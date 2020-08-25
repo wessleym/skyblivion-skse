@@ -35,16 +35,37 @@ namespace RE {
 			0x0000
 		};
 
+		SCRIPT_FUNCTION* waitFunction = NULL;//WTM:  Change:  Experimenting
+		SCRIPT_FUNCTION::ScriptData waitFunctionData =
+		{
+			0x1000 + (int)TESCondition::FunctionID::kWait,
+			0x0001,
+			0x0000
+		};
+
+		SCRIPT_FUNCTION* essentialDeathReloadFunction = NULL;//WTM:  Change:  Experimenting
+		SCRIPT_FUNCTION::ScriptData essentialDeathReloadFunctionData =
+		{
+			0x1000 + (int)TESCondition::FunctionID::kEssentialDeathReload,
+			0x0001,
+			0x0000
+		};
+
 		SCRIPT_FUNCTION* sayFunction = NULL;
 		SCRIPT_FUNCTION* sayToFunction = NULL;
+		SCRIPT_FUNCTION* startConversationFunction = NULL;//WTM:  Change:  Experimenting
 
 		BYTE dummySCRISayToAlloc[sizeof(Script)] = { 0 };
 		BYTE dummySCRISayAlloc[sizeof(Script)] = { 0 };
+		BYTE dummySCRIStartConversationAlloc[sizeof(Script)] = { 0 };
+		BYTE dummySCRIEssentialDeathReloadAlloc[sizeof(Script)] = { 0 };
 		Script* dummySayToScript = (Script*)&dummySCRISayToAlloc;
 		Script* dummySayScript = (Script*)&dummySCRISayAlloc;
+		Script* dummyStartConversationScript = (Script*)&dummySCRIStartConversationAlloc;
 
-		BYTE sayToScriptData[12] = { 0x34, 0x10, 0x8, 0x0, 0x2, 0x0, 0x72, 0x01, 0x0, 0x72, 0x2, 0x0 };
-		BYTE sayScriptData[9] = { 0x33, 0x10, 0x5, 0x0, 0x1, 0x0, 0x72, 0x1, 0x0 };
+		BYTE sayToScriptData[12] =                { 0x34,                                               0x10, 0x8, 0x0, 0x2, 0x0, 0x72, 0x1, 0x0, 0x72, 0x2, 0x0 };
+		BYTE sayScriptData[9] =                   { 0x33,                                               0x10, 0x5, 0x0, 0x1, 0x0, 0x72, 0x1, 0x0 };
+		BYTE startConversationScriptData[12] =    { (byte)TESCondition::FunctionID::kStartConversation, 0x10, 0x8, 0x0, 0x2, 0x0, 0x72, 0x1, 0x0, 0x72, 0x2, 0x0 };
 
 		void initDummySayToScript() {
 			dummySayToScript->formFlags = 0x000400a;
@@ -71,6 +92,18 @@ namespace RE {
 			dummySayScript->header.isQuestScript = 1;
 			dummySayScript->text = "Say";
 			dummySayScript->data = (SCRIPT_FUNCTION::ScriptData*)sayScriptData;
+		}
+
+		void initDummyStartConversationScript() {
+			dummyStartConversationScript->formFlags = 0x000400a;
+			dummyStartConversationScript->formID = 0xff000a18;
+			dummyStartConversationScript->formType = (FormType)0x13;
+			dummyStartConversationScript->header.refObjectCount = 0x00000002;
+			dummyStartConversationScript->header.dataSize = 0x0000000c;
+			dummyStartConversationScript->header.variableCount = 0x00000000;
+			dummyStartConversationScript->header.isQuestScript = 1;
+			dummyStartConversationScript->text = "StartConversation";
+			dummyStartConversationScript->data = (SCRIPT_FUNCTION::ScriptData*)startConversationScriptData;
 		}
 
 
@@ -260,7 +293,7 @@ namespace RE {
 		}
 
 		void modAmountSoldStolen(StaticFunctionTag*, unsigned long amount) {
-			PlayerCharacter::GetSingleton()->amountStolenSold = amount;
+			PlayerCharacter::GetSingleton()->amountStolenSold += amount;//WTM:  Change:  Was amountStolenSold = amount.
 		}
 
 		UInt32 isPCAMurderer(StaticFunctionTag*) {
@@ -310,18 +343,122 @@ namespace RE {
 			return 0;
 		}
 
+		void startConversation(Actor* thisActor, Actor* otherActor, TESTopic* topic) {//WTM:  Change:  Experimenting.  I'm trying to pass in arguments.
+			if (startConversationFunction)
+			{
+				double result = 0.0;
+				UInt32 opcodeOffset = 0x4;
+
+				SCRIPT_REFERENCED_OBJECT arg1;
+				//memset(&arg1.form_name, 0, sizeof(BSString));
+				arg1.editorID = "";
+				arg1.form = otherActor;
+				SCRIPT_REFERENCED_OBJECT arg2;
+				//memset(&arg2.form_name, 0, sizeof(BSString));
+				arg2.editorID = "";
+				arg2.form = topic;
+
+				//BSSimpleList<SCRIPT_REFERENCED_OBJECT*> arglist2(&arg2, NULL);
+				//BSSimpleList<SCRIPT_REFERENCED_OBJECT*> arglist1(&arg1, &arglist2);
+				//RefListEntry arglist2;
+
+				//arglist1.var = &arg1;
+				//arglist2.var = &arg2;
+				//arglist1.next = &arglist2;
+				//arglist2.next = NULL;
+
+
+				BSSimpleList<SCRIPT_REFERENCED_OBJECT*> reflist;
+				reflist.push_front(&arg2);
+				reflist.push_front(&arg1);
+
+				initDummyStartConversationScript();
+				dummyStartConversationScript->refObjects = reflist;
+
+				startConversationFunction->executeFunction(
+					startConversationFunction->params,
+					(SCRIPT_FUNCTION::ScriptData*)startConversationScriptData,
+					thisActor,
+					NULL,
+					dummyStartConversationScript,
+					NULL,
+					result,
+					opcodeOffset
+				);
+			}
+		}
+
+		void ObScriptWait(Actor* reference, TESPackage* package) {//WTM:  Change:  Experimenting.  How do I pass in package?
+			if (waitFunction)
+			{
+				double result = 0.0;
+				UInt32 opcodeOffset = 0x4;
+
+				waitFunction->executeFunction(
+					waitFunction->params,
+					&waitFunctionData,
+					reference,
+					NULL,
+					NULL,
+					NULL,
+					result,
+					opcodeOffset
+				);
+			}
+		}
+
+		UInt32 GetContainer(TESObjectREFR* objectReference) {//WTM:  Change:  Experimenting
+			if (objectReference == NULL) { return 1; }
+			TESContainer* container = objectReference->GetContainer();
+			if (container == NULL) { return 2; }
+			return 3;
+			//int num = container->numContainerObjects;
+		}
+
+		void EssentialDeathReload(StaticFunctionTag*, const BSFixedString* message) {//WTM:  Change:  Experimenting.  How do I pass in message?
+			if (essentialDeathReloadFunction)
+			{
+				double result = 0.0;
+				UInt32 opcodeOffset = 0x4;
+
+				essentialDeathReloadFunction->executeFunction(
+					essentialDeathReloadFunction->params,
+					&essentialDeathReloadFunctionData,
+					NULL,
+					NULL,
+					NULL,
+					NULL,
+					result,
+					opcodeOffset
+				);
+			}
+		}
+
 		bool RegisterFuncs(BSScript::Internal::VirtualMachine* a_vm) {
 
 			_MESSAGE("Initializing ObScript hooks...");
 
+			a_vm->RegisterFunction("LegacyGetAmountSoldStolen", "Game", getAmountSoldStolen);//WTM:  Change:  Renamed from GetAmountSoldStolen
+			a_vm->RegisterFunction("LegacyModAmountSoldStolen", "Game", modAmountSoldStolen);//WTM:  Change:  Renamed from ModAmountSoldStolen
+			a_vm->RegisterFunction("LegacyIsPCAMurderer", "Game", isPCAMurderer);//WTM:  Change:  Renamed from IsPCAMurderer
+
 			a_vm->RegisterFunction("PrepareForReinitializing", "Quest", prepareForReinitializing);
 			
-			
-			a_vm->RegisterFunction("LegacySayTo", "ObjectReference", ObScriptSayTo);
+			_MESSAGE("Looking for Say execute handler");
+			sayFunction = SCRIPT_FUNCTION::LocateScriptCommand("Say");
+			if (NULL == sayFunction)
+			{
+				_ERROR("Unable to find sayFunction!");
+			}
 			a_vm->RegisterFunction("LegacySay", "ObjectReference", ObScriptSay);
-			a_vm->RegisterFunction("GetAmountSoldStolen", "Game", getAmountSoldStolen);
-			a_vm->RegisterFunction("ModAmountSoldStolen", "Game", modAmountSoldStolen);
-			a_vm->RegisterFunction("IsPCAMurderer", "Game", isPCAMurderer);
+
+			_MESSAGE("Looking for SayTo execute handler");
+			sayToFunction = SCRIPT_FUNCTION::LocateScriptCommand("SayTo");
+			if (NULL == sayToFunction)
+			{
+				_ERROR("Unable to find sayToFunction!");
+			}
+			a_vm->RegisterFunction("LegacySayTo", "ObjectReference", ObScriptSayTo);
 
 			_MESSAGE("Looking for IsAnimPlaying execute handler");
 			isAnimPlayingFunction = SCRIPT_FUNCTION::LocateScriptCommand("IsAnimPlaying");
@@ -331,18 +468,39 @@ namespace RE {
 			}
 			a_vm->RegisterFunction("IsAnimPlaying", "ObjectReference", isAnimPlaying);
 
-			_MESSAGE("Looking for IsAnimPlaying execute handler");
-
-			getDestroyedFunction = SCRIPT_FUNCTION::LocateScriptCommand("GetDestroyed");			
+			_MESSAGE("Looking for GetDestroyed execute handler");
+			getDestroyedFunction = SCRIPT_FUNCTION::LocateScriptCommand("GetDestroyed");
 			if (NULL == getDestroyedFunction)
 			{
 				_ERROR("Unable to find getDestroyedFunction!");
 			}
-			a_vm->RegisterFunction("GetDestroyed", "ObjectReference", getDestroyed);
+			a_vm->RegisterFunction("LegacyGetDestroyed", "ObjectReference", getDestroyed);
 
-			sayFunction = SCRIPT_FUNCTION::LocateScriptCommand("Say");
-			sayToFunction = SCRIPT_FUNCTION::LocateScriptCommand("SayTo");
+			/*a_vm->RegisterFunction("LegacyGetContainer", "ObjectReference", GetContainer);//WTM:  Change:  Experimenting
 
+			waitFunction = SCRIPT_FUNCTION::LocateScriptCommand("Wait");//WTM:  Change:  Experimenting
+			if (NULL == waitFunction)
+			{
+				_ERROR("Unable to find waitFunction!");
+			}
+			a_vm->RegisterFunction("LegacyWait", "Actor", ObScriptWait);
+
+			essentialDeathReloadFunction = SCRIPT_FUNCTION::LocateScriptCommand("EssentialDeathReload");//WTM:  Change:  Experimenting
+			if (NULL == essentialDeathReloadFunction)
+			{
+				_ERROR("Unable to find essentialDeathReloadFunction!");
+			}
+			a_vm->RegisterFunction("LegacyEssentialDeathReload", "Game", EssentialDeathReload);*/
+
+			_MESSAGE("Looking for StartConversation execute handler");
+			startConversationFunction = SCRIPT_FUNCTION::LocateScriptCommand("StartConversation");
+			if (NULL == startConversationFunction)
+			{
+				_ERROR("Unable to find startConversationFunction!");
+			}
+			a_vm->RegisterFunction("LegacyStartConversation", "ObjectReference", startConversation);
+			//WTM:  Note:  I think I got this to work, but it only seems to work when called on the player.
+			//For example, PlayerRef.StartConversation(SomeActor_p, SomeTopic_p) works, but SomeActor_p.StartConversation(PlayerRef, SomeTopic_p) seems to do nothing.
 
 			_MESSAGE("Initializing ObScript hooks done");
 
