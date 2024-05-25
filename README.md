@@ -2,6 +2,5 @@
 SKSE utilities for Skyblivion project
 
 # Build Instructions
-Copy SKSE files from SKSE source into skyblivion-skse\skse64_src folder.
-Retarget for newest version of Windows SDK.
-You might get a compilation error and will need to remove "constexpr" from GFxExternalInterface.h, line 18.
+Open this folder with Visual Studio and then use CMake to build.
+(You might need to save CMakeLists.txt within Visual Studio to get things started. Then use the normal Visual Studio build functionality.)

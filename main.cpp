@@ -1,4 +1,4 @@
-﻿#include "skse64_common/skse_version.h"  // RUNTIME_VERSION
+/*#include "skse64_common/skse_version.h"  // RUNTIME_VERSION
 
 #include "version.h"  // VERSION_VERSTRING, VERSION_MAJOR
 
@@ -8,10 +8,38 @@
 
 #include "common/ITypes.h" //TYPES
 
-#include <sstream>
+#include <sstream>*/
+
+#include <spdlog/sinks/basic_file_sink.h>
+#include <stdfloat>
+#include <stdint.h>
+#include <windows.h>
+#include "SKSE/Logger.h"
  
-__declspec(dllimport) double g_silent_voice_duration_seconds;
-__declspec(dllimport) int g_is_obscript_say_say_to;
+/* __declspec(dllimport) */double g_silent_voice_duration_seconds;
+/* __declspec(dllimport) */int g_is_obscript_say_say_to;
+
+//These used to be defined be SKSE, but they are no longer.
+#define _MESSAGE(a_fmt, ...)	/*SKSE::Impl::ConsoleLogger::VPrint(__FILE__, __LINE__, SKSE::Logger::Level::kMessage, a_fmt, __VA_ARGS__)*/SKSE::log::info(a_fmt)
+#define _ERROR(a_fmt, ...)		/*SKSE::Impl::ConsoleLogger::VPrint(__FILE__, __LINE__, SKSE::Logger::Level::kError, a_fmt, __VA_ARGS__)*/SKSE::log::error(a_fmt)
+#define _FATALERROR(a_fmt, ...)	/*SKSE::Impl::ConsoleLogger::VPrint(__FILE__, __LINE__, SKSE::Logger::Level::kFatalError, a_fmt, __VA_ARGS__)*/SKSE::log::critical(a_fmt)
+
+#ifndef SKYB_VERSION_INCLUDED
+    #define SKYB_VERSION_INCLUDED
+
+    #define MAKE_STR_HELPER(a_str) #a_str
+    #define MAKE_STR(a_str) MAKE_STR_HELPER(a_str)
+
+    #define SKYB_VERSION_MAJOR 1
+    #define SKYB_VERSION_MINOR 0
+    #define SKYB_VERSION_PATCH 0
+    #define SKYB_VERSION_BETA 0
+    #define SKYB_VERSION_VERSTRING   \
+        MAKE_STR(SKYB_VERSION_MAJOR) \
+        "." MAKE_STR(SKYB_VERSION_MINOR) "." MAKE_STR(SKYB_VERSION_PATCH) "." MAKE_STR(SKYB_VERSION_BETA)
+
+#endif
+
 
 
 //NativeFunction* stopFunction = NULL;
@@ -38,7 +66,7 @@ namespace RE {
 		SCRIPT_FUNCTION* waitFunction = NULL;//WTM:  Change:  Experimenting
 		SCRIPT_FUNCTION::ScriptData waitFunctionData =
 		{
-			0x1000 + (int)TESCondition::FunctionID::kWait,
+			0x1000 + (int)FUNCTION_DATA::FunctionID::kWait,
 			0x0001,
 			0x0000
 		};
@@ -46,7 +74,7 @@ namespace RE {
 		SCRIPT_FUNCTION* essentialDeathReloadFunction = NULL;//WTM:  Change:  Experimenting
 		SCRIPT_FUNCTION::ScriptData essentialDeathReloadFunctionData =
 		{
-			0x1000 + (int)TESCondition::FunctionID::kEssentialDeathReload,
+			0x1000 + (int)FUNCTION_DATA::FunctionID::kEssentialDeathReload,
 			0x0001,
 			0x0000
 		};
@@ -63,12 +91,13 @@ namespace RE {
 		Script* dummySayScript = (Script*)&dummySCRISayAlloc;
 		Script* dummyStartConversationScript = (Script*)&dummySCRIStartConversationAlloc;
 
-		BYTE sayToScriptData[12] =                { 0x34,                                               0x10, 0x8, 0x0, 0x2, 0x0, 0x72, 0x1, 0x0, 0x72, 0x2, 0x0 };
-		BYTE sayScriptData[9] =                   { 0x33,                                               0x10, 0x5, 0x0, 0x1, 0x0, 0x72, 0x1, 0x0 };
-		BYTE startConversationScriptData[12] =    { (byte)TESCondition::FunctionID::kStartConversation, 0x10, 0x8, 0x0, 0x2, 0x0, 0x72, 0x1, 0x0, 0x72, 0x2, 0x0 };
+		BYTE sayToScriptData[12] =                { (BYTE)FUNCTION_DATA::FunctionID::kSayTo            , 0x10, 0x8, 0x0, 0x2, 0x0, 0x72, 0x1, 0x0, 0x72, 0x2, 0x0 };
+		BYTE sayScriptData[9] =                   { (BYTE)FUNCTION_DATA::FunctionID::kSay              , 0x10, 0x5, 0x0, 0x1, 0x0, 0x72, 0x1, 0x0 };
+		BYTE startConversationScriptData[12] =    { (BYTE)FUNCTION_DATA::FunctionID::kStartConversation, 0x10, 0x8, 0x0, 0x2, 0x0, 0x72, 0x1, 0x0, 0x72, 0x2, 0x0 };
 
 		void initDummySayToScript() {
-			dummySayToScript->formFlags = 0x000400a;
+            char sayTo[6] = "SayTo";
+            dummySayToScript->formFlags = 0x000400a;
 			dummySayToScript->formID = 0xff000a17;
 			dummySayToScript->formType = (FormType)0x13;
 			//dummySayToScript->pad13 = 0x0f;
@@ -77,11 +106,12 @@ namespace RE {
 			dummySayToScript->header.variableCount = 0x00000000;
 			dummySayToScript->header.isQuestScript = 1;
 			//dummySayToScript->headertype = 0x00010000;
-			dummySayToScript->text = "SayTo";
+            dummySayToScript->text = sayTo;
 			dummySayToScript->data = (SCRIPT_FUNCTION::ScriptData*)sayToScriptData;
 		}
 
 		void initDummySayScript() {
+            char say[4] = "Say";
 			dummySayScript->formFlags = 0x000400a;
 			dummySayScript->formID = 0xff000e05;
 			dummySayScript->formType = (FormType)0x13;
@@ -90,11 +120,12 @@ namespace RE {
 			dummySayScript->header.dataSize = 0x00000009;
 			dummySayScript->header.variableCount = 0x00000000;
 			dummySayScript->header.isQuestScript = 1;
-			dummySayScript->text = "Say";
+            dummySayScript->text = say;
 			dummySayScript->data = (SCRIPT_FUNCTION::ScriptData*)sayScriptData;
 		}
 
 		void initDummyStartConversationScript() {
+            char startConversation[18] = "StartConversation";
 			dummyStartConversationScript->formFlags = 0x000400a;
 			dummyStartConversationScript->formID = 0xff000a18;
 			dummyStartConversationScript->formType = (FormType)0x13;
@@ -102,12 +133,12 @@ namespace RE {
 			dummyStartConversationScript->header.dataSize = 0x0000000c;
 			dummyStartConversationScript->header.variableCount = 0x00000000;
 			dummyStartConversationScript->header.isQuestScript = 1;
-			dummyStartConversationScript->text = "StartConversation";
+            dummyStartConversationScript->text = startConversation;
 			dummyStartConversationScript->data = (SCRIPT_FUNCTION::ScriptData*)startConversationScriptData;
 		}
 
 
-		Float32 ObScriptSay(TESObjectREFR* thisActor, TESTopic* TopicID, bool value)
+		float ObScriptSay(TESObjectREFR* thisActor, TESTopic* TopicID, bool value)
 		{
 			double result = 0.0;
 
@@ -125,7 +156,7 @@ namespace RE {
 				//	return 0.0;
 				//}
 
-				UInt32 opcodeOffset = 0x4;
+				UINT32 opcodeOffset = 0x4;
 
 				if (thisActor == NULL || TopicID == NULL)
 					return 0.5;
@@ -191,7 +222,7 @@ namespace RE {
 			return result;
 		}
 
-		Float32 ObScriptSayTo(TESObjectREFR* thisActor, Actor* anotherActor, TESTopic* TopicID, bool value)
+		float ObScriptSayTo(TESObjectREFR* thisActor, Actor* anotherActor, TESTopic* TopicID, bool value)
 		{
 			double result = 0.0;
 
@@ -209,7 +240,7 @@ namespace RE {
 				//	return 0.0;
 				//}
 
-				UInt32 opcodeOffset = 0x4;
+				UINT32 opcodeOffset = 0x4;
 
 				if (thisActor == NULL || anotherActor == NULL || TopicID == NULL)
 					return 0.5;
@@ -288,23 +319,23 @@ namespace RE {
 			return true;
 		}
 
-		UInt32 getAmountSoldStolen(StaticFunctionTag*) {
-			return PlayerCharacter::GetSingleton()->amountStolenSold;
+		UINT32 getAmountSoldStolen(StaticFunctionTag*) {
+            return PlayerCharacter::GetSingleton()->GetInfoRuntimeData().amountStolenSold;
 		}
 
 		void modAmountSoldStolen(StaticFunctionTag*, unsigned long amount) {
-			PlayerCharacter::GetSingleton()->amountStolenSold += amount;//WTM:  Change:  Was amountStolenSold = amount.
+			PlayerCharacter::GetSingleton()->GetInfoRuntimeData().amountStolenSold += amount;//WTM:  Change:  Was amountStolenSold = amount.
 		}
 
-		UInt32 isPCAMurderer(StaticFunctionTag*) {
-			return PlayerCharacter::GetSingleton()->murder;
+		UINT32 isPCAMurderer(StaticFunctionTag*) {
+			return PlayerCharacter::GetSingleton()->GetGameStatsData().murder;
 		}
 
 		bool isAnimPlaying(TESObjectREFR* animatedRefr) {
 			if (isAnimPlayingFunction)
 			{
 				double result = 0.0;
-				UInt32 opcodeOffset = 0x4;
+                UINT32 opcodeOffset = 0x4;
 				
 				isAnimPlayingFunction->executeFunction(
 					isAnimPlayingFunction->params,
@@ -322,11 +353,11 @@ namespace RE {
 		}
 
 		//TODO: CHECK: should be Double?
-		UInt32 getDestroyed(TESObjectREFR* reference) {
+        UINT32 getDestroyed(TESObjectREFR* reference) {
 			if (getDestroyedFunction)
 			{
 				double result = 0.0;
-				UInt32 opcodeOffset = 0x4;
+                UINT32 opcodeOffset = 0x4;
 
 				getDestroyedFunction->executeFunction(
 					getDestroyedFunction->params,
@@ -347,7 +378,7 @@ namespace RE {
 			if (startConversationFunction)
 			{
 				double result = 0.0;
-				UInt32 opcodeOffset = 0x4;
+                UINT32 opcodeOffset = 0x4;
 
 				SCRIPT_REFERENCED_OBJECT arg1;
 				//memset(&arg1.form_name, 0, sizeof(BSString));
@@ -392,7 +423,7 @@ namespace RE {
 			if (waitFunction)
 			{
 				double result = 0.0;
-				UInt32 opcodeOffset = 0x4;
+				UINT32 opcodeOffset = 0x4;
 
 				waitFunction->executeFunction(
 					waitFunction->params,
@@ -407,7 +438,7 @@ namespace RE {
 			}
 		}
 
-		UInt32 GetContainer(TESObjectREFR* objectReference) {//WTM:  Change:  Experimenting
+		UINT32 GetContainer(TESObjectREFR* objectReference) {//WTM:  Change:  Experimenting
 			if (objectReference == NULL) { return 1; }
 			TESContainer* container = objectReference->GetContainer();
 			if (container == NULL) { return 2; }
@@ -419,7 +450,7 @@ namespace RE {
 			if (essentialDeathReloadFunction)
 			{
 				double result = 0.0;
-				UInt32 opcodeOffset = 0x4;
+				UINT32 opcodeOffset = 0x4;
 
 				essentialDeathReloadFunction->executeFunction(
 					essentialDeathReloadFunction->params,
@@ -448,7 +479,7 @@ namespace RE {
 			sayFunction = SCRIPT_FUNCTION::LocateScriptCommand("Say");
 			if (NULL == sayFunction)
 			{
-				_ERROR("Unable to find sayFunction!");
+                _ERROR("Unable to find sayFunction!");
 			}
 			a_vm->RegisterFunction("LegacySay", "ObjectReference", ObScriptSay);
 
@@ -456,7 +487,7 @@ namespace RE {
 			sayToFunction = SCRIPT_FUNCTION::LocateScriptCommand("SayTo");
 			if (NULL == sayToFunction)
 			{
-				_ERROR("Unable to find sayToFunction!");
+                _ERROR("Unable to find sayToFunction!");
 			}
 			a_vm->RegisterFunction("LegacySayTo", "ObjectReference", ObScriptSayTo);
 
@@ -464,7 +495,7 @@ namespace RE {
 			isAnimPlayingFunction = SCRIPT_FUNCTION::LocateScriptCommand("IsAnimPlaying");
 			if (NULL == isAnimPlayingFunction)
 			{
-				_ERROR("Unable to find isAnimPlayingFunction!");
+                _ERROR("Unable to find isAnimPlayingFunction!");
 			}
 			a_vm->RegisterFunction("IsAnimPlaying", "ObjectReference", isAnimPlaying);
 
@@ -472,7 +503,7 @@ namespace RE {
 			getDestroyedFunction = SCRIPT_FUNCTION::LocateScriptCommand("GetDestroyed");
 			if (NULL == getDestroyedFunction)
 			{
-				_ERROR("Unable to find getDestroyedFunction!");
+                _ERROR("Unable to find getDestroyedFunction!");
 			}
 			a_vm->RegisterFunction("LegacyGetDestroyed", "ObjectReference", getDestroyed);
 
@@ -509,51 +540,62 @@ namespace RE {
 	}
 }
 
-extern "C" {
-	bool SKSEPlugin_Query(const SKSE::QueryInterface* a_skse, SKSE::PluginInfo* a_info)
-	{
-		SKSE::Logger::OpenRelative(FOLDERID_Documents, L"\\My Games\\Skyrim Special Edition\\SKSE\\Skyblivion.log");
-		SKSE::Logger::SetPrintLevel(SKSE::Logger::Level::kDebugMessage);
-		SKSE::Logger::SetFlushLevel(SKSE::Logger::Level::kDebugMessage);
-		SKSE::Logger::UseLogStamp(true);
+//This method is no longer needed.
+bool SKSEPlugin_QueryOld(const SKSE::QueryInterface* a_skse, SKSE::PluginInfo* a_info) {
+    /*
+    SKSE::Logger::OpenRelative(FOLDERID_Documents, L"\\My Games\\Skyrim Special Edition\\SKSE\\Skyblivion.log");
+    SKSE::Logger::SetPrintLevel(SKSE::Logger::Level::kDebugMessage);
+    SKSE::Logger::SetFlushLevel(SKSE::Logger::Level::kDebugMessage);
+    SKSE::Logger::UseLogStamp(true);
+    */
 
-		_MESSAGE("Skyblivion v%s", SKYB_VERSION_VERSTRING);
+    _MESSAGE("Skyblivion v%s", SKYB_VERSION_VERSTRING);
 
-		a_info->infoVersion = SKSE::PluginInfo::kVersion;
-		a_info->name = "Skyblivion";
-		a_info->version = SKYB_VERSION_MAJOR;
+	//This is now set from CMakeLists.txt with add_commonlibsse_plugin. (SKSEPluginInfo could also be used.)
+	//https://gitlab.com/colorglass/commonlibsse-sample-plugin#plugin-initialization
+    a_info->infoVersion = SKSE::PluginInfo::kVersion;
+    a_info->name = "Skyblivion";
+    a_info->version = SKYB_VERSION_MAJOR;
 
-		if (a_skse->IsEditor()) {
-			_FATALERROR("Loaded in editor, marking as incompatible!\n");
-			return false;
-		}
-
-		switch (a_skse->RuntimeVersion()) {
-		case RUNTIME_VERSION_1_5_97:
-			break;
-		default:
-			_FATALERROR("Unsupported runtime version %08X!\n", a_skse->RuntimeVersion());
-			return false;
-		}
-
-		return true;
-	}
+    return true;
+}
 
 
-	bool SKSEPlugin_Load(const SKSE::LoadInterface* a_skse)
-	{
-		_MESSAGE("Skyblivion loaded");
+SKSEPluginLoad(const SKSE::LoadInterface* skse) {
+    auto logsFolder = SKSE::log::log_directory();
+    if (!logsFolder) {
+        SKSE::stl::report_and_fail("!logsFolder");
+    }
+    auto pluginName = SKSE::PluginDeclaration::GetSingleton()->GetName();
+    auto logFilePath = *logsFolder / std::format("{}.log", pluginName);
+    auto fileLoggerPtr = std::make_shared<spdlog::sinks::basic_file_sink_mt>(logFilePath.string(), true);
+    auto loggerPtr = std::make_shared<spdlog::logger>("log", std::move(fileLoggerPtr));
+    spdlog::set_default_logger(std::move(loggerPtr));
+    spdlog::set_level(spdlog::level::trace);
+    spdlog::flush_on(spdlog::level::trace);
 
-		if (!SKSE::Init(a_skse)) {
-			return false;
-		}
+    _MESSAGE("Skyblivion loaded");
 
-		auto papyrus = SKSE::GetPapyrusInterface();
-		if (!papyrus->Register(RE::ObScriptHooks::RegisterFuncs)) {
-			_FATALERROR("Failed to register papyrus callback!\n");
-			return false;
-		}
+    SKSE::Init(skse);
 
-		return true;
-	}
-};
+    if (skse->IsEditor()) {
+        _FATALERROR("Loaded in editor. Marking as incompatible.");
+        return false;
+    }
+
+    /*switch (a_skse->RuntimeVersion()) {
+    case RUNTIME_VERSION_1_5_97:
+        break;
+    default:
+        _FATALERROR("Unsupported runtime version %08X!\n", a_skse->RuntimeVersion());
+        return false;
+    }*/
+
+    auto papyrus = SKSE::GetPapyrusInterface();
+    if (!papyrus->Register(RE::ObScriptHooks::RegisterFuncs)) {
+        _FATALERROR("Failed to register papyrus callback!");
+        return false;
+    }
+
+    return true;
+}
