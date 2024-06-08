@@ -419,6 +419,18 @@ namespace RE {
 			}
 		}
 
+		std::vector<float> GetSkillDataArray(StaticFunctionTag*, int mode) {
+            int listSize = PlayerCharacter::PlayerSkills::Data::Skill::kTotal;
+            PlayerCharacter* pPC = PlayerCharacter::GetSingleton();
+            auto skills = pPC->GetInfoRuntimeData().skills->data->skills;
+            std::vector<float> returnValue(listSize, 0.0f);
+            for (int i = 0; i < listSize;i++) {
+                auto skill = skills[i];
+                returnValue[i] = mode == 0   ? skill.xp : mode == 1 ? skill.levelThreshold : (skill.xp / skill.levelThreshold) * 100;
+            }
+            return returnValue;
+        }
+
 		void ObScriptWait(Actor* reference, TESPackage* package) {//WTM:  Change:  Experimenting.  How do I pass in package?
 			if (waitFunction)
 			{
@@ -532,6 +544,9 @@ namespace RE {
 			a_vm->RegisterFunction("LegacyStartConversation", "ObjectReference", startConversation);
 			//WTM:  Note:  I think I got this to work, but it only seems to work when called on the player.
 			//For example, PlayerRef.StartConversation(SomeActor_p, SomeTopic_p) works, but SomeActor_p.StartConversation(PlayerRef, SomeTopic_p) seems to do nothing.
+
+			//WTM:  Note:  For Fallen's UI
+            a_vm->RegisterFunction("GetSkillDataArray", "TES4SkillUtility", GetSkillDataArray);
 
 			_MESSAGE("Initializing ObScript hooks done");
 
