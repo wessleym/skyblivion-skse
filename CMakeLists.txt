@@ -8,7 +8,7 @@ cmake_minimum_required(VERSION 3.21)
 
 # [BEGIN set_project_name]
 # Set your project name. This will be the name of your SKSE .dll file.
-project(Skyblivion VERSION 1.0.0 LANGUAGES CXX)
+project(Skyblivion VERSION 1.0.0.0 LANGUAGES CXX)
 
 # [END set_project_name]
 
@@ -52,7 +52,8 @@ option(ENABLE_SKYRIM_VR "Enable support for Skyrim VR in the dynamic runtime fea
 set(BUILD_TESTS OFF)
 
 find_package(Boost 1.70.0 REQUIRED COMPONENTS filesystem)
-target_link_libraries(${PROJECT_NAME} PRIVATE Boost::filesystem Boost::algorithm) 
+target_link_libraries(${PROJECT_NAME} PRIVATE Boost::filesystem) 
+
 
 # When your SKSE .dll is compiled, this will automatically copy the .dll into your mods folder.
 # Only works if you configure DEPLOY_ROOT above (or set the SKYRIM_MODS_FOLDER environment variable)
