@@ -8,7 +8,7 @@ cmake_minimum_required(VERSION 3.21)
 
 # [BEGIN set_project_name]
 # Set your project name. This will be the name of your SKSE .dll file.
-project(Skyblivion VERSION 1.0.0.0 LANGUAGES CXX)
+project(Skyblivion VERSION 1.0.0 LANGUAGES CXX)
 
 # [END set_project_name]
 
@@ -45,7 +45,7 @@ add_commonlibsse_plugin(${PROJECT_NAME} SOURCES main.cpp)
 target_compile_features(${PROJECT_NAME} PRIVATE cxx_std_23)
 target_precompile_headers(${PROJECT_NAME} PRIVATE PCH.h)
 
-# Added per Robert's recommendation
+# Added per Robert's recommendation. The below seem to be the default values.
 option(ENABLE_SKYRIM_SE "Enable support for Skyrim SE in the dynamic runtime feature." ON)
 option(ENABLE_SKYRIM_AE "Enable support for Skyrim AE in the dynamic runtime feature." ON)
 option(ENABLE_SKYRIM_VR "Enable support for Skyrim VR in the dynamic runtime feature." ON)
