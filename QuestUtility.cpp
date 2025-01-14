@@ -1,7 +1,7 @@
 class QuestUtility {
 public:
     static void Register(RE::BSScript::Internal::VirtualMachine* vm) {
-        vm->RegisterFunction("PrepareForReinitializing", "TES4QuestUtility", PrepareForReinitializing);
+        vm->RegisterFunction("PrepareForReinitializing", "SKYBQuestUtility", PrepareForReinitializing);
     }
 private:
     static bool PrepareForReinitializing(RE::StaticFunctionTag*, RE::TESQuest* quest) {

@@ -1,7 +1,7 @@
 class SkillUtility {
 public:
     static void Register(RE::BSScript::Internal::VirtualMachine* vm) {
-        vm->RegisterFunction("GetSkillDataArray", "TES4SkillUtility", GetSkillDataArray);
+        vm->RegisterFunction("GetSkillDataArray", "SKYBSkillUtility", GetSkillDataArray);
     }
 
 private:

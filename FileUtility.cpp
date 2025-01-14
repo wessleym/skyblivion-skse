@@ -8,7 +8,7 @@ namespace fs = boost::filesystem;
 class FileUtility {
 public:
     static void Register(RE::BSScript::Internal::VirtualMachine* vm) {
-        vm->RegisterFunction("FilesInFolder", "TES4FileUtility", FilesInFolder);
+        vm->RegisterFunction("FilesInFolder", "SKYBFileUtility", FilesInFolder);
     }
 
 private:

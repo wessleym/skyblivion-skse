@@ -3,11 +3,12 @@
 class GameUtility {
 public:
     static void Register(RE::BSScript::Internal::VirtualMachine* vm) {
-        vm->RegisterFunction("LegacyGetAmountSoldStolen", "TES4GameUtility",
+        std::string_view className = "SKYBGameUtility";
+        vm->RegisterFunction("LegacyGetAmountSoldStolen", className,
                              getAmountSoldStolen);  // WTM:  Change:  Renamed from GetAmountSoldStolen
-        vm->RegisterFunction("LegacyModAmountSoldStolen", "TES4GameUtility",
+        vm->RegisterFunction("LegacyModAmountSoldStolen", className,
                              modAmountSoldStolen);  // WTM:  Change:  Renamed from ModAmountSoldStolen
-        vm->RegisterFunction("LegacyIsPCAMurderer", "TES4GameUtility",
+        vm->RegisterFunction("LegacyIsPCAMurderer", className,
                              isPCAMurderer);  // WTM:  Change:  Renamed from IsPCAMurderer
     }
 

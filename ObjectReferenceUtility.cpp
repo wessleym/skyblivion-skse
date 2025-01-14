@@ -3,33 +3,34 @@
 class ObjectReferenceUtility {
 public:
     static void Register(RE::BSScript::Internal::VirtualMachine* vm) {
+        std::string_view className = "SKYBObjectReferenceUtility";
         _MESSAGE("Looking for Say execute handler");
         sayFunction = RE::SCRIPT_FUNCTION::LocateScriptCommand("Say");
         if (NULL == sayFunction) {
             _ERROR("Unable to find sayFunction!");
         }
-        vm->RegisterFunction("LegacySay", "TES4ObjectReferenceUtility", ObScriptSay);
+        vm->RegisterFunction("LegacySay", className, ObScriptSay);
 
         _MESSAGE("Looking for SayTo execute handler");
         sayToFunction = RE::SCRIPT_FUNCTION::LocateScriptCommand("SayTo");
         if (NULL == sayToFunction) {
             _ERROR("Unable to find sayToFunction!");
         }
-        vm->RegisterFunction("LegacySayTo", "TES4ObjectReferenceUtility", ObScriptSayTo);
+        vm->RegisterFunction("LegacySayTo", className, ObScriptSayTo);
 
         _MESSAGE("Looking for IsAnimPlaying execute handler");
         isAnimPlayingFunction = RE::SCRIPT_FUNCTION::LocateScriptCommand("IsAnimPlaying");
         if (NULL == isAnimPlayingFunction) {
             _ERROR("Unable to find isAnimPlayingFunction!");
         }
-        vm->RegisterFunction("IsAnimPlaying", "TES4ObjectReferenceUtility", isAnimPlaying);
+        vm->RegisterFunction("IsAnimPlaying", className, isAnimPlaying);
 
         _MESSAGE("Looking for GetDestroyed execute handler");
         getDestroyedFunction = RE::SCRIPT_FUNCTION::LocateScriptCommand("GetDestroyed");
         if (NULL == getDestroyedFunction) {
             _ERROR("Unable to find getDestroyedFunction!");
         }
-        vm->RegisterFunction("LegacyGetDestroyed", "TES4ObjectReferenceUtility", getDestroyed);
+        vm->RegisterFunction("LegacyGetDestroyed", className, getDestroyed);
 
         // vm->RegisterFunction("LegacyGetContainer", "ObjectReference", GetContainer);// WTM:  Change:  Experimenting
 
@@ -38,7 +39,7 @@ public:
         if (NULL == startConversationFunction) {
             _ERROR("Unable to find startConversationFunction!");
         }
-        vm->RegisterFunction("LegacyStartConversation", "TES4ObjectReferenceUtility", startConversation);
+        vm->RegisterFunction("LegacyStartConversation", className, startConversation);
         // WTM:  Note:  I think I got this to work, but it only seems to work when called on the player.
         // For example, PlayerRef.StartConversation(SomeActor_p, SomeTopic_p) works, but
         // SomeActor_p.StartConversation(PlayerRef, SomeTopic_p) seems to do nothing.
