@@ -29,15 +29,20 @@ private:
                     ext = ".";
                     ext.append(extensionData);
                 }
-                _MESSAGE("dir: %ls ext: %ls", dirpath, ext.c_str());
+                SKSE::log::info("Getting files from directory {} with ext {}", directoryPath.c_str(), ext.c_str());
                 for (fs::directory_iterator dir_iter(dir); dir_iter != end_iter; ++dir_iter) {
                     if (fs::is_regular_file(dir_iter->status())) {
                         fs::path filepath = dir_iter->path();
                         std::string file = filepath.filename().generic_string();
-                        //std::string fileExt = filepath.extension().generic_string();
-                        _MESSAGE("file: %ls ext: %ls", file.c_str(), fileExt.c_str());
-                        if (ext == ".*" || boost::iequals(filepath.extension().generic_string(), ext))
-                            arr.push_back(RE::BSFixedString(file.c_str()));
+                        std::string fileExt = filepath.extension().generic_string();
+                        SKSE::log::info("Assessing file {} ext {}", file.c_str(), fileExt.c_str());
+                        if (ext == ".*" || boost::iequals(filepath.extension().generic_string(), ext)) {
+                            RE::BSFixedString fileAsFixedString = RE::BSFixedString(file.c_str());
+                            if (std::find(arr.begin(), arr.end(), fileAsFixedString) == arr.end()) {// WTM: Fallen claims to have witnessed duplication. I cannot reproduce it, but I am now preventing duplicate items.
+                                SKSE::log::info("Returning file {} ext {}", file.c_str(), fileExt.c_str());
+                                arr.push_back(fileAsFixedString);
+                            }
+                        }
                     }
                 }
             }
