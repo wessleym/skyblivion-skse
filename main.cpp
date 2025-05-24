@@ -1,6 +1,7 @@
 #include <spdlog/sinks/basic_file_sink.h>
 
 #include "FileUtility.cpp"
+#include "FormUtility.cpp"
 #include "GameUtility.cpp"
 #include "ObjectReferenceUtility.cpp"
 #include "QuestUtility.cpp"
@@ -26,6 +27,7 @@
 static bool RegisterFuncs(RE::BSScript::Internal::VirtualMachine* vm) {
     _MESSAGE("Registering custom functions...");
     FileUtility::Register(vm);
+    FormUtility::Register(vm);
     GameUtility::Register(vm);
     QuestUtility::Register(vm);
     ObjectReferenceUtility::Register(vm);
