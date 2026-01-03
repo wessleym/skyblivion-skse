@@ -1,7 +1,7 @@
 class FormUtility {
 public:
     static void Register(RE::BSScript::Internal::VirtualMachine* vm) {
-        vm->RegisterFunction("GetAssociatedMenuForm", "SKYBFormUtility", GetAssociatedMenuForm);
+        SKSEScriptRegistrar::Register(vm, "SKYBFormUtility", "GetAssociatedMenuForm", GetAssociatedMenuForm);
     }
 
 private:

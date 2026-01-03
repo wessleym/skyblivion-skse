@@ -3,9 +3,11 @@
 #include "FileUtility.cpp"
 #include "FormUtility.cpp"
 #include "GameUtility.cpp"
+#include "MouseUtility.cpp"
 #include "ObjectReferenceUtility.cpp"
 #include "QuestUtility.cpp"
 #include "SkillUtility.cpp"
+#include "SKSEScriptRegistrar.cpp"
 #include "SKSELog.cpp"
 
 #ifndef SKYB_VERSION_INCLUDED
@@ -29,8 +31,9 @@ static bool RegisterFuncs(RE::BSScript::Internal::VirtualMachine* vm) {
     FileUtility::Register(vm);
     FormUtility::Register(vm);
     GameUtility::Register(vm);
-    QuestUtility::Register(vm);
+    MouseUtility::Register(vm);
     ObjectReferenceUtility::Register(vm);
+    QuestUtility::Register(vm);
     SkillUtility::Register(vm);
     _MESSAGE("Custom functions registered.");
     return true;

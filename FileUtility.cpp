@@ -3,12 +3,13 @@
 #include <boost/filesystem/fstream.hpp>
 
 #include "SKSELog.cpp"
+#include "SKSEScriptRegistrar.cpp"
 
 namespace fs = boost::filesystem;
 class FileUtility {
 public:
     static void Register(RE::BSScript::Internal::VirtualMachine* vm) {
-        vm->RegisterFunction("FilesInFolder", "SKYBFileUtility", FilesInFolder);
+        SKSEScriptRegistrar::Register(vm, "SKYBFileUtility", "FilesInFolder", FilesInFolder);
     }
 
 private:

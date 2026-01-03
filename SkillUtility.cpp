@@ -1,7 +1,7 @@
 class SkillUtility {
 public:
     static void Register(RE::BSScript::Internal::VirtualMachine* vm) {
-        vm->RegisterFunction("GetSkillDataArray", "SKYBSkillUtility", GetSkillDataArray);
+        SKSEScriptRegistrar::Register(vm, "SKYBSkillUtility", "GetSkillDataArray", GetSkillDataArray);
     }
 
 private:

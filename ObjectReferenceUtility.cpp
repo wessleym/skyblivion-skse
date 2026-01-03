@@ -4,45 +4,28 @@ class ObjectReferenceUtility {
 public:
     static void Register(RE::BSScript::Internal::VirtualMachine* vm) {
         std::string_view className = "SKYBObjectReferenceUtility";
-        _MESSAGE("Looking for Say execute handler");
-        sayFunction = RE::SCRIPT_FUNCTION::LocateScriptCommand("Say");
-        if (NULL == sayFunction) {
-            _ERROR("Unable to find sayFunction!");
-        }
-        vm->RegisterFunction("LegacySay", className, ObScriptSay);
+        
+        sayFunction = SKSEScriptRegistrar::LocateFunction("Say");
+        SKSEScriptRegistrar::Register(vm, className, "LegacySay", ObScriptSay);
 
-        _MESSAGE("Looking for SayTo execute handler");
-        sayToFunction = RE::SCRIPT_FUNCTION::LocateScriptCommand("SayTo");
-        if (NULL == sayToFunction) {
-            _ERROR("Unable to find sayToFunction!");
-        }
-        vm->RegisterFunction("LegacySayTo", className, ObScriptSayTo);
+        sayToFunction = SKSEScriptRegistrar::LocateFunction("SayTo");
+        SKSEScriptRegistrar::Register(vm, className, "LegacySayTo", ObScriptSayTo);
 
-        _MESSAGE("Looking for IsAnimPlaying execute handler");
-        isAnimPlayingFunction = RE::SCRIPT_FUNCTION::LocateScriptCommand("IsAnimPlaying");
-        if (NULL == isAnimPlayingFunction) {
-            _ERROR("Unable to find isAnimPlayingFunction!");
-        }
-        vm->RegisterFunction("IsAnimPlaying", className, isAnimPlaying);
+        isAnimPlayingFunction = SKSEScriptRegistrar::LocateFunction("IsAnimPlaying");
+        SKSEScriptRegistrar::Register(vm, className, "IsAnimPlaying", isAnimPlaying);
 
-        _MESSAGE("Looking for GetDestroyed execute handler");
-        getDestroyedFunction = RE::SCRIPT_FUNCTION::LocateScriptCommand("GetDestroyed");
-        if (NULL == getDestroyedFunction) {
-            _ERROR("Unable to find getDestroyedFunction!");
-        }
-        vm->RegisterFunction("LegacyGetDestroyed", className, getDestroyed);
+        getDestroyedFunction = SKSEScriptRegistrar::LocateFunction("GetDestroyed");
+        SKSEScriptRegistrar::Register(vm, className, "LegacyGetDestroyed", getDestroyed);
 
         // vm->RegisterFunction("LegacyGetContainer", "ObjectReference", GetContainer);// WTM:  Change:  Experimenting
 
-        _MESSAGE("Looking for StartConversation execute handler");
-        startConversationFunction = RE::SCRIPT_FUNCTION::LocateScriptCommand("StartConversation");
-        if (NULL == startConversationFunction) {
-            _ERROR("Unable to find startConversationFunction!");
-        }
-        vm->RegisterFunction("LegacyStartConversation", className, startConversation);
+        startConversationFunction = SKSEScriptRegistrar::LocateFunction("StartConversation");
+        SKSEScriptRegistrar::Register(vm, className, "LegacyStartConversation", startConversation);
         // WTM:  Note:  I think I got this to work, but it only seems to work when called on the player.
         // For example, PlayerRef.StartConversation(SomeActor_p, SomeTopic_p) works, but
         // SomeActor_p.StartConversation(PlayerRef, SomeTopic_p) seems to do nothing.
+
+        SKSEScriptRegistrar::Register(vm, className, "ContainsItem2", ContainsItem);
     }
 
 private:
@@ -326,6 +309,21 @@ private:
                 startConversationFunction->params, (RE::SCRIPT_FUNCTION::ScriptData*)startConversationScriptData,
                 thisActor, NULL, dummyStartConversationScript, NULL, result, opcodeOffset);
         }
+    }
+
+    static bool ContainsItem(RE::StaticFunctionTag*, RE::TESObjectREFR* objectRef, RE::TESForm* soughtObject) {
+        auto changes = objectRef->GetInventoryChanges();
+        if (!changes || !changes->entryList) {
+            return false;
+        }
+
+        for (auto& entry : *changes->entryList) {
+            if (entry && entry->object && (entry->object == soughtObject || entry->object->formID == soughtObject->formID) && entry->countDelta > 0) {
+                return true;
+            }
+        }
+
+        return false;
     }
 };
 
