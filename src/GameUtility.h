@@ -11,13 +11,13 @@ public:
 
 private:
     static UINT32 getAmountSoldStolen(RE::StaticFunctionTag*) {
-        return RE::PlayerCharacter::GetSingleton()->GetInfoRuntimeData().amountStolenSold;
+        return RE::PlayerCharacter::GetSingleton()->amountStolenSold;
     }
     static void modAmountSoldStolen(RE::StaticFunctionTag*, unsigned long amount) {
-        RE::PlayerCharacter::GetSingleton()->GetInfoRuntimeData().amountStolenSold +=
+        RE::PlayerCharacter::GetSingleton()->amountStolenSold +=
             amount;  // WTM:  Change:  Was amountStolenSold = amount.
     }
     static UINT32 isPCAMurderer(RE::StaticFunctionTag*) {
-        return RE::PlayerCharacter::GetSingleton()->GetGameStatsData().murder;
+        return RE::PlayerCharacter::GetSingleton()->murder;
     }
 };

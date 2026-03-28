@@ -23,7 +23,7 @@ private:
         // Dialogue Menu- Talking actor
         if (a_menu == "BookMenu") {
             result.push_back(RE::BookMenu::GetTargetForm());
-            result.push_back(RE::BookMenu::GetTargetReference());
+            result.push_back(RE::BookMenu::GetTargetReference().get());
         } else if (a_menu == "ContainerMenu") {
             auto handle = RE::ContainerMenu::GetTargetRefHandle();
 
@@ -51,11 +51,11 @@ private:
                 }
             }
         } else if (a_menu == "Lockpicking Menu") {
-            result.push_back(RE::LockpickingMenu::GetTargetReference());
+            result.push_back(RE::LockpickingMenu::GetTargetReference().get());
         } else if (a_menu == "Training Menu") {
             // Likely the first thing is the actor but it's not confirmed yet and I don't want to rn
         } else if (a_menu == "GiftMenu") {
-            auto handle = RE::GiftMenu::GetTargetRefHandle();
+            auto handle = RE::GiftMenu::GetReceiverRefHandle();
 
             if (handle) {
                 auto vendor = RE::Actor::LookupByHandle(handle);

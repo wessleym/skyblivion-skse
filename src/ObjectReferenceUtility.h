@@ -1,5 +1,3 @@
-#include "SKSELog.cpp"
-
 class ObjectReferenceUtility {
 public:
     static void Register(RE::BSScript::Internal::VirtualMachine* vm) {
@@ -33,9 +31,9 @@ private:
     /* __declspec(dllimport) */ static int g_is_obscript_say_say_to;
 
     static RE::SCRIPT_FUNCTION* sayFunction;
-    static BYTE sayScriptData[9];
+    static std::uint8_t sayScriptData[9];
     static RE::Script* initDummySayScript() {
-        BYTE dummySCRISayAlloc[sizeof(RE::Script)] = {0};
+        std::uint8_t dummySCRISayAlloc[sizeof(RE::Script)] = {0};
         RE::Script* dummySayScript = (RE::Script*)&dummySCRISayAlloc;
         char say[4] = "Say";
         dummySayScript->formFlags = 0x000400a;
@@ -64,7 +62,7 @@ private:
             //	return 0.0;
             // }
 
-            UINT32 opcodeOffset = 0x4;
+            std::uint32_t opcodeOffset = 0x4;
 
             if (thisActor == NULL || TopicID == NULL) return 0.5;
 
@@ -121,9 +119,9 @@ private:
     }
 
     static RE::SCRIPT_FUNCTION* sayToFunction;
-    static BYTE sayToScriptData[12];
+    static std::uint8_t sayToScriptData[12];
     static RE::Script* initDummySayToScript() {
-        BYTE dummySCRISayToAlloc[sizeof(RE::Script)] = {0};
+        std::uint8_t dummySCRISayToAlloc[sizeof(RE::Script)] = {0};
         RE::Script* dummySayToScript = (RE::Script*)&dummySCRISayToAlloc;
         char sayTo[6] = "SayTo";
         dummySayToScript->formFlags = 0x000400a;
@@ -154,7 +152,7 @@ private:
             //	return 0.0;
             // }
 
-            UINT32 opcodeOffset = 0x4;
+            std::uint32_t opcodeOffset = 0x4;
 
             if (thisActor == NULL || anotherActor == NULL || TopicID == NULL) return 0.5;
 
@@ -220,7 +218,7 @@ private:
         if (isAnimPlayingFunction) {
             RE::SCRIPT_FUNCTION::ScriptData isAnimPlayingFunctionData = {0x1128, 0x0001, 0x0000};
             double result = 0.0;
-            UINT32 opcodeOffset = 0x4;
+            std::uint32_t opcodeOffset = 0x4;
 
             isAnimPlayingFunction->executeFunction(isAnimPlayingFunction->params, &isAnimPlayingFunctionData,
                                                    animatedRefr, NULL, NULL, NULL, result, opcodeOffset);
@@ -231,11 +229,11 @@ private:
 
     static RE::SCRIPT_FUNCTION* getDestroyedFunction;
     // TODO: CHECK: should be Double?
-    static UINT32 getDestroyed(RE::StaticFunctionTag*, RE::TESObjectREFR* reference) {
+    static std::uint32_t getDestroyed(RE::StaticFunctionTag*, RE::TESObjectREFR* reference) {
         if (getDestroyedFunction) {
             RE::SCRIPT_FUNCTION::ScriptData getDestroyedFunctionData = {0x10CB, 0x0001, 0x0000};
             double result = 0.0;
-            UINT32 opcodeOffset = 0x4;
+            std::uint32_t opcodeOffset = 0x4;
 
             getDestroyedFunction->executeFunction(getDestroyedFunction->params, &getDestroyedFunctionData, reference,
                                                   NULL, NULL, NULL, result, opcodeOffset);
@@ -244,7 +242,7 @@ private:
         return 0;
     }
 
-    /*static UINT32 GetContainer(RE::TESObjectREFR* objectReference) {  // WTM:  Change:  Experimenting
+    /*static std::uint32_t GetContainer(RE::TESObjectREFR* objectReference) {  // WTM:  Change:  Experimenting
         if (objectReference == NULL) {
             return 1;
         }
@@ -257,9 +255,9 @@ private:
     }*/
 
     static RE::SCRIPT_FUNCTION* startConversationFunction;  // WTM:  Change:  Experimenting
-    static BYTE startConversationScriptData[12];
+    static std::uint8_t startConversationScriptData[12];
     static RE::Script* initDummyStartConversationScript() {
-        BYTE dummySCRIStartConversationAlloc[sizeof(RE::Script)] = {0};
+        std::uint8_t dummySCRIStartConversationAlloc[sizeof(RE::Script)] = {0};
         RE::Script* dummyStartConversationScript = (RE::Script*)&dummySCRIStartConversationAlloc;
         char startConversation[18] = "StartConversation";
         dummyStartConversationScript->formFlags = 0x000400a;
@@ -278,7 +276,7 @@ private:
         RE::TESTopic* topic) {  // WTM:  Change:  Experimenting.  I'm trying to pass in arguments.
         if (startConversationFunction) {
             double result = 0.0;
-            UINT32 opcodeOffset = 0x4;
+            std::uint32_t opcodeOffset = 0x4;
 
             RE::SCRIPT_REFERENCED_OBJECT arg1;
             // memset(&arg1.form_name, 0, sizeof(BSString));
@@ -329,12 +327,12 @@ private:
 
 double ObjectReferenceUtility::g_silent_voice_duration_seconds;
 int ObjectReferenceUtility::g_is_obscript_say_say_to;
-BYTE ObjectReferenceUtility::startConversationScriptData[12] = {
-    (BYTE)RE::FUNCTION_DATA::FunctionID::kStartConversation, 0x10, 0x8, 0x0, 0x2, 0x0, 0x72, 0x1, 0x0, 0x72, 0x2, 0x0};
-BYTE ObjectReferenceUtility::sayScriptData[9] = {
-    (BYTE)RE::FUNCTION_DATA::FunctionID::kSay, 0x10, 0x5, 0x0, 0x1, 0x0, 0x72, 0x1, 0x0};
-BYTE ObjectReferenceUtility::sayToScriptData[12] = {
-    (BYTE)RE::FUNCTION_DATA::FunctionID::kSayTo, 0x10, 0x8, 0x0, 0x2, 0x0, 0x72, 0x1, 0x0, 0x72, 0x2, 0x0};
+std::uint8_t ObjectReferenceUtility::startConversationScriptData[12] = {
+    (std::uint8_t)RE::FUNCTION_DATA::FunctionID::kStartConversation, 0x10, 0x8, 0x0, 0x2, 0x0, 0x72, 0x1, 0x0, 0x72, 0x2, 0x0};
+std::uint8_t ObjectReferenceUtility::sayScriptData[9] = {
+    (std::uint8_t)RE::FUNCTION_DATA::FunctionID::kSay, 0x10, 0x5, 0x0, 0x1, 0x0, 0x72, 0x1, 0x0};
+std::uint8_t ObjectReferenceUtility::sayToScriptData[12] = {
+    (std::uint8_t)RE::FUNCTION_DATA::FunctionID::kSayTo, 0x10, 0x8, 0x0, 0x2, 0x0, 0x72, 0x1, 0x0, 0x72, 0x2, 0x0};
 RE::SCRIPT_FUNCTION* ObjectReferenceUtility::sayFunction = NULL;
 RE::SCRIPT_FUNCTION* ObjectReferenceUtility::sayToFunction = NULL;
 RE::SCRIPT_FUNCTION* ObjectReferenceUtility::isAnimPlayingFunction = NULL;

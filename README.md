@@ -1,17 +1,66 @@
-# skyblivion-skse
-SKSE utilities for Skyblivion project
+# Skyblivion SKSE Plugin
+This project was converted from on older template to this template:
 
-# Build Instructions
-Open this folder with Visual Studio and then use CMake to build.
+https://github.com/libxse/commonlibsse-template
 
-You might need to save CMakeLists.txt within Visual Studio to get things started. Then use the normal Visual Studio build functionality.
+It should be cloned recursively:
 
-# Troubleshooting
-For the first build, you might need to run Visual Studio as an administrator set Properties > Compatibility > Run this program as an administrator:
-- C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Tools\MSVC\14.42.34433\bin\Hostx64\x64\cl.exe
-- C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\Ninja\ninja.exe
-- %localappdata%\vcpkg\downloads\tools\ninja\1.10.2-windows\ninja.exe
+git clone --recurse-submodules https://github.com/wessleym/skyblivion-skse
 
-It's possible that not all of these needed to be changed. Later, I was able to turn off these compatibility settings and run Visual Studio as a normal user.
+What follows is the original README.md from https://github.com/libxse/commonlibsse-template:
 
-If problems continue, update the "baseline" values in vcpkg-configuration.json with the most recent Git hashes.
+# CommonLibSSE Plugin Template
+
+This is a basic plugin template using CommonLibSSE.
+
+### Requirements
+* [XMake](https://xmake.io) [3.0.0+]
+* C++23 Compiler (MSVC, Clang-CL)
+
+## Getting Started
+```bat
+git clone --recurse-submodules https://github.com/libxse/commonlibsse-template
+cd commonlibsse-template
+```
+
+### Build
+To build the project, run the following command:
+```bat
+xmake build
+```
+
+> ***Note:*** *This will generate a `build/windows/` directory in the **project's root directory** with the build output.*
+
+### Build Output (Optional)
+If you want to redirect the build output, set one of the following environment variables:
+
+- Path to a Mod Manager mods folder: `XSE_TES5_MODS_PATH`
+
+  or
+
+- Path to a Skyrim install folder: `XSE_TES5_GAME_PATH`
+
+### Project Generation (Optional)
+If you use Visual Studio, run the following command:
+```bat
+xmake project -k vsxmake
+```
+
+> ***Note:*** *This will generate a `vsxmakeXXXX/` directory in the **project's root directory** using the latest version of Visual Studio installed on the system.*
+
+**Alternatively**, if you do not use Visual Studio, you can generate a `compile_commands.json` file for use with a laguage server like clangd in any code editor that supports it, like vscode:
+```bat
+xmake project -k compile_commands
+```
+
+> ***Note:*** *You must have a language server extension installed to make use of this file. I recommend `clangd`. Do not have more than one installed at a time as they will conflict with each other. I also recommend installing the `xmake` extension if available to make building the project easier.*
+
+### Upgrading Packages (Optional)
+If you want to upgrade the project's dependencies, run the following commands:
+```bat
+xmake repo --update
+xmake require --upgrade
+```
+
+## Documentation
+Please refer to the [Wiki](../../wiki/Home) for more advanced topics.
