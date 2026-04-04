@@ -18,11 +18,12 @@ public:
         // vm->RegisterFunction("LegacyGetContainer", "ObjectReference", GetContainer);// WTM:  Change:  Experimenting
 
         startConversationFunction = SKSEScriptRegistrar::LocateFunction("StartConversation");
-        SKSEScriptRegistrar::Register(vm, className, "LegacyStartConversation", startConversation);
+        //SKSEScriptRegistrar::Register(vm, className, "LegacyStartConversation", startConversation);
         // WTM:  Note:  I think I got this to work, but it only seems to work when called on the player.
         // For example, PlayerRef.StartConversation(SomeActor_p, SomeTopic_p) works, but
         // SomeActor_p.StartConversation(PlayerRef, SomeTopic_p) seems to do nothing.
 
+        // I'm measuring performance in SKYBObjectReferenceUtility.psc for the below.
         SKSEScriptRegistrar::Register(vm, className, "ContainsItem2", ContainsItem);
     }
 
@@ -310,18 +311,15 @@ private:
     }
 
     static bool ContainsItem(RE::StaticFunctionTag*, RE::TESObjectREFR* objectRef, RE::TESForm* soughtObject) {
-        auto changes = objectRef->GetInventoryChanges();
-        if (!changes || !changes->entryList) {
+        if (!objectRef || !soughtObject) {
             return false;
         }
-
-        for (auto& entry : *changes->entryList) {
-            if (entry && entry->object && (entry->object == soughtObject || entry->object->formID == soughtObject->formID) && entry->countDelta > 0) {
-                return true;
-            }
+        auto soughtObjectAsBoundObject = soughtObject->As<RE::TESBoundObject>();
+        if (!soughtObjectAsBoundObject) {
+            return false;
         }
-
-        return false;
+        auto inventory = objectRef->GetInventory();
+        return inventory.contains(soughtObjectAsBoundObject);
     }
 };
 
