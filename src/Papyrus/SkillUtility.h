@@ -1,3 +1,6 @@
+#pragma once
+#include "SKSEScriptRegistrar.h"
+
 class SkillUtility {
 public:
     static void Register(RE::BSScript::Internal::VirtualMachine* vm) {

@@ -1,3 +1,6 @@
+#pragma once
+#include "SKSEScriptRegistrar.h"
+
 class MouseUtility {
 public:
     static void Register(RE::BSScript::Internal::VirtualMachine* vm) {

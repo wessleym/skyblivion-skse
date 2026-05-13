@@ -1,3 +1,6 @@
 [submodule "lib/commonlibsse"]
 	path = lib/commonlibsse
 	url = https://github.com/libxse/commonlibsse.git
+[submodule "lib/clib-util"]
+	path = lib/clib-util
+	url = https://github.com/powerof3/CLibUtil

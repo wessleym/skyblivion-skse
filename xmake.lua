@@ -1,5 +1,6 @@
 -- include subprojects
 includes("lib/commonlibsse")
+includes("lib/clib-util")
 
 -- set project constants
 set_project("Skyblivion")
@@ -12,9 +13,6 @@ set_warnings("allextra")
 add_rules("mode.debug", "mode.releasedbg")
 add_rules("plugin.vsxmake.autoupdate")
 
--- add dependencies
-add_requires("boost", {configs = {filesystem = true}})
-
 -- define targets
 target("Skyblivion")
     add_rules("commonlibsse.plugin", {
@@ -24,7 +22,10 @@ target("Skyblivion")
     })
 
     -- add dependencies
-    add_packages("boost")
+    add_deps("clib-util")
+
+    -- prevent <Windows.h> from defining the ERROR macro (collides with REX::ERROR)
+    add_defines("NOGDI")
 
     -- add src files
     add_files("src/**.cpp")

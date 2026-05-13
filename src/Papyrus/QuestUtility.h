@@ -1,3 +1,6 @@
+#pragma once
+#include "SKSEScriptRegistrar.h"
+
 class QuestUtility {
 public:
     static void Register(RE::BSScript::Internal::VirtualMachine* vm) {

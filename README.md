@@ -1,5 +1,5 @@
 # Skyblivion SKSE Plugin
-This project was converted from on older template to this template:
+This project was converted from an older template to this template:
 
 https://github.com/libxse/commonlibsse-template
 
