@@ -1,0 +1,143 @@
+html, body {
+    margin: 0;
+    padding: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.6);
+    color: #fff;
+    font-family: monospace;
+    font-size: 14px;
+    user-select: none;
+}
+
+.window {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: max-content;
+    background: #222;
+    border: 1px solid #888;
+}
+
+.titlebar {
+    padding: 10px 16px;
+    background: #333;
+    border-bottom: 1px solid #888;
+    font-weight: bold;
+    font-size: 20px;
+}
+
+.body {
+    display: flex;
+    flex-direction: row;
+}
+
+.col {
+    flex: 0 0 auto;
+    padding: 10px 12px;
+    border-right: 1px solid #555;
+    min-height: 420px;
+}
+.col:last-child { border-right: none; }
+
+.col.col-effects { width: 300px; }
+.col.col-builder { width: 300px; }
+.col.col-spell   { width: 300px; }
+
+.col-header {
+    font-weight: bold;
+    margin: 10px 0 6px;
+    border-bottom: 1px solid #555;
+    padding-bottom: 3px;
+    font-size: 15px;
+}
+
+#effect-list, #spell-effects {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    max-height: 320px;
+    overflow-y: auto;
+}
+
+#effect-list li, #spell-effects li {
+    padding: 4px 8px;
+    cursor: pointer;
+    border: 1px solid transparent;
+}
+#effect-list li:hover { background: #333; }
+#effect-list li.selected { background: #3a3a5a; border-color: #88a; }
+
+#spell-effects li { cursor: default; }
+#spell-effects li .remove {
+    margin-left: 8px;
+    cursor: pointer;
+    color: #f88;
+}
+
+.row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin: 4px 0;
+}
+.row label, .row > span:first-child {
+    min-width: 14ch;
+}
+.row input[type="range"] { flex: 1; }
+.row.disabled { opacity: 0.3; pointer-events: none; }
+
+[id^="val-"] {
+    display: inline-block;
+    min-width: 5ch;
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+}
+
+input[type="text"] {
+    background: #111;
+    color: #fff;
+    border: 1px solid #666;
+    padding: 2px 4px;
+    font-family: inherit;
+    font-size: inherit;
+    flex: 1;
+    min-width: 0;
+}
+
+button {
+    background: #333;
+    color: #fff;
+    border: 1px solid #888;
+    padding: 6px 18px;
+    font-family: inherit;
+    font-size: 15px;
+    cursor: pointer;
+}
+button:hover { background: #444; }
+button:disabled { opacity: 0.4; cursor: not-allowed; }
+
+select {
+    background: #111;
+    color: #fff;
+    border: 1px solid #666;
+    padding: 2px 4px;
+    font-family: inherit;
+    font-size: inherit;
+    flex: 1;
+}
+
+#effect-list li.hint {
+    cursor: default;
+    opacity: 0.5;
+}
+#effect-list li.hint:hover { background: none; }
+
+.actions {
+    margin-top: 12px;
+    display: flex;
+    gap: 6px;
+}
+
+#add-effect-btn { margin-top: 8px; }

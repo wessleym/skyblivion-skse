@@ -1,0 +1,220 @@
+html, body {
+    margin: 0;
+    padding: 0;
+    width: 100%;
+    height: 100%;
+    background: transparent;
+    color: #f5e9c8;
+    font-family: "Trebuchet MS", sans-serif;
+    user-select: none;
+}
+
+.scene {
+    position: absolute;
+    top: 12px;
+    left: 12px;
+    transform: scale(calc(25vw / 460px));
+    transform-origin: top left;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 24px;
+}
+
+.pie-wrap {
+    position: relative;
+    width: 460px;
+    height: 460px;
+    filter: drop-shadow(0 0 28px rgba(0, 0, 0, 0.7));
+}
+
+.pie {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+}
+
+.quadrant-guide {
+    fill: rgba(20, 14, 8, 0.55);
+    stroke: rgba(168, 145, 90, 0.4);
+    stroke-width: 2;
+}
+
+/*
+Wraps every magnitude bar.
+After a wedge click, .spinning is added to animate the group 90° clockwise around the wheel center.
+Once animation-end fires, the class is removed.
+animation (not transition) is used here because PrismaUI's renderer mishandles the transition: none + transform snap pattern at the end of a transition.
+animation-fill-mode: forwards holds the 90° final state cleanly, and removing the class reverts to the base style (no transform = 0°) instantly because there's no transition on transform.
+*/
+.bars-rotor {
+    transform-origin: 230px 230px;
+}
+@keyframes rotor-spin {
+    from { transform: rotate(0deg); }
+    to   { transform: rotate(90deg); }
+}
+.bars-rotor.spinning {
+    animation: rotor-spin 0.3s ease forwards;
+}
+
+.quadrant-divider {
+    stroke: rgba(168, 145, 90, 0.35);
+    stroke-width: 1;
+}
+
+/*Per-wedge hit target. Does not rotate.*/
+.hitbox {
+    fill: transparent;
+    cursor: pointer;
+}
+
+/*Wedge dim layer*/
+.dim-overlay {
+    fill: rgba(0, 0, 0, 0);
+    pointer-events: none;
+    transition: fill 0.2s ease;
+}
+
+/*
+The visible bars. Positioned within bars-rotor so the group can be rotated as a whole.
+The bars always look enabled regardless of used state; the dim-overlay handles "disabled".
+*/
+.wedge {
+    fill: rgba(232, 200, 130, 0.18);
+    stroke: rgba(232, 200, 130, 0.7);
+    stroke-width: 1.5;
+    pointer-events: none;
+    transition: fill 0.15s ease, stroke 0.15s ease;
+}
+
+/*
+Hover highlight on the bars whose action is being hovered.
+JavaScript adds and removes .hovered as the cursor enters and leaves the hitbox.
+:hover won't work in this case.
+*/
+.wedge.hovered {
+    fill: rgba(245, 233, 200, 0.32);
+    stroke: rgba(245, 233, 200, 0.95);
+    stroke-width: 2;
+}
+
+.quadrant.used .dim-overlay {
+    fill: rgba(0, 0, 0, 0.55);
+}
+.quadrant.used .hitbox {
+    cursor: not-allowed;
+    pointer-events: none;
+}
+
+.pie-hub {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 160px;
+    height: 160px;
+    border-radius: 50%;
+    background: rgba(20, 14, 8, 0.92);
+    border: 2px solid #a8915a;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    box-shadow: 0 0 16px rgba(0, 0, 0, 0.8);
+    z-index: 5;
+}
+
+.npc-name {
+    font-size: 14px;
+    letter-spacing: 2px;
+    opacity: 0.85;
+    padding: 0 12px;
+}
+
+.npc-disposition {
+    font-size: 32px;
+    font-weight: bold;
+    margin-top: 6px;
+    color: #f5e9c8;
+    transition: color 0.3s ease;
+}
+.npc-disposition.positive { color: #6ce06c; }
+.npc-disposition.negative { color: #e26c6c; }
+
+.npc-disposition-label {
+    font-size: 10px;
+    letter-spacing: 1px;
+    opacity: 0.6;
+    margin-top: -2px;
+}
+.npc-disposition-label.max-reached {
+    color: #6ce06c;
+    opacity: 1;
+    font-size: 11px;
+    font-weight: bold;
+}
+.npc-disposition-label.feedback {
+    color: #d6a06b;
+    opacity: 1;
+    font-size: 10px;
+    font-weight: bold;
+}
+
+.label {
+    position: absolute;
+    pointer-events: none;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    text-shadow: 0 1px 3px rgba(0, 0, 0, 0.9);
+}
+.action-name {
+    font-size: 18px;
+    letter-spacing: 2px;
+}
+.preference {
+    font-size: 10px;
+    letter-spacing: 1px;
+    padding: 2px 8px;
+    border-radius: 3px;
+    background: rgba(20, 14, 8, 0.85);
+    border: 1px solid currentColor;
+    text-shadow: none;
+}
+.preference.Love { color: #6ce06c; }
+.preference.Like { color: #b8d68b; }
+.preference.Dislike { color: #d6a06b; }
+.preference.Hate { color: #e26c6c; }
+
+.label.Admire { top: 12px; left: 50%; transform: translateX(-50%); }
+.label.Boast { right: 12px; top: 50%;  transform: translateY(-50%); }
+.label.Joke { bottom: 12px; left: 50%; transform: translateX(-50%); }
+.label.Coerce { left: 12px; top: 50%; transform: translateY(-50%); }
+
+.label.used .action-name, .label.used .preference { opacity: 0.4; }
+
+.bribe-btn {
+    padding: 10px 32px;
+    background: rgba(20, 14, 8, 0.92);
+    color: #f5e9c8;
+    border: 1px solid #a8915a;
+    cursor: pointer;
+    font: inherit;
+    font-size: 16px;
+    letter-spacing: 2px;
+    text-shadow: 0 1px 3px rgba(0, 0, 0, 0.9);
+    box-shadow: 0 0 12px rgba(0, 0, 0, 0.6);
+    transition: background 0.15s ease, border-color 0.15s ease;
+}
+.bribe-btn:hover {
+    background: #3a2a14;
+    border-color: #f5e9c8;
+}
+.bribe-btn:disabled {
+    opacity: 0.35;
+    cursor: not-allowed;
+}

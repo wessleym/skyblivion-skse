@@ -17,8 +17,8 @@ bool TESNPCActivateHook::Activate(
         if (auto actor = a_targetRef ? a_targetRef->As<RE::Actor>() : nullptr) {
             if (auto actorBase = actor->GetActorBase()) {
                 std::string edid = clib_util::editorID::get_editorID(actorBase);
-                DispositionSystem::SetActorDisposition(actor, edid);
-                REX::INFO("Set disposition before TESNPC activate: {}", edid);
+                DispositionSystem::SetInitialDisposition(actor, edid);
+                Log::INFO("Set disposition before TESNPC activate: {}", edid);
             }
         }
     }
@@ -29,5 +29,4 @@ bool TESNPCActivateHook::Activate(
 void TESNPCActivateHook::Apply() {
     REL::Relocation<std::uintptr_t> vtbl{ RE::VTABLE_TESNPC[0] };
     func = vtbl.write_vfunc(idx, Activate);
-    REX::INFO("Applied TESNPCActivateHook");
 }

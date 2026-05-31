@@ -1,0 +1,42 @@
+#pragma once
+
+#include "../PrismaFeatureView.h"
+#include "PersuasionContract.h"
+
+namespace RE { class Actor; }
+class PrismaViewHandle;
+
+namespace Persuasion {
+
+class PersuasionView : public PrismaFeatureView<PersuasionView> {
+public:
+    static void Open(RE::Actor* target);
+    static void Close();
+
+private:
+    friend class PrismaFeatureView<PersuasionView>;
+
+    //I'm experimenting with two modes:
+    enum class CaptivityMode {
+        Standard,//Dialogue menu stays open under Persuasion game so NPC stays still
+        Captive//Close dialogue menu and make NPC stand still
+    };
+
+    static constexpr const char* kHtmlPath = "Persuasion/index.html";
+    static constexpr const char* kVerifyJsFunc = PersuasionContract::JsFunc::PersuasionVerifyBridges;
+    static void RegisterListeners(const PrismaViewHandle& view);
+
+    static RE::FormID s_currentTargetFormID;//Form ID of NPC currently being persuaded (0 if none)
+    static constexpr CaptivityMode kConfiguredMode = CaptivityMode::Captive;
+
+    //JavaScript Listeners:
+    static void OnWedgeHover(const char* argument);
+    static void OnCloseFromJS(const char* argument);
+    static void OnDispositionChanged(const char* argument);
+    static void OnBribe(const char* argument);
+
+    static void SendBribeResult(bool success, int price, int gain, float disposition, const char* reason);
+    static void SetDisposition(RE::Actor* actor, float value);
+};
+
+}

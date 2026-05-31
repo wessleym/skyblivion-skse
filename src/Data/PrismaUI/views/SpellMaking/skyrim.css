@@ -1,0 +1,190 @@
+/* Skyrim theme — overrides style.css to give the SpellMaking view the look of
+   Skyrim's in-game popup-notice panel (translucent black panel, gray borders,
+   light-gray serif text, centered title). Purely visual: colors, fonts,
+   borders, shadows. No positioning, no margins/padding, no widths/heights.
+   Loaded AFTER style.css in index.html so these rules win.
+
+   Palette:
+     rgba(0, 0, 0, 0.3)    viewport dim outside the window
+     rgba(0, 0, 0, 0.72)   window background — translucent black
+     #8a8a8a               rule — borders, dividers (mid gray)
+     #b0b0b0               rule-strong — focus / hover borders
+     #d4d4d4               ink — primary text (light gray)
+     #ffffff               ink-bright — titlebar, selected items
+     #888888               ink-dim — hint rows, disabled labels
+     #d68070               soft-red — × remove button only
+
+   Font: clean humanist sans-serif. Skyrim's UI font (Futura Condensed Medium)
+   isn't preinstalled on Windows; "Trebuchet MS" is the closest commonly-
+   available fallback (humanist sans with a similar vertical feel), then
+   Segoe UI, then the generic sans-serif. Header prominence is carried by
+   size + brightness — no caps, no extra letter-spacing, no bold beyond what
+   style.css already sets on .titlebar.                                       */
+
+html, body {
+    background: rgba(0, 0, 0, 0.3);
+    color: #d4d4d4;
+    font-family: "Trebuchet MS", "Segoe UI", sans-serif;
+}
+
+.window {
+    background: rgba(0, 0, 0, 0.72);
+    border-color: #8a8a8a;
+    box-shadow: 0 0 32px rgba(0, 0, 0, 0.85);
+}
+
+.titlebar {
+    background: transparent;
+    border-bottom-color: rgba(138, 138, 138, 0.55);
+    color: #ffffff;
+    text-align: center;
+    font-style: normal;
+}
+
+.col {
+    border-right-color: rgba(138, 138, 138, 0.4);
+}
+
+.col-header {
+    color: #d4d4d4;
+    border-bottom-color: rgba(138, 138, 138, 0.4);
+    font-weight: normal;
+}
+
+#effect-list li, #spell-effects li {
+    color: #d4d4d4;
+    font-weight: normal;
+}
+#effect-list li:hover {
+    background: rgba(255, 255, 255, 0.07);
+    color: #ffffff;
+}
+#effect-list li.selected {
+    background: rgba(255, 255, 255, 0.12);
+    border-color: #b0b0b0;
+    color: #ffffff;
+}
+#effect-list li.hint {
+    color: #888888;
+    font-style: italic;
+    font-weight: normal;
+}
+#effect-list li.hint:hover {
+    background: none;
+    color: #888888;
+}
+
+#spell-effects li .remove {
+    color: #d68070;
+}
+
+.row label,
+.row > span:first-child {
+    color: #d4d4d4;
+}
+
+[id^="val-"] {
+    color: #d4d4d4;
+}
+
+input[type="text"] {
+    background: rgba(0, 0, 0, 0.4);
+    color: #d4d4d4;
+    border-color: #8a8a8a;
+    font-style: normal;
+}
+input[type="text"]:focus {
+    outline: none;
+    border-color: #b0b0b0;
+    background: rgba(0, 0, 0, 0.55);
+}
+
+select {
+    background: rgba(0, 0, 0, 0.4);
+    color: #d4d4d4;
+    border-color: #8a8a8a;
+}
+select:focus {
+    outline: none;
+    border-color: #b0b0b0;
+}
+
+/* Range slider — thin gray track with a small light-gray thumb. PrismaUI uses
+   the WebKit pseudo-elements in-game; the Mozilla set is here for Firefox
+   preview parity. */
+input[type="range"] {
+    -webkit-appearance: none;
+    appearance: none;
+    background: transparent;
+    height: 18px;
+    cursor: pointer;
+}
+input[type="range"]::-webkit-slider-runnable-track {
+    height: 2px;
+    background: #8a8a8a;
+    border: none;
+}
+input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background: #d4d4d4;
+    border: 1px solid #b0b0b0;
+    margin-top: -5px;
+    box-shadow: 0 0 4px rgba(212, 212, 212, 0.35);
+}
+input[type="range"]::-moz-range-track {
+    height: 2px;
+    background: #8a8a8a;
+}
+input[type="range"]::-moz-range-thumb {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background: #d4d4d4;
+    border: 1px solid #b0b0b0;
+}
+
+button {
+    background: rgba(0, 0, 0, 0.4);
+    color: #d4d4d4;
+    border-color: #8a8a8a;
+    border-radius: 2px;
+    font-weight: normal;
+    font-style: normal;
+    text-transform: none;
+    letter-spacing: 0;
+    transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+button:hover {
+    background: rgba(255, 255, 255, 0.08);
+    color: #ffffff;
+    border-color: #b0b0b0;
+}
+button:active {
+    background: rgba(0, 0, 0, 0.6);
+}
+button:disabled {
+    color: #888888;
+}
+
+/* Narrow gray-on-dark scrollbars. WebKit-only — sufficient for Ultralight. */
+#effect-list::-webkit-scrollbar,
+#spell-effects::-webkit-scrollbar {
+    width: 8px;
+}
+#effect-list::-webkit-scrollbar-track,
+#spell-effects::-webkit-scrollbar-track {
+    background: rgba(0, 0, 0, 0.25);
+}
+#effect-list::-webkit-scrollbar-thumb,
+#spell-effects::-webkit-scrollbar-thumb {
+    background: rgba(138, 138, 138, 0.55);
+    border-radius: 2px;
+}
+#effect-list::-webkit-scrollbar-thumb:hover,
+#spell-effects::-webkit-scrollbar-thumb:hover {
+    background: #b0b0b0;
+}

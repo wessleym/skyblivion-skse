@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Skyblivion Spell Making</title>
+    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="skyrim.css">
+</head>
+<body>
+    <div class="window">
+        <div class="titlebar">Spell Making</div>
+        <div class="body">
+            <div class="col col-effects">
+                <div class="col-header">Cast Mode</div>
+                <div class="row">
+                    <select id="cast-mode"></select>
+                </div>
+                <div class="col-header">Available Effects</div>
+                <ul id="effect-list"></ul>
+            </div>
+            <div class="col col-builder">
+                <div class="col-header">Selected Effect</div>
+                <div id="builder">
+                    <div class="row">
+                        <span>Effect:</span>
+                        <span id="builder-effect-name">(none)</span>
+                    </div>
+                    <div class="row">
+                        <span>School:</span>
+                        <span id="builder-effect-school">--</span>
+                    </div>
+                    <div class="row" id="row-magnitude">
+                        <label for="slider-magnitude">Magnitude:</label>
+                        <input type="range" id="slider-magnitude" min="3" max="100" value="10">
+                        <span id="readout-magnitude">10</span>
+                    </div>
+                    <div class="row" id="row-duration">
+                        <label for="slider-duration">Duration (s):</label>
+                        <input type="range" id="slider-duration" min="1" max="120" value="30">
+                        <span id="readout-duration">30</span>
+                    </div>
+                    <div class="row" id="row-area">
+                        <label for="slider-area">Area (ft):</label>
+                        <input type="range" id="slider-area" min="9" max="100" value="9">
+                        <span id="readout-area">None</span>
+                    </div>
+                    <div class="row">
+                        <span>Magicka Cost:</span>
+                        <span id="builder-effect-magicka-cost">--</span>
+                    </div>
+                    <button id="add-effect-btn">Add to Spell</button>
+                </div>
+            </div>
+            <div class="col col-spell">
+                <div class="col-header">New Spell</div>
+                <div class="row">
+                    <label for="spell-name">Name:</label>
+                    <input type="text" id="spell-name" value="My Spell">
+                </div>
+                <div class="row">
+                    <span>Magicka Cost:</span>
+                    <span id="spell-magicka-cost">0</span>
+                </div>
+                <div class="row">
+                    <span>Gold Price:</span>
+                    <span id="spell-gold-price">0</span>
+                </div>
+                <div class="row">
+                    <span>Mastery:</span>
+                    <span id="spell-mastery">--</span>
+                </div>
+                <div class="col-header">Effects in Spell</div>
+                <ul id="spell-effects"></ul>
+                <div class="actions">
+                    <button id="buy-btn">Buy</button>
+                    <button id="cancel-btn">Cancel</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    <script src="../_Shared/shared.js"></script>
+    <script src="script.js"></script>
+</body>
+</html>

@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <title>Skyblivion Persuasion</title>
+    <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+    <div class="scene">
+        <div class="pie-wrap">
+            <svg class="pie" viewBox="0 0 460 460" xmlns="http://www.w3.org/2000/svg">
+                <defs>
+                    <clipPath id="clip-Admire"><path id="clip-path-Admire"></path></clipPath>
+                    <clipPath id="clip-boast"><path id="clip-path-Boast"></path></clipPath>
+                    <clipPath id="clip-joke"><path id="clip-path-Joke"></path></clipPath>
+                    <clipPath id="clip-coerce"><path id="clip-path-Coerce"></path></clipPath>
+                </defs>
+                <circle class="quadrant-guide" cx="230" cy="230" r="230"></circle>
+                <line class="quadrant-divider" x1="230" y1="0"   x2="230" y2="460"></line>
+                <line class="quadrant-divider" x1="0"   y1="230" x2="460" y2="230"></line>
+                <g class="bars-rotor" id="bars-rotor">
+                    <g class="bars-group" clip-path="url(#clip-Admire)">
+                        <path class="wedge" id="wedge-Admire-0"></path>
+                        <path class="wedge" id="wedge-Admire-1"></path>
+                        <path class="wedge" id="wedge-Admire-2"></path>
+                        <path class="wedge" id="wedge-Admire-3"></path>
+                    </g>
+                    <g class="bars-group" clip-path="url(#clip-Boast)">
+                        <path class="wedge" id="wedge-Boast-0"></path>
+                        <path class="wedge" id="wedge-Boast-1"></path>
+                        <path class="wedge" id="wedge-Boast-2"></path>
+                        <path class="wedge" id="wedge-Boast-3"></path>
+                    </g>
+                    <g class="bars-group" clip-path="url(#clip-Joke)">
+                        <path class="wedge" id="wedge-Joke-0"></path>
+                        <path class="wedge" id="wedge-Joke-1"></path>
+                        <path class="wedge" id="wedge-Joke-2"></path>
+                        <path class="wedge" id="wedge-Joke-3"></path>
+                    </g>
+                    <g class="bars-group" clip-path="url(#clip-Coerce)">
+                        <path class="wedge" id="wedge-Coerce-0"></path>
+                        <path class="wedge" id="wedge-Coerce-1"></path>
+                        <path class="wedge" id="wedge-Coerce-2"></path>
+                        <path class="wedge" id="wedge-Coerce-3"></path>
+                    </g>
+                </g>
+                <g class="hitbox-group" id="hitbox-group">
+                    <g class="quadrant" data-action="Admire">
+                        <path class="hitbox" id="hitbox-Admire"></path>
+                        <path class="dim-overlay" id="overlay-Admire"></path>
+                    </g>
+                    <g class="quadrant" data-action="Boast">
+                        <path class="hitbox" id="hitbox-Boast"></path>
+                        <path class="dim-overlay" id="overlay-Boast"></path>
+                    </g>
+                    <g class="quadrant" data-action="Joke">
+                        <path class="hitbox" id="hitbox-Joke"></path>
+                        <path class="dim-overlay" id="overlay-Joke"></path>
+                    </g>
+                    <g class="quadrant" data-action="Coerce">
+                        <path class="hitbox" id="hitbox-Coerce"></path>
+                        <path class="dim-overlay" id="overlay-Coerce"></path>
+                    </g>
+                </g>
+            </svg>
+            <div class="label Admire">
+                <span class="action-name">Admire</span>
+                <span class="preference" id="preference-Admire">--</span>
+            </div>
+            <div class="label Boast">
+                <span class="action-name">Boast</span>
+                <span class="preference" id="preference-Boast">--</span>
+            </div>
+            <div class="label Joke">
+                <span class="action-name">Joke</span>
+                <span class="preference" id="preference-Joke">--</span>
+            </div>
+            <div class="label Coerce">
+                <span class="action-name">Coerce</span>
+                <span class="preference" id="preference-Coerce">--</span>
+            </div>
+            <div class="pie-hub">
+                <div class="npc-name" id="npc-name">NPC Name</div>
+                <div class="npc-disposition" id="npc-disposition">--</div>
+                <div class="npc-disposition-label" id="npc-disposition-label">Disposition</div>
+            </div>
+        </div>
+        <button id="bribe-btn" class="bribe-btn" type="button">Bribe</button>
+    </div>
+    <script src="../_Shared/shared.js"></script>
+    <script src="script.js"></script>
+</body>
+</html>

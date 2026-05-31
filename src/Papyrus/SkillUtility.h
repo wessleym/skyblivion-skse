@@ -11,7 +11,7 @@ private:
     static std::vector<float> GetSkillDataArray(RE::StaticFunctionTag*, int mode) {
         int listSize = RE::PlayerCharacter::PlayerSkills::Data::Skill::kTotal;
         RE::PlayerCharacter* pPC = RE::PlayerCharacter::GetSingleton();
-        auto skills = pPC->skills->data->skills;
+        auto skills = REBridge::PlayerData(pPC).skills->data->skills;
         std::vector<float> returnValue(listSize, 0.0f);
         for (int i = 0; i < listSize; i++) {
             auto skill = skills[i];
