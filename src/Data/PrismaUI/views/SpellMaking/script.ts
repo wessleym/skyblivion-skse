@@ -680,7 +680,7 @@ class SpellMakingBridges {
         this.elements.selectedCastModeKey = "";
         this.elements.spellName = "My Spell";
         this.renderer.renderAll();
-        this.renderer.fixCastModeClick();
+        this.elements.fixCastModeClick();
     }
 }
 

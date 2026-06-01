@@ -552,10 +552,10 @@ class PersuasionRenderer {
                 });
             }
         });
-        //Hovering a quadrant:
+        //Hovering over a quadrant:
         //Highlight the bars at that action's position and inform C++ so it can drive a facial expression.
         //Leaving clears both.
-        //Used quadrants set the hitbox to pointer - events: none, so hover only fires on non-".used" quadrants.
+        //Used quadrants set the hitbox to pointer-events: none, so hover only fires on non-".used" quadrants.
         elements.onHitboxMouseEnter(action.id, () => {
             elements.setBarsHovered(action.id, true);
             const pref = game.getPreference(action.id);
