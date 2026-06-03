@@ -39,7 +39,7 @@ namespace SpellMaking {
 			std::string name;
 			RE::MagicSystem::CastingType castingType = RE::MagicSystem::CastingType::kFireAndForget;
 			RE::MagicSystem::Delivery delivery = RE::MagicSystem::Delivery::kAimed;
-			std::int32_t  magickaCost = 0;
+			std::int32_t magickaCost = 0;
 			std::vector<EffectSpec> effects;
 		};
 

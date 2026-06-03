@@ -143,10 +143,10 @@ namespace Persuasion {
 				}
 				});
 		}
-	}
 
-	void ResetActorExpression(RE::Actor* actor) {
-		SetActorExpression(actor, 0, 0);
+		void ResetActorExpression(RE::Actor* actor) {
+			SetActorExpression(actor, 0, 0);
+		}
 	}
 
 	void PersuasionView::RegisterListeners(const PrismaViewHandle& view) {

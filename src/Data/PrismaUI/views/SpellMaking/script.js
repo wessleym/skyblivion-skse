@@ -86,13 +86,13 @@ class MagicEffect {
     //Resolves which MGEF EditorID this effect uses for a given area:
     //    null -> "" (no override; caller uses the non-area variant's formId)
     //    10..100 -> "[areaMgefEditorIdPrefix][area]" (the matching area-bucket EDID)
-    getMgefEditorIdFor(area) {
+    getMgefEditorIdByArea(area) {
         if (area == null)
             return "";
         if (!this.hasArea) {
             throw new Error("MGEF Editor ID requested for when hasArea was false. " + this.id);
         }
-        return this.areaMgefEditorIdPrefix + area.toString();
+        return this.areaMgefEditorIdPrefix + area.toString().padStart(4, '0');
     }
     getMagickaCost(params) {
         const mag = this.hasMagnitude ? Math.pow(Math.max(3, params.magnitude), 1.28) : 1;
@@ -112,17 +112,19 @@ class EffectCatalog {
         //Area-bucket EditorID prefixes. Each area-capable effect has 91 MGEFs [prefix]10..[prefix]100
         //(one per integer area value), each with the No Area flag cleared so effectItem.area engages
         //the engine's area mechanism.
-        const areaEdidPrefixFire = "SKYBPlaceholderFireMGEF";
-        const areaEdidPrefixFrost = "SKYBPlaceholderFrostMGEF";
-        const areaEdidPrefixShock = "SKYBPlaceholderShockMGEF";
-        const areaEdidPrefixCalm = "SKYBPlaceholderCalmMGEF";
-        const areaEdidPrefixFear = "SKYBPlaceholderFearMGEF";
-        const areaEdidPrefixFury = "SKYBPlaceholderFuryMGEF";
-        const areaEdidPrefixParalyze = "SKYBPlaceholderParalyzeMGEF";
+        //Spell Making Required Plugin Data (2/2):
+        function getAreaEdidPrefix(effect) { return "SKYBSpellMaking" + effect + "MGEF"; }
+        const areaEdidPrefixFire = getAreaEdidPrefix("Fire");
+        const areaEdidPrefixFrost = getAreaEdidPrefix("Frost");
+        const areaEdidPrefixShock = getAreaEdidPrefix("Shock");
+        const areaEdidPrefixCalm = getAreaEdidPrefix("Calm");
+        const areaEdidPrefixFear = getAreaEdidPrefix("Fear");
+        const areaEdidPrefixFury = getAreaEdidPrefix("Fury");
+        const areaEdidPrefixParalyze = getAreaEdidPrefix("Paralyze");
         this.effects =
             [
                 //These are hardcoded instead of using Skyrim.esm because Skyrim.esm's data is not
-                //a good match for the data needed from Oblivion. It's possible we converted some
+                //a good match for the data needed from Oblivion. It's possible we could convert some
                 //of the Oblivion data into our Skyblivion.esm, but hardcoding allows us to be
                 //independent from Skyblivion.
                 //Fire and Forget: Aimed
@@ -264,7 +266,7 @@ class SpellDraft {
                 //editorId is non-empty only when the player picked a numeric area.
                 //editorId is the EDID of the matching area-bucket placholderholder MGEF.
                 //The C++ code prefers editorId over formId when editorId is non-empty.
-                editorId: s.effect.getMgefEditorIdFor(s.params.area),
+                editorId: s.effect.getMgefEditorIdByArea(s.params.area),
                 //magnitude and duration are zeroes when unused since zeroes are still written to the effectItem.
                 magnitude: s.effect.hasMagnitude ? s.params.magnitude : 0,
                 duration: s.effect.durationApplies() ? s.params.duration : 0,

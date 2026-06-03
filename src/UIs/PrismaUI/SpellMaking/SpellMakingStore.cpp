@@ -13,7 +13,7 @@ namespace SpellMaking {
 
 	namespace {
 		//Placeholder Pool: Every SpellItem whose name is exactly this string is a placeholder pool slot.
-		constexpr std::string_view kPoolMarkerName = "SKYBPlaceholderSpell";
+		constexpr std::string_view kPoolMarkerName = "SKYBSpellMakingSpell";//Spell Making Required Plugin Data (1/2)
 
 		//Co-Save Record:
 		constexpr std::uint32_t kSerializationID = 'SKYB';
@@ -186,7 +186,7 @@ namespace SpellMaking {
 				return slot.form;
 			}
 		}
-		Log::WARN("SpellMakingStore::CreateSpell: Placeholder pool exhausted ({} slot(s)). '{}' not created", s_slots.size(), recipe.name);
+		Log::WARN("SpellMakingStore::CreateSpell: Placeholder pool exhausted ({} slots). '{}' was not created.", s_slots.size(), recipe.name);
 		return nullptr;
 	}
 

@@ -14,7 +14,7 @@
 //    s_handle: The shared view handle
 //    Ready: A readiness guard for entry points
 //
-// A Derived must provide (and befriend this base so they can stay private):
+//A Derived class must provide (and befriend this base so they can stay private):
 //   static constexpr const char* kHtmlPath;      // e.g. "Persuasion/index.html"
 //   static constexpr const char* kVerifyJsFunc;  // JS function that verifies the bridges
 //   static void RegisterListeners(const PrismaViewHandle& view);
@@ -36,19 +36,26 @@ protected:
 
 	// Guard for entry points that require a live view. Logs and returns false when not ready.
 	[[nodiscard]] static bool Ready(const char* context) {
-		if (s_handle.IsValid()) {
-			return true;
+		if (!s_handle.IsValid()) {
+			Log::WARN("{} view was not created. See previous log entries.", context);
+			return false;
 		}
-		Log::WARN("{}: view not ready.", context);
-		return false;
+		if (!s_domReady) {
+			Log::WARN("{} view exists, but its page never finished loading. It will not be shown.", context);
+			return false;
+		}
+		return true;
 	}
 
 private:
+	static inline bool s_domReady = false;
+
 	// Fires once the view's DOM is ready (asynchronously, after CreateView returns). s_handle
 	// is already assigned by then, since Initialize sets it before this can run.
 	static void OnDomReady(PrismaView) {
 		Derived::RegisterListeners(s_handle);
 		s_handle.InvokeByFunctionName(Derived::kVerifyJsFunc);
 		s_handle.Hide();
+		s_domReady = true;
 	}
 };
