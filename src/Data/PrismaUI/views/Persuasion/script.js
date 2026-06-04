@@ -1,7 +1,5 @@
 "use strict";
-// One NPC reaction toward an action: its wire id (shared with C++) and how strongly it
-// moves disposition per magnitude point. The four PREFERENCES instances below are the
-// single source of truth for preference data.
+//An NPC's Preference combined with a factor of disposition change
 class Preference {
     constructor(name, factor) {
         this.name = name;
@@ -15,7 +13,7 @@ class Preference {
         throw new Error("Preference not found: " + name);
     }
 }
-// Hate is ~1.5x Love at base skill.
+//Hate is ~1.5x Love at base skill.
 Preference.love = new Preference("Love", +2);
 Preference.like = new Preference("Like", +1);
 Preference.dislike = new Preference("Dislike", -1);

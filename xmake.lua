@@ -51,7 +51,7 @@ add_requires("nlohmann_json v3.12.0")  -- JSON parsing for the spell-making buy 
 local plugin_desc = {
     name = "Skyblivion",
     author = "Skyblivion Team",
-    description = "Skyblivion SKSE64 Plugin"
+    description = "Skyblivion SKSE Plugin"
 }
 
 -- define targets
@@ -74,6 +74,14 @@ target("Skyblivion")
     --   NOGDI    -> ERROR   (collides with Log::ERROR)
     --   NOMINMAX -> min/max (collide with std::min / std::max)
     add_defines("NOGDI", "NOMINMAX")
+
+    -- IntelliSense only: the build already gets these from the commonlibsse-ng dep, but
+    -- xmake's vsxmake generator doesn't copy dep flags into the .vcxproj, so without them
+    -- the IDE parses CommonLib with no runtime target defined. Harmless build duplicates.
+    if backend_ng then
+        add_defines("ENABLE_SKYRIM_SE=1", "ENABLE_SKYRIM_AE=1", "ENABLE_SKYRIM_VR=1")
+        add_includedirs("lib/commonlibsse-ng/extern/openvr/headers")
+    end
 
     -- add src files
     add_files("src/**.cpp")

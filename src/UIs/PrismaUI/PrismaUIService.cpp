@@ -3,7 +3,7 @@
 namespace {
     void OnConsoleMessage(PrismaView, PRISMA_UI_API::ConsoleMessageLevel level, const char* message) {
         const char* msg = message ? message : "";
-        const auto format = "[JS] {}";
+        constexpr auto format = "[JS] {}";
         switch (level) {
         case PRISMA_UI_API::ConsoleMessageLevel::Error:
             Log::ERROR(format, msg);

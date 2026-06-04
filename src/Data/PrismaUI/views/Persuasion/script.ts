@@ -9,13 +9,11 @@ interface Window {
 type PreferenceString = "Love" | "Like" | "Dislike" | "Hate";
 type PersuasionActionId = "Admire" | "Boast" | "Joke" | "Coerce";
 
-// One NPC reaction toward an action: its wire id (shared with C++) and how strongly it
-// moves disposition per magnitude point. The four PREFERENCES instances below are the
-// single source of truth for preference data.
+//An NPC's Preference combined with a factor of disposition change
 class Preference {
     private constructor(public readonly name: PreferenceString, public readonly factor: number) { }
 
-    // Hate is ~1.5x Love at base skill.
+    //Hate is ~1.5x Love at base skill.
     private static readonly love = new Preference("Love", +2);
     private static readonly like = new Preference("Like", +1);
     private static readonly dislike = new Preference("Dislike", -1);
