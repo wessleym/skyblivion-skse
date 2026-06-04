@@ -14,24 +14,25 @@
 //    s_handle: The shared view handle
 //    Ready: A readiness guard for entry points
 //
-//A Derived class must provide (and befriend this base so they can stay private):
-//   static constexpr const char* kHtmlPath;      // e.g. "Persuasion/index.html"
-//   static constexpr const char* kVerifyJsFunc;  // JS function that verifies the bridges
-//   static void RegisterListeners(const PrismaViewHandle& view);
-//   friend class PrismaFeatureView<Derived>;
+//A Derived class should establish this function:
+//    static void Initialize(const PrismaUIService& service)
+//It should call Initialize(service, kHtmlPath, kVerifyJsFunc, &RegisterListeners).
 //
 // The JavaScript listener callbacks must be free/static functions: the PrismaUI API takes a
 // context-free function pointer (void(*)(const char*)), so they cannot capture state,
 // which is why the whole feature view is a static singleton rather than an instance.
 template <typename Derived>
 class PrismaFeatureView {
-public:
-	static void Initialize(const PrismaUIService& service) {
-		const PrismaView view = ViewUtility::CreateHiddenView(service, Derived::kHtmlPath, &PrismaFeatureView::OnDomReady);
+protected:
+	using RegisterListenersFn = void (*)(const PrismaViewHandle&);
+
+	static void Initialize(const PrismaUIService& service, const char* htmlPath, const char* verifyJsFunc, RegisterListenersFn registerListeners) {
+		s_verifyJsFunc = verifyJsFunc;
+		s_registerListeners = registerListeners;
+		const PrismaView view = ViewUtility::CreateHiddenView(service, htmlPath, &PrismaFeatureView::OnDomReady);
 		s_handle = PrismaViewHandle(&service, view);
 	}
 
-protected:
 	static inline PrismaViewHandle s_handle{};
 
 	// Guard for entry points that require a live view. Logs and returns false when not ready.
@@ -49,12 +50,14 @@ protected:
 
 private:
 	static inline bool s_domReady = false;
+	static inline const char* s_verifyJsFunc = nullptr;
+	static inline RegisterListenersFn s_registerListeners = nullptr;
 
-	// Fires once the view's DOM is ready (asynchronously, after CreateView returns). s_handle
-	// is already assigned by then, since Initialize sets it before this can run.
+	//Fires once the view's DOM is ready (asynchronously, after CreateView returns).
+	//s_handle, s_verifyJsFunc and s_registerListeners are already assigned by then.
 	static void OnDomReady(PrismaView) {
-		Derived::RegisterListeners(s_handle);
-		s_handle.InvokeByFunctionName(Derived::kVerifyJsFunc);
+		s_registerListeners(s_handle);
+		s_handle.InvokeByFunctionName(s_verifyJsFunc);
 		s_handle.Hide();
 		s_domReady = true;
 	}

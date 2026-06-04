@@ -10,6 +10,10 @@
 
 namespace SpellMaking {
 
+	void SpellMakingView::Initialize(const PrismaUIService& service) {
+		PrismaFeatureView::Initialize(service, kHtmlPath, kVerifyJsFunc, &SpellMakingView::RegisterListeners);
+	}
+
 	void SpellMakingView::RegisterListeners(const PrismaViewHandle& view) {
 		view.RegisterListener(SpellMakingContract::Listener::SpellMakingBuy, OnBuy);
 		view.RegisterListener(SpellMakingContract::Listener::SpellMakingClose, OnCloseFromJS);

@@ -149,6 +149,10 @@ namespace Persuasion {
 		}
 	}
 
+	void PersuasionView::Initialize(const PrismaUIService& service) {
+		PrismaFeatureView::Initialize(service, kHtmlPath, kVerifyJsFunc, &PersuasionView::RegisterListeners);
+	}
+
 	void PersuasionView::RegisterListeners(const PrismaViewHandle& view) {
 		view.RegisterListener(PersuasionContract::Listener::PersuasionWedgeHover, OnWedgeHover);
 		view.RegisterListener(PersuasionContract::Listener::PersuasionClose, OnCloseFromJS);

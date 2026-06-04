@@ -9,12 +9,11 @@ namespace SpellMaking {
 
 class SpellMakingView : public PrismaFeatureView<SpellMakingView> {
 public:
+    static void Initialize(const PrismaUIService& service);
     static void Open();
     static void Close();
 
 private:
-    friend class PrismaFeatureView<SpellMakingView>;
-
     static constexpr const char* kHtmlPath = "SpellMaking/index.html";
     static constexpr const char* kVerifyJsFunc = SpellMakingContract::JsFunc::SpellMakingVerifyBridges;
     static void RegisterListeners(const PrismaViewHandle& view);

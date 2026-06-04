@@ -10,12 +10,11 @@ namespace Persuasion {
 
 class PersuasionView : public PrismaFeatureView<PersuasionView> {
 public:
+    static void Initialize(const PrismaUIService& service);
     static void Open(RE::Actor* target);
     static void Close();
 
 private:
-    friend class PrismaFeatureView<PersuasionView>;
-
     //I'm experimenting with two modes:
     enum class CaptivityMode {
         Standard,//Dialogue menu stays open under Persuasion game so NPC stays still
