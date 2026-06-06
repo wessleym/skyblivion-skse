@@ -222,6 +222,9 @@ class SpellDraft {
     get anyEffects() {
         return this.effectsInternal.length > 0;
     }
+    get isFull() {
+        return this.effectsInternal.length >= SpellDraft.maxEffects;
+    }
     clear() {
         this.castModeInternal = null;
         this.effectsInternal = [];
@@ -233,6 +236,9 @@ class SpellDraft {
         this.castModeInternal = mode;
     }
     addEffect(effect, params) {
+        if (this.isFull) {
+            return;
+        } //The UI disables the add button when full, but this further ensures another effect isn't added.
         //Snapshot the params. The caller's editor params keep mutating after this.
         //Normalize area to null for effects that don't support it so downstream consumers don't have to check effect.hasArea.
         const paramsWithFixedArea = new EffectParameters(params.magnitude, params.duration, effect.hasArea ? params.area : null);
@@ -277,6 +283,7 @@ class SpellDraft {
     }
 }
 SpellDraft.goldPerMagicka = 5;
+SpellDraft.maxEffects = 15; //Robert reports this is a Skryim limit.
 //A range slider, its changing value readout, and its parent row. See constructor for element IDs.
 class LabeledSlider {
     constructor(key, //names the parameter
@@ -447,6 +454,9 @@ class SpellMakingViewElements {
     set buyEnabled(enabled) {
         this.buyButtonEl.disabled = !enabled;
     }
+    set addEffectEnabled(enabled) {
+        this.addEffectButtonEl.disabled = !enabled;
+    }
     onBuyClicked(handler) {
         this.buyButtonEl.addEventListener("click", handler);
     }
@@ -523,6 +533,7 @@ class SpellMakingRenderer {
         this.elements.spellGoldPrice = this.spellDraft.goldPrice().toString();
         this.elements.spellMastery = totalMagickaCost == 0 ? "--" : this.effectCatalog.getMasteryName(totalMagickaCost);
         this.elements.buyEnabled = this.spellDraft.anyEffects;
+        this.elements.addEffectEnabled = !this.spellDraft.isFull;
     }
     renderSpellEffects() {
         const items = this.spellDraft.effects.map((s, idx) => {
@@ -611,6 +622,9 @@ class SpellMakingBridges {
         const id = effectEditor.effectId;
         if (id == null) {
             throw new Error("spellMaking: add-effect invoked with no effect selected");
+        }
+        if (spellDraft.isFull) {
+            return;
         }
         const effect = effectCatalog.get(id);
         spellDraft.addEffect(effect, effectEditor.parameters());

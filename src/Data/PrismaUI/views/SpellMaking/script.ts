@@ -244,6 +244,7 @@ class EffectCatalog {
 //Spell currently being made
 class SpellDraft {
     private static readonly goldPerMagicka = 5;
+    private static readonly maxEffects = 15;//Robert reports this is a Skryim limit.
     private castModeInternal: CastMode | null;
     private effectsInternal: SpellEffectInstance[];
     public constructor() {
@@ -263,6 +264,10 @@ class SpellDraft {
         return this.effectsInternal.length > 0;
     }
 
+    public get isFull() {
+        return this.effectsInternal.length >= SpellDraft.maxEffects;
+    }
+
     public clear() {
         this.castModeInternal = null;
         this.effectsInternal = [];
@@ -276,6 +281,7 @@ class SpellDraft {
     }
 
     public addEffect(effect: MagicEffect, params: EffectParameters) {
+        if (this.isFull) { return; }//The UI disables the add button when full, but this further ensures another effect isn't added.
         //Snapshot the params. The caller's editor params keep mutating after this.
         //Normalize area to null for effects that don't support it so downstream consumers don't have to check effect.hasArea.
         const paramsWithFixedArea = new EffectParameters(params.magnitude, params.duration, effect.hasArea ? params.area : null);
@@ -442,7 +448,7 @@ class SpellMakingViewElements {
     private readonly spellGoldPriceEl: HTMLElement;
     private readonly spellMasteryEl: HTMLElement;
     private readonly buyButtonEl: HTMLButtonElement;
-    private readonly addEffectButtonEl: HTMLElement;
+    private readonly addEffectButtonEl: HTMLButtonElement;
     private readonly cancelButtonEl: HTMLElement;
     public constructor() {
         this.spellNameEl = <HTMLInputElement>el("spell-name");
@@ -456,7 +462,7 @@ class SpellMakingViewElements {
         this.spellGoldPriceEl = el("spell-gold-price");
         this.spellMasteryEl = el("spell-mastery");
         this.buyButtonEl = <HTMLButtonElement>el("buy-btn");
-        this.addEffectButtonEl = el("add-effect-btn");
+        this.addEffectButtonEl = <HTMLButtonElement>el("add-effect-btn");
         this.cancelButtonEl = el("cancel-btn");
     }
 
@@ -534,6 +540,9 @@ class SpellMakingViewElements {
     //Buttons:
     public set buyEnabled(enabled: boolean) {
         this.buyButtonEl.disabled = !enabled;
+    }
+    public set addEffectEnabled(enabled: boolean) {
+        this.addEffectButtonEl.disabled = !enabled;
     }
     public onBuyClicked(handler: () => void) {
         this.buyButtonEl.addEventListener("click", handler);
@@ -636,6 +645,7 @@ class SpellMakingRenderer {
             return li;
         });
         this.elements.setSpellEffectItems(items);
+        this.elements.addEffectEnabled = !this.spellDraft.isFull;
     }
 
     private costSuffix() {
@@ -722,6 +732,7 @@ class SpellMakingBridges {
         if (id == null) {
             throw new Error("spellMaking: add-effect invoked with no effect selected");
         }
+        if (spellDraft.isFull) { return; }
         const effect = effectCatalog.get(id);
         spellDraft.addEffect(effect, effectEditor.parameters());
         renderer.renderSpellEffects();
