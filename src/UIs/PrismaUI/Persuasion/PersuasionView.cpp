@@ -17,28 +17,32 @@ namespace Persuasion {
 	RE::FormID PersuasionView::s_currentTargetFormID = 0;
 
 	namespace {
-		// Invokes `Actor.SetDontMove(value)` on the target through the Papyrus VM. There is no
-		// direct C++ entry point for this on RE::Actor in CommonLibSSE, so we dispatch through
-		// the VM the same way a Papyrus script would call it.
-		void SetActorDontMove(RE::Actor* actor, bool value) {
-			if (!actor) {
+		void SetDialogueMenuVisible(bool visible) {
+			auto* ui = RE::UI::GetSingleton();
+			if (!ui) {
 				return;
 			}
-			auto* vm = RE::BSScript::Internal::VirtualMachine::GetSingleton();
-			if (!vm) {
+			auto menu = ui->GetMenu(RE::DialogueMenu::MENU_NAME);
+			if (!menu || !menu->uiMovie) {
 				return;
 			}
-			auto policy = vm->GetObjectHandlePolicy();
-			if (!policy) {
+			RE::GFxValue value{ visible };
+			menu->uiMovie->SetVariable("_root._visible", value);
+		}
+
+		//Prevent camera movement since mouse movements in the top-left corner
+		//might move the camera if the user goes to far toward the edge.
+		void SetLookControlEnabled(bool enabled) {
+			auto* controlMap = RE::ControlMap::GetSingleton();
+			if (!controlMap) {
 				return;
 			}
-			auto handle = policy->GetHandleForObject(actor->GetFormType(), actor);
-			if (handle == policy->EmptyHandle()) {
-				return;
-			}
-			auto* args = RE::MakeFunctionArguments(std::move(value));
-			RE::BSTSmartPointer<RE::BSScript::IStackCallbackFunctor> callback;
-			vm->DispatchMethodCall2(handle, "Actor", "SetDontMove", args, callback);
+			controlMap->ToggleControls(RE::UserEvents::USER_EVENT_FLAG::kLooking, enabled, false);
+		}
+
+		void SetDialogueMenuVisibleAndLookControlEnabled(bool enabled) {
+			SetDialogueMenuVisible(enabled);
+			SetLookControlEnabled(enabled);
 		}
 
 		//Strong reactions are required for them to be visible on the NPC's face.
@@ -186,11 +190,7 @@ namespace Persuasion {
 		};
 
 		if (kConfiguredMode == CaptivityMode::Captive) {
-			//Close dialogue menu but don't let NPC walk away.
-			if (auto* mtm = RE::MenuTopicManager::GetSingleton()) {
-				mtm->forceGoodbye = true;
-			}
-			SetActorDontMove(target, true);
+			SetDialogueMenuVisibleAndLookControlEnabled(false);
 		}
 
 		s_handle.InvokeByFunctionName(PersuasionContract::JsFunc::PersuasionInit, payload);
@@ -211,12 +211,10 @@ namespace Persuasion {
 
 		if (actor) {
 			ResetActorExpression(actor);
-			if (kConfiguredMode == CaptivityMode::Captive) {
-				SetActorDontMove(actor, false);
-				if (auto* player = RE::PlayerCharacter::GetSingleton()) {
-					actor->ActivateRef(player, 0, nullptr, 1, false);//Resume dialogue
-				}
-			}
+		}
+
+		if (kConfiguredMode == CaptivityMode::Captive) {
+			SetDialogueMenuVisibleAndLookControlEnabled(true);
 		}
 
 		s_currentTargetFormID = 0;

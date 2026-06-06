@@ -11,13 +11,13 @@ public:
 
 private:
     static void OpenPersuasionGame(RE::StaticFunctionTag*, RE::Actor* target) {
-        Log::INFO("Papyrus: OpenPersuasionGame called with target {:08X}",
+        Log::INFO("Papyrus: OpenPersuasionGame Called with Target {:08X}",
                   target ? target->GetFormID() : 0u);
         UISystem::OpenPersuasion(target);
     }
 
     static void OpenSpellMaking(RE::StaticFunctionTag*) {
-        Log::INFO("Papyrus: OpenSpellMaking called");
+        Log::INFO("Papyrus: OpenSpellMaking Called");
         UISystem::OpenSpellMaking();
     }
 };

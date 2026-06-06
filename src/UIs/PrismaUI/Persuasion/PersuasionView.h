@@ -17,8 +17,8 @@ public:
 private:
     //I'm experimenting with two modes:
     enum class CaptivityMode {
-        Standard,//Dialogue menu stays open under Persuasion game so NPC stays still
-        Captive//Close dialogue menu and make NPC stand still
+        Standard,//Dialogue stays open and visible but the Persuasion game.
+        Captive//Dialogue stays open but invisible.
     };
 
     static constexpr const char* kHtmlPath = "Persuasion/index.html";
