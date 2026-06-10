@@ -83,7 +83,7 @@ animation-fill-mode: forwards holds the 90° final state cleanly, and removing t
 .dim-overlay {
     fill: rgba(0, 0, 0, 0);
     pointer-events: none;
-    transition: fill 0.2s ease;
+    /*transition: fill 0.2s ease;*/
 }
 
 /*
@@ -95,7 +95,7 @@ The bars always look enabled regardless of used state; the dim-overlay handles "
     stroke: rgba(226, 206, 170, 0.75);
     stroke-width: 1.5;
     pointer-events: none;
-    transition: fill 0.15s ease, stroke 0.15s ease;
+    /*transition: fill 0.15s ease, stroke 0.15s ease;*/
 }
 
 /*
