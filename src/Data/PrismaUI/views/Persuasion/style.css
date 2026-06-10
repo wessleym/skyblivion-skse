@@ -1,18 +1,27 @@
+@font-face {
+    font-family: 'kingthings_petrockregular';
+    src: url('kingthings_petrock-webfont.woff2') format('woff2'),
+         url('kingthings_petrock-webfont.woff') format('woff');
+    font-weight: normal;
+    font-style: normal;
+
+}
+
 html, body {
     margin: 0;
     padding: 0;
     width: 100%;
     height: 100%;
     background: transparent;
-    color: #f5e9c8;
-    font-family: "Trebuchet MS", sans-serif;
+    color: #FFFFFF;
+    font-family: "kingthings_petrockregular", sans-serif;
     user-select: none;
 }
 
 .scene {
     position: absolute;
-    top: 12px;
-    left: 12px;
+    top: 100px;
+    left: 100px;
     transform: scale(calc(25vw / 460px));
     transform-origin: top left;
     display: flex;
@@ -23,8 +32,8 @@ html, body {
 
 .pie-wrap {
     position: relative;
-    width: 460px;
-    height: 460px;
+    width: 600px;
+    height: 600px;
     filter: drop-shadow(0 0 28px rgba(0, 0, 0, 0.7));
 }
 
@@ -36,7 +45,7 @@ html, body {
 }
 
 .quadrant-guide {
-    fill: rgba(20, 14, 8, 0.55);
+    fill: rgba(72, 54, 39, 0.4);
     stroke: rgba(168, 145, 90, 0.4);
     stroke-width: 2;
 }
@@ -60,8 +69,8 @@ animation-fill-mode: forwards holds the 90° final state cleanly, and removing t
 }
 
 .quadrant-divider {
-    stroke: rgba(168, 145, 90, 0.35);
-    stroke-width: 1;
+    stroke: rgba(72, 54, 39, 0.4);
+    stroke-width: 2;
 }
 
 /*Per-wedge hit target. Does not rotate.*/
@@ -82,8 +91,8 @@ The visible bars. Positioned within bars-rotor so the group can be rotated as a 
 The bars always look enabled regardless of used state; the dim-overlay handles "disabled".
 */
 .wedge {
-    fill: rgba(232, 200, 130, 0.18);
-    stroke: rgba(232, 200, 130, 0.7);
+    fill: rgba(72, 54, 39, 0.75);
+    stroke: rgba(226, 206, 170, 0.75);
     stroke-width: 1.5;
     pointer-events: none;
     transition: fill 0.15s ease, stroke 0.15s ease;
@@ -95,8 +104,8 @@ JavaScript adds and removes .hovered as the cursor enters and leaves the hitbox.
 :hover won't work in this case.
 */
 .wedge.hovered {
-    fill: rgba(245, 233, 200, 0.32);
-    stroke: rgba(245, 233, 200, 0.95);
+    fill: rgba(226, 206, 170, 0.75);
+    stroke: rgba(226, 206, 170, 0.75);
     stroke-width: 2;
 }
 
@@ -116,8 +125,8 @@ JavaScript adds and removes .hovered as the cursor enters and leaves the hitbox.
     width: 160px;
     height: 160px;
     border-radius: 50%;
-    background: rgba(20, 14, 8, 0.92);
-    border: 2px solid #a8915a;
+    background: rgba(72, 54, 39, 0.99);
+    border: 2px solid #E2CEAA;
     display: flex;
     flex-direction: column;
     align-items: center;
@@ -128,7 +137,7 @@ JavaScript adds and removes .hovered as the cursor enters and leaves the hitbox.
 }
 
 .npc-name {
-    font-size: 14px;
+    font-size: 22px;
     letter-spacing: 2px;
     opacity: 0.85;
     padding: 0 12px;
@@ -138,28 +147,28 @@ JavaScript adds and removes .hovered as the cursor enters and leaves the hitbox.
     font-size: 32px;
     font-weight: bold;
     margin-top: 6px;
-    color: #f5e9c8;
+    color: #FFFFFF;
     transition: color 0.3s ease;
 }
-.npc-disposition.positive { color: #6ce06c; }
-.npc-disposition.negative { color: #e26c6c; }
+.npc-disposition.positive { color: #84AD71; }
+.npc-disposition.negative { color: #ED6148; }
 
 .npc-disposition-label {
-    font-size: 10px;
+    font-size: 22px;
     letter-spacing: 1px;
     opacity: 0.6;
     margin-top: -2px;
 }
 .npc-disposition-label.max-reached {
-    color: #6ce06c;
+    color: #84AD71;
     opacity: 1;
-    font-size: 11px;
+    font-size: 22px;
     font-weight: bold;
 }
 .npc-disposition-label.feedback {
-    color: #d6a06b;
+    color: #ed9748;
     opacity: 1;
-    font-size: 10px;
+    font-size: 22px;
     font-weight: bold;
 }
 
@@ -173,22 +182,23 @@ JavaScript adds and removes .hovered as the cursor enters and leaves the hitbox.
     text-shadow: 0 1px 3px rgba(0, 0, 0, 0.9);
 }
 .action-name {
-    font-size: 18px;
+    font-size: 26px;
     letter-spacing: 2px;
 }
 .preference {
-    font-size: 10px;
+    font-size: 22px;
+    font-weight: 700;
     letter-spacing: 1px;
     padding: 2px 8px;
     border-radius: 3px;
     background: rgba(20, 14, 8, 0.85);
-    border: 1px solid currentColor;
+    border: 2px solid currentColor;
     text-shadow: none;
 }
-.preference.Love { color: #6ce06c; }
-.preference.Like { color: #b8d68b; }
-.preference.Dislike { color: #d6a06b; }
-.preference.Hate { color: #e26c6c; }
+.preference.Love { color: #84AD71; }
+.preference.Like { color: #fffd8d; }
+.preference.Dislike { color: #ed9748; }
+.preference.Hate { color: #ED6148; }
 
 .label.Admire { top: 12px; left: 50%; transform: translateX(-50%); }
 .label.Boast { right: 12px; top: 50%;  transform: translateY(-50%); }
@@ -199,12 +209,13 @@ JavaScript adds and removes .hovered as the cursor enters and leaves the hitbox.
 
 .bribe-btn {
     padding: 10px 32px;
-    background: rgba(20, 14, 8, 0.92);
-    color: #f5e9c8;
-    border: 1px solid #a8915a;
+    background: rgba(72, 54, 39, 0.92);
+    color: #FFFFFF;
+    border: 2px solid #E2CEAA;
     cursor: pointer;
     font: inherit;
-    font-size: 16px;
+    font-size: 24px;
+    font-weight: 700;
     letter-spacing: 2px;
     text-shadow: 0 1px 3px rgba(0, 0, 0, 0.9);
     box-shadow: 0 0 12px rgba(0, 0, 0, 0.6);
@@ -212,7 +223,7 @@ JavaScript adds and removes .hovered as the cursor enters and leaves the hitbox.
 }
 .bribe-btn:hover {
     background: #3a2a14;
-    border-color: #f5e9c8;
+    border-color: #E2CEAA;
 }
 .bribe-btn:disabled {
     opacity: 0.35;
