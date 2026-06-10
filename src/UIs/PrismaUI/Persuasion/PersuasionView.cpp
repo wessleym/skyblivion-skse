@@ -30,21 +30,6 @@ namespace Persuasion {
 			menu->uiMovie->SetVariable("_root._visible", value);
 		}
 
-		//Prevent camera movement since mouse movements in the top-left corner
-		//might move the camera if the user goes to far toward the edge.
-		void SetLookControlEnabled(bool enabled) {
-			auto* controlMap = RE::ControlMap::GetSingleton();
-			if (!controlMap) {
-				return;
-			}
-			controlMap->ToggleControls(RE::UserEvents::USER_EVENT_FLAG::kLooking, enabled, false);
-		}
-
-		void SetDialogueMenuVisibleAndLookControlEnabled(bool enabled) {
-			SetDialogueMenuVisible(enabled);
-			SetLookControlEnabled(enabled);
-		}
-
 		//Strong reactions are required for them to be visible on the NPC's face.
 		constexpr int kExpressionAnger = 0;//DialogueAnger
 		constexpr int kExpressionHappy = 2;//DialogueHappy
@@ -190,7 +175,7 @@ namespace Persuasion {
 		};
 
 		if (kConfiguredMode == CaptivityMode::Captive) {
-			SetDialogueMenuVisibleAndLookControlEnabled(false);
+			SetDialogueMenuVisible(false);
 		}
 
 		s_handle.InvokeByFunctionName(PersuasionContract::JsFunc::PersuasionInit, payload);
@@ -214,7 +199,7 @@ namespace Persuasion {
 		}
 
 		if (kConfiguredMode == CaptivityMode::Captive) {
-			SetDialogueMenuVisibleAndLookControlEnabled(true);
+			SetDialogueMenuVisible(true);
 		}
 
 		s_currentTargetFormID = 0;
