@@ -4,6 +4,7 @@
 #include "TESNPCActivateHook.h"
 #include "TESRaces.h"
 #include <ClibUtil/RNG.hpp>
+#include <cmath>
 
 void DispositionSystem::Initialize() {
 	TESNPCActivateHook::Apply();
@@ -240,10 +241,11 @@ void DispositionSystem::SetInitialDisposition(RE::Actor* actor, std::string_view
 		auto disposition = CalcDisposition(actor);
 
 		// Mark NPC disposition so it isn't needlessly recalced if it happened to be 0.0f first try.
-		if (disposition == 0.0f) {
-			disposition = 0.01f;
+		if (disposition < 1.0f) {
+			disposition = 1.0f;
 		}
 
+		disposition = std::round(disposition);
 		// Papyrus call so changes persist.
 		SetDispositionActorValue(actor, disposition);
 
