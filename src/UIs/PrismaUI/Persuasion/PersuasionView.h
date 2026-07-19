@@ -8,34 +8,30 @@ class PrismaViewHandle;
 
 namespace Persuasion {
 
-class PersuasionView : public PrismaFeatureView<PersuasionView> {
-public:
-    static void Initialize(const PrismaUIService& service);
-    static void Open(RE::Actor* target);
-    static void Close();
+	class PersuasionView : public PrismaFeatureView<PersuasionView> {
+	public:
+		static void Initialize(const PrismaUIService& service);
+		static void Open(RE::Actor* target);
+		static void Close();
 
-private:
-    //I'm experimenting with two modes:
-    enum class CaptivityMode {
-        Standard,//Dialogue stays open and visible but the Persuasion game.
-        Captive//Dialogue stays open but invisible.
-    };
+	private:
+		static constexpr const char* kHtmlPath = "Persuasion/index.html";
+		static constexpr const char* kVerifyJsFunc = PersuasionContract::JsFunc::PersuasionVerifyBridges;
+		static void RegisterListeners(const PrismaViewHandle& view);
 
-    static constexpr const char* kHtmlPath = "Persuasion/index.html";
-    static constexpr const char* kVerifyJsFunc = PersuasionContract::JsFunc::PersuasionVerifyBridges;
-    static void RegisterListeners(const PrismaViewHandle& view);
+		static RE::FormID s_currentTargetFormID;//Form ID of NPC currently being persuaded (0 if none)
 
-    static RE::FormID s_currentTargetFormID;//Form ID of NPC currently being persuaded (0 if none)
-    static constexpr CaptivityMode kConfiguredMode = CaptivityMode::Captive;
+		// Resolves the current target actor, returning null and logging on failure
+		static RE::Actor* GetCurrentActorOrWarn(const char* context);
 
-    //JavaScript Listeners:
-    static void OnWedgeHover(const char* argument);
-    static void OnCloseFromJS(const char* argument);
-    static void OnDispositionChanged(const char* argument);
-    static void OnBribe(const char* argument);
+		//JavaScript Listeners:
+		static void OnWedgeHover(const char* argument);
+		static void OnCloseFromJS(const char* argument);
+		static void OnDispositionChanged(const char* argument);
+		static void OnBribe(const char* argument);
 
-    static void SendBribeResult(bool success, int price, int gain, float disposition, const char* reason);
-    static void SetDisposition(RE::Actor* actor, float value);
-};
+		static void SendBribeResult(bool success, int price, int gain, float disposition, const char* reason);
+		static void SetDisposition(RE::Actor* actor, float value);
+	};
 
 }

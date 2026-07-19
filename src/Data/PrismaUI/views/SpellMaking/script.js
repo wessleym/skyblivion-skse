@@ -533,7 +533,6 @@ class SpellMakingRenderer {
         this.elements.spellGoldPrice = this.spellDraft.goldPrice().toString();
         this.elements.spellMastery = totalMagickaCost == 0 ? "--" : this.effectCatalog.getMasteryName(totalMagickaCost);
         this.elements.buyEnabled = this.spellDraft.anyEffects;
-        this.elements.addEffectEnabled = !this.spellDraft.isFull;
     }
     renderSpellEffects() {
         const items = this.spellDraft.effects.map((s, idx) => {
@@ -552,6 +551,7 @@ class SpellMakingRenderer {
             return li;
         });
         this.elements.setSpellEffectItems(items);
+        this.elements.addEffectEnabled = !this.spellDraft.isFull;
     }
     costSuffix() {
         const mode = this.spellDraft.castMode;
