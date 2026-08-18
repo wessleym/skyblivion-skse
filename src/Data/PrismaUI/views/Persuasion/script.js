@@ -138,6 +138,14 @@ class PersuasionGame {
     get isMaxReached() {
         return this.npcNonNull.isMaxReached();
     }
+    //Only allow escaping when the view may be dismissed (game over or between rounds).
+    get canBeClosed() {
+        if (this.npcNonNull.isGameOver) {
+            return true;
+        }
+        const used = Object.keys(this.roundNonNull.usedMagnitudes).length;
+        return used == 0 || used == 4;
+    }
     magnitudeIndexAt(index) {
         return this.roundNonNull.getMagnitudeIndexAt(index);
     }
@@ -218,6 +226,8 @@ class PersuasionBridges {
         this.renderer.applyPreferences();
         this.renderer.updateDisposition(null);
         this.renderer.renderWedges();
+        this.elements.setCloseButtonEnabled(this.game.canBeClosed);
+        this.elements.setBribeButtonEnabled(!this.game.isGameOver);
         if (this.game.isMaxReached) {
             this.endGame();
         }
@@ -240,6 +250,8 @@ class PersuasionBridges {
     endGame() {
         this.game.end();
         this.actions.forEach((a) => { this.elements.setUsedVisual(a.id, true); });
+        this.elements.setCloseButtonEnabled(this.game.canBeClosed);
+        this.elements.setBribeButtonEnabled(!this.game.isGameOver);
         this.elements.dispositionLabel.showMaxReached();
         console.log("Persuasion max disposition reached: " + this.game.disposition);
         setTimeout(() => {
@@ -248,7 +260,7 @@ class PersuasionBridges {
     }
 }
 class ActionElements {
-    constructor(hitbox, overlay, clipPath, wedges, preference, quadrant, label) {
+    constructor(hitbox, overlay, clipPath, wedges, preference, quadrant, label, invisibleFocusButton) {
         this.hitbox = hitbox;
         this.overlay = overlay;
         this.clipPath = clipPath;
@@ -256,6 +268,7 @@ class ActionElements {
         this.preference = preference;
         this.quadrant = quadrant;
         this.label = label;
+        this.invisibleFocusButton = invisibleFocusButton;
     }
 }
 //Owns every Persuasion view element and its DispositionLabel, exposing intent-revealing
@@ -265,6 +278,7 @@ class PersuasionViewElements {
         this.npcNameEl = el("npc-name");
         this.npcDispositionEl = el("npc-disposition");
         this.bribeButtonEl = el("bribe-btn");
+        this.closeButtonEl = el("close-btn");
         this.barsRotorEl = el("bars-rotor");
         this.hitboxGroupEl = el("hitbox-group");
         this.persuasionActionIdToActionElements = PersuasionViewElements.getPersuasionActionIdToActionElements(actions, barCount);
@@ -277,7 +291,7 @@ class PersuasionViewElements {
             for (let bar = 0; bar < barCount; bar++) {
                 wedges.push(el("wedge-" + action.id + "-" + bar));
             }
-            dictionary[action.id] = new ActionElements(el("hitbox-" + action.id), el("overlay-" + action.id), el("clip-path-" + action.id), wedges, el("preference-" + action.id), elBySelector(".quadrant[data-action='" + action.id + "']"), elBySelector(".label." + action.id));
+            dictionary[action.id] = new ActionElements(el("hitbox-" + action.id), el("overlay-" + action.id), el("clip-path-" + action.id), wedges, el("preference-" + action.id), elBySelector(".quadrant[data-action='" + action.id + "']"), elBySelector(".label." + action.id), el("focus-" + action.id));
         });
         return dictionary;
     }
@@ -325,10 +339,14 @@ class PersuasionViewElements {
         const action = this.persuasionActionIdToActionElements[actionId];
         action.quadrant.classList.toggle("used", used);
         action.label.classList.toggle("used", used);
+        action.invisibleFocusButton.disabled = used;
     }
     //Event Listeners:
     onBribeClicked(handler) {
         this.bribeButtonEl.addEventListener("click", handler);
+    }
+    onCloseClicked(handler) {
+        this.closeButtonEl.addEventListener("click", handler);
     }
     onHitboxClicked(actionId, handler) {
         this.persuasionActionIdToActionElements[actionId].hitbox.addEventListener("click", handler);
@@ -338,6 +356,68 @@ class PersuasionViewElements {
     }
     onHitboxMouseLeave(actionId, handler) {
         this.persuasionActionIdToActionElements[actionId].hitbox.addEventListener("mouseleave", handler);
+    }
+    onAnchorFocus(actionId, handler) {
+        this.persuasionActionIdToActionElements[actionId].invisibleFocusButton.addEventListener("focus", handler);
+    }
+    onAnchorBlur(actionId, handler) {
+        this.persuasionActionIdToActionElements[actionId].invisibleFocusButton.addEventListener("blur", handler);
+    }
+    onAnchorClick(actionId, handler) {
+        this.persuasionActionIdToActionElements[actionId].invisibleFocusButton.addEventListener("click", handler);
+    }
+    focusAction(actionId) {
+        this.persuasionActionIdToActionElements[actionId].invisibleFocusButton.focus();
+    }
+    blurAction(actionId) {
+        this.persuasionActionIdToActionElements[actionId].invisibleFocusButton.blur();
+    }
+    setCloseButtonEnabled(enabled) {
+        this.closeButtonEl.disabled = !enabled;
+    }
+    setBribeButtonEnabled(enabled) {
+        this.bribeButtonEl.disabled = !enabled;
+    }
+    isRotating() {
+        return this.barsRotorEl.classList.contains("spinning");
+    }
+    focusTarget(target) {
+        if (target == "Close") {
+            this.closeButtonEl.focus();
+        }
+        else if (target == "Bribe") {
+            this.bribeButtonEl.focus();
+        }
+        else {
+            this.focusAction(target);
+        }
+    }
+    //Whether a target can receive focus, read straight from each element's real disabled state.
+    isTargetEnabled(target) {
+        if (target == "Close") {
+            return !this.closeButtonEl.disabled;
+        }
+        if (target == "Bribe") {
+            return !this.bribeButtonEl.disabled;
+        }
+        return !this.persuasionActionIdToActionElements[target].invisibleFocusButton.disabled;
+    }
+    //The navigation target currently holding focus (document.activeElement), or null if it's none of ours.
+    activeTargetKey() {
+        const active = document.activeElement;
+        if (active == this.closeButtonEl) {
+            return "Close";
+        }
+        if (active == this.bribeButtonEl) {
+            return "Bribe";
+        }
+        const ids = Object.keys(this.persuasionActionIdToActionElements);
+        for (const id of ids) {
+            if (this.persuasionActionIdToActionElements[id].invisibleFocusButton == active) {
+                return id;
+            }
+        }
+        return null;
     }
     //Animates the magnitude rotation: visually rotate every quadrant 90 degrees clockwise
     //around the wheel center, then snap back; onApply is invoked at the animation's end
@@ -489,6 +569,56 @@ class PersuasionRenderer {
         this.elements.showDisposition(this.game.disposition, delta);
     }
 }
+//Allows keyboard or gamepad DOM element focusing
+class FocusNavigator {
+    constructor(elements) {
+        this.elements = elements;
+    }
+    //Moves the focus cursor one step in the given direction
+    handle(direction) {
+        const target = this.neighbor(this.elements.activeTargetKey(), direction);
+        if (target != null) {
+            this.elements.focusTarget(target);
+        }
+    }
+    //The target a direction moves to, or null to stay put (nothing there, or a disabled button).
+    neighbor(current, direction) {
+        if (current == "Close" || current == "Bribe") {
+            if (direction == "Up") {
+                return "Joke";
+            }
+            if (direction == "Left" || direction == "Right") {
+                const other = current == "Close" ? "Bribe" : "Close";
+                return this.elements.isTargetEnabled(other) ? other : null; //can't move onto a disabled button.
+            }
+            return null; //down from a button goes nowhere.
+        }
+        if (direction == "Up") {
+            return "Admire";
+        }
+        if (direction == "Right") {
+            return "Boast";
+        }
+        if (direction == "Left") {
+            return "Coerce";
+        }
+        //down: head to the bottom quadrant (Joke); if we're already there, or it's used/unfocusable, enter the button row.
+        if (current != "Joke" && this.elements.isTargetEnabled("Joke")) {
+            return "Joke";
+        }
+        return this.firstEnabledButton();
+    }
+    //The button Down lands on: Close when it's enabled (between rounds), otherwise Bribe (mid-round).
+    firstEnabledButton() {
+        if (this.elements.isTargetEnabled("Close")) {
+            return "Close";
+        }
+        if (this.elements.isTargetEnabled("Bribe")) {
+            return "Bribe";
+        }
+        return null;
+    }
+}
 (function () {
     const actions = [
         new PersuasionAction("Admire", 225),
@@ -499,79 +629,173 @@ class PersuasionRenderer {
     const game = new PersuasionGame();
     const elements = new PersuasionViewElements(actions, WheelGeometry.barCount);
     const renderer = new PersuasionRenderer(game, elements, actions);
+    //Keeps the Close button's enabled state in sync with whether the view may currently be dismissed.
+    function refreshCloseButton() {
+        elements.setCloseButtonEnabled(game.canBeClosed);
+    }
     function resetRound() {
         if (!game.isGameOver) {
             actions.forEach((a) => { elements.setUsedVisual(a.id, false); });
             game.startRound();
             renderer.renderWedges();
+            refreshCloseButton();
         }
     }
     const bridges = new PersuasionBridges(game, renderer, elements, actions);
-    elements.onBribeClicked(() => {
-        if (game.isGameOver) {
+    //Applies a wedge click. Shared by the mouse (hitbox click) and the focused quadrant anchor's click
+    //(fired natively by Enter/Space or the gamepad "accept" button).
+    function activateQuadrant(action, i) {
+        //The mouse can't click mid-spin (hitboxes get pointer-events: none), but a keyboard/gamepad activation can, so guard here.
+        if (elements.isRotating()) {
             return;
         }
-        bridges.bribe(game.disposition.toString());
-    });
-    actions.forEach((action, i) => {
-        elements.onHitboxClicked(action.id, () => {
-            const result = game.handleWedgeClicked(action.id, i);
-            if (result == null) {
-                return;
-            }
-            elements.setUsedVisual(action.id, true);
-            // Clear the hover highlight on this action's bars. The hitbox has .used (pointer-events: none), so mouseleave won't fire.
-            elements.setBarsHovered(action.id, false);
-            renderer.updateDisposition(result.delta);
-            bridges.dispositionChanged(result.disposition.toString());
-            console.log("Persuasion wedge clicked: " + JSON.stringify({
-                action: action.id,
-                magnitude: result.magnitude,
-                preference: result.preference,
-                delta: result.delta,
+        const result = game.handleWedgeClicked(action.id, i);
+        if (result == null) {
+            return;
+        }
+        elements.setUsedVisual(action.id, true);
+        // Clear the hover highlight on this action's bars. The hitbox has .used (pointer-events: none), so mouseleave won't fire.
+        elements.setBarsHovered(action.id, false);
+        renderer.updateDisposition(result.delta);
+        refreshCloseButton();
+        bridges.dispositionChanged(result.disposition.toString());
+        console.log("Persuasion wedge clicked: " + JSON.stringify({
+            action: action.id,
+            magnitude: result.magnitude,
+            preference: result.preference,
+            delta: result.delta,
+            disposition: result.disposition
+        }));
+        if (result.maxReached) {
+            bridges.endGame();
+            return;
+        }
+        if (result.roundComplete) {
+            console.log("Persuasion round complete: " + JSON.stringify({
+                uses: game.usedMagnitudes,
                 disposition: result.disposition
             }));
-            if (result.maxReached) {
-                bridges.endGame();
-                return;
-            }
-            if (result.roundComplete) {
-                console.log("Persuasion round complete: " + JSON.stringify({
-                    uses: game.usedMagnitudes,
-                    disposition: result.disposition
-                }));
-                setTimeout(resetRound, 1500);
-            }
-            else {
-                //Rotate the magnitude data and re-render the bars at the animation's end.
-                elements.animateMagnitudeRotation(() => {
-                    game.rotateMagnitudes();
-                    renderer.renderWedges();
-                });
-            }
-        });
-        //Hovering over a quadrant:
-        //Highlight the bars at that action's position and inform C++ so it can drive a facial expression.
-        //Leaving clears both.
-        //Used quadrants set the hitbox to pointer-events: none, so hover only fires on non-".used" quadrants.
-        elements.onHitboxMouseEnter(action.id, () => {
+            setTimeout(resetRound, 1500);
+        }
+        else {
+            //Rotate the magnitude data and re-render the bars at the animation's end.
+            elements.animateMagnitudeRotation(() => {
+                game.rotateMagnitudes();
+                renderer.renderWedges();
+            });
+        }
+    }
+    function activateBribe() {
+        if (!game.isGameOver) {
+            bridges.bribe(game.disposition.toString());
+        }
+    }
+    function activateClose() {
+        //Defensive: mid-round the button is disabled (unfocusable and unclickable), but keep the game-rule guard too.
+        if (game.canBeClosed) {
+            bridges.close("close-button");
+        }
+    }
+    elements.onBribeClicked(activateBribe);
+    elements.onCloseClicked(activateClose);
+    actions.forEach((action, i) => {
+        elements.onHitboxClicked(action.id, () => activateQuadrant(action, i));
+        elements.onAnchorClick(action.id, () => activateQuadrant(action, i));
+        elements.onAnchorFocus(action.id, () => {
             elements.setBarsHovered(action.id, true);
             const pref = game.getPreference(action.id);
             bridges.wedgeHover(pref.name);
         });
-        elements.onHitboxMouseLeave(action.id, () => {
+        elements.onAnchorBlur(action.id, () => {
             elements.setBarsHovered(action.id, false);
             bridges.wedgeHover("");
         });
+        //The mouse moves the same focus cursor: hovering a quadrant focuses its anchor, leaving blurs it.
+        //Used quadrants have pointer-events: none on the hitbox, so these only fire on selectable quadrants.
+        elements.onHitboxMouseEnter(action.id, () => elements.focusAction(action.id));
+        elements.onHitboxMouseLeave(action.id, () => elements.blurAction(action.id));
+    });
+    //Directional navigation over the wheel and the two bottom buttons.
+    //Driven by the keyboard here and by the gamepad d-pad or stick below; both just move the DOM focus cursor.
+    const focusNavigator = new FocusNavigator(elements);
+    document.addEventListener("keydown", (e) => {
+        function keyEventToNavDirection(e) {
+            const code = e.keyCode; //PrismaUI may omit .key. Use keyCode.
+            if (e.key == "ArrowUp" || code == 38) {
+                return "Up";
+            }
+            if (e.key == "ArrowDown" || code == 40) {
+                return "Down";
+            }
+            if (e.key == "ArrowLeft" || code == 37) {
+                return "Left";
+            }
+            if (e.key == "ArrowRight" || code == 39) {
+                return "Right";
+            }
+            return null;
+        }
+        const direction = keyEventToNavDirection(e);
+        if (direction == null) {
+            return;
+        }
+        focusNavigator.handle(direction);
+        e.preventDefault();
     });
     addEscapeListener(() => {
         bridges.close("escape-pressed");
-    }, () => {
-        //Only allow escaping when the game is over or between rounds.
-        const used = Object.keys(game.usedMagnitudes).length;
-        const betweenRounds = used == 0 || used == 4;
-        return game.isGameOver || betweenRounds;
+    }, () => game.canBeClosed);
+    window.prismaUi.controls.addEventListener("gamepadbuttondown", e => {
+        const detail = e.detail;
+        const action = detail.action;
+        if (action == "accept") {
+            const activeElement = document.activeElement;
+            if (activeElement instanceof HTMLElement) {
+                activeElement.click();
+            }
+        }
+        else if (action == "cancel") {
+            if (game.canBeClosed) {
+                bridges.close("cancel-gamepad-button-pressed");
+            }
+        }
     });
+    function getGamepadDirection() {
+        const gamepad = navigator.getGamepads().find(gp => gp != null);
+        if (gamepad == null) {
+            return null;
+        }
+        const dpadUp = gamepad.buttons[12].pressed;
+        const dpadDown = gamepad.buttons[13].pressed;
+        const dpadLeft = gamepad.buttons[14].pressed;
+        const dpadRight = gamepad.buttons[15].pressed;
+        const leftStickX = gamepad.axes[0];
+        const leftStickY = gamepad.axes[1];
+        const deadzone = .5;
+        if (dpadUp || leftStickY < -deadzone) {
+            return "Up";
+        }
+        else if (dpadDown || leftStickY > deadzone) {
+            return "Down";
+        }
+        else if (dpadLeft || leftStickX < -deadzone) {
+            return "Left";
+        }
+        else if (dpadRight || leftStickX > deadzone) {
+            return "Right";
+        }
+        return null;
+    }
+    let lastGamepadDirection = null;
+    function onAnimationFrame() {
+        const gamepadDirection = getGamepadDirection();
+        if (gamepadDirection != null && lastGamepadDirection != gamepadDirection) {
+            focusNavigator.handle(gamepadDirection);
+        }
+        lastGamepadDirection = gamepadDirection;
+        requestAnimationFrame(onAnimationFrame);
+    }
+    requestAnimationFrame(onAnimationFrame);
     game.startRound();
     renderer.renderHitboxes();
     renderer.renderWedges();

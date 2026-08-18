@@ -303,7 +303,7 @@ class SpellDraft {
     }
 
     //See SpellRecipeParser::Parse.
-    public toBuyPayload(name: string): string {
+    public toBuyPayload(name: string) {
         if (!this.castModeInternal) return "";
         return JSON.stringify({
             name: name,
@@ -413,7 +413,7 @@ class EffectEditor {
     }
 
     //Enables only the rows the selected effect uses.
-    public enableRowsByEffect(effect: MagicEffect): void {
+    public enableRowsByEffect(effect: MagicEffect) {
         this.magnitudeSlider.setEnabled(effect.hasMagnitude);
         this.durationSlider.setEnabled(effect.durationApplies());
         this.areaSlider.setEnabled(effect.hasArea);
@@ -668,7 +668,7 @@ class SpellMakingBridges {
     }
 
     //C++ -> JS
-    public static reset(): void {
+    public static reset() {
         SpellMakingBridges.instance.onReset();
     }
 

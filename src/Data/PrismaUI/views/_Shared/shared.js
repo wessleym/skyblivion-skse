@@ -1,5 +1,4 @@
 "use strict";
-/// <reference path="C:/Users/Wess/Documents/Projects/PrismaUIFramework/dist/PrismaUI_1.5.0/PrismaUI/misc/PrismaUI_API.d.ts" />
 function el(id) {
     const el = document.getElementById(id);
     if (el) {

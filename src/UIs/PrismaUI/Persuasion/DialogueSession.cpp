@@ -3,6 +3,7 @@
 #include <atomic>
 #include <chrono>
 #include <cstdint>
+#include <memory>
 #include <thread>
 
 namespace Persuasion {
@@ -28,6 +29,37 @@ namespace Persuasion {
 		// The engine clears it when the player ends the reopened dialogue with a normal goodbye.
 		void SetActorDialogueWithPlayer(RE::Actor* actor, bool inDialogue) {
 			actor->SetDialogueWithPlayer(inDialogue, false, nullptr);
+		}
+
+		// Attempts to log the intermittent frozen-mouth bug.
+		void WatchForFrozenMouth(RE::FormID formID) {
+			auto heldSamples = std::make_shared<std::atomic<int>>(0);
+			auto lastValue = std::make_shared<std::atomic<float>>(-1.0f);
+			std::thread([formID, heldSamples, lastValue]() {
+				for (int i = 0; i < 12; ++i) {
+					std::this_thread::sleep_for(std::chrono::milliseconds(250));
+					auto* taskInterface = SKSE::GetTaskInterface();
+					if (!taskInterface) {
+						return;
+					}
+					taskInterface->AddTask([formID, heldSamples, lastValue]() {
+						auto* actor = RE::TESForm::LookupByID<RE::Actor>(formID);
+						auto* faceGen = actor ? actor->GetFaceGenAnimationData() : nullptr;
+						if (!faceGen) {
+							return;
+						}
+						const float value = faceGen->phoneme3.GetMaxValue();
+						if (value <= 0.01f || value != lastValue->exchange(value)) {
+							heldSamples->store(0);
+							return;
+						}
+						if (heldSamples->fetch_add(1) + 1 == 6) {//6 x 250ms = 1.5s unchanged
+							Log::WARN("Frozen mouth: actor {:08X} phoneme3 held {:.2f} for 1.5s.",
+								formID, value);
+						}
+						});
+				}
+				}).detach();
 		}
 
 		void StartConversationKeepAlive(RE::FormID formID) {
@@ -124,6 +156,7 @@ namespace Persuasion {
 		SetActorDialogueWithPlayer(target, true);
 		SetDialogueMenuVisible(false);
 		StartConversationKeepAlive(target->GetFormID());
+		WatchForFrozenMouth(target->GetFormID());
 	}
 
 	void DialogueSession::End(RE::FormID formID) {

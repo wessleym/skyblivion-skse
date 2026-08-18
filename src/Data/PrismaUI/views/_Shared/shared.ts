@@ -1,6 +1,4 @@
-/// <reference path="C:/Users/Wess/Documents/Projects/PrismaUIFramework/dist/PrismaUI_1.5.0/PrismaUI/misc/PrismaUI_API.d.ts" />
-
-function el(id: string): HTMLElement {
+function el(id: string) {
     const el = document.getElementById(id);
     if (el) { return el; }
     throw new Error("Element #" + id + " not found.");

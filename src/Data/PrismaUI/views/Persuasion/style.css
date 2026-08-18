@@ -207,7 +207,12 @@ JavaScript adds and removes .hovered as the cursor enters and leaves the hitbox.
 
 .label.used .action-name, .label.used .preference { opacity: 0.4; }
 
-.bribe-btn {
+.button-row {
+    display: flex;
+    gap: 24px;
+}
+
+.menu-btn {
     padding: 10px 32px;
     background: rgba(72, 54, 39, 0.92);
     color: #FFFFFF;
@@ -220,12 +225,37 @@ JavaScript adds and removes .hovered as the cursor enters and leaves the hitbox.
     text-shadow: 0 1px 3px rgba(0, 0, 0, 0.9);
     box-shadow: 0 0 12px rgba(0, 0, 0, 0.6);
     transition: background 0.15s ease, border-color 0.15s ease;
+
+    &:hover {
+        background: #3a2a14;
+        border-color: #E2CEAA;
+    }
+
+    &:disabled {
+        opacity: 0.35;
+        cursor: not-allowed;
+    }
+
+    &:focus {
+        outline: none;
+        background: #3a2a14;
+        border-color: #FFE9A8;
+        box-shadow: 0 0 16px rgba(255, 233, 168, 0.65);
+    }
 }
-.bribe-btn:hover {
-    background: #3a2a14;
-    border-color: #E2CEAA;
-}
-.bribe-btn:disabled {
-    opacity: 0.35;
-    cursor: not-allowed;
+
+.quadrant-focus {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    border: 0;
+    opacity: 0;
+    pointer-events: none;
+
+    &:focus {
+        outline: none;
+    }
 }
