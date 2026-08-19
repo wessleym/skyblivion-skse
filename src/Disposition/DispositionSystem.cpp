@@ -1,7 +1,7 @@
 #include "DispositionSystem.h"
 #include "TESFactions.h"
 #include "TESGlobals.h"
-#include "TESNPCActivateHook.h"
+#include "CharacterLoad3d.h"
 #include "TESRaces.h"
 #include <ClibUtil/RNG.hpp>
 #include <cmath>
@@ -65,9 +65,6 @@ float DispositionSystem::CalcDisposition(RE::Actor* npc) {
 	//player and npc are non null.
 	auto playerAVOwner = REBridge::AVOwner(player);
 	auto npcAVOwner = REBridge::AVOwner(npc);
-	//if (!playerAVOwner || !npcAVOwner) {//Unreachable since playerAVOwner npcAVOwner are non null
-	//    return 40.0f;
-	//}
 
 	auto NormalizeRace = [](RE::TESRace* race) -> RE::TESRace* {
 		if (race == TESRaces::HighElfRaceVampire) return TESRaces::HighElfRace;
@@ -170,9 +167,10 @@ float DispositionSystem::CalcDisposition(RE::Actor* npc) {
 		}
 	}
 
-	if (REBridge::ActorStateOf(player)->IsWeaponDrawn()) {
+	//this was in the original formula, but removed since doesent make sense since being called from a load 3d hook
+	/*f(REBridge::ActorStateOf(player)->IsWeaponDrawn()) {
 		disp -= 10.0f;
-	}
+	}*/
 
 	const float speechDiff =
 		(playerAVOwner->GetActorValue(RE::ActorValue::kSpeech) -
