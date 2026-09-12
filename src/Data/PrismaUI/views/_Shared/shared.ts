@@ -16,6 +16,10 @@ function parseIntOrThrow(str: string) {
     throw new Error("str was NaN: " + str);
 }
 
+function isInGame() {
+    return typeof window.prismaUi != "undefined";
+}
+
 //Throws if C++ hasn't registered the named JS->C++ bridge functions on window.
 //label is the view's name, used only in the error message.
 function verifyBridges(label: string, requiredFns: string[]) {
@@ -133,7 +137,10 @@ class GamepadDebugDisplay {
 }
 
 //Activates the gamepad debug overlay. Comment out to disable.
-window.addEventListener("load", () => { GamepadDebugDisplay.install(); });
+/*window.addEventListener("load", () => {
+    if (!isInGame()) { return; }
+    GamepadDebugDisplay.install();
+});*/
 
 function addEscapeListener(callback: () => void, preCallbackCheck: (() => boolean) | null = null) {
     document.addEventListener("keydown", (e) => {

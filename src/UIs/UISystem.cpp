@@ -3,14 +3,16 @@
 #include "PrismaUI/Persuasion/PersuasionView.h"
 #include "PrismaUI/SpellMaking/SpellMakingStore.h"
 #include "PrismaUI/SpellMaking/SpellMakingView.h"
+#include "PrismaUI/Stats/StatsMenuHook.h"
+#include "PrismaUI/Stats/StatsView.h"
 
 #include <optional>
 
 namespace {
-    // Owns the PrismaUI service for the program's lifetime. The feature views borrow it by
-    // pointer (PrismaViewHandle::m_service); their OnDomReady callbacks fire asynchronously on
-    // the PrismaUI thread AFTER OnDataLoaded returns, so the service must outlive this function.
-    // (A stack-local here left every view handle dangling -> use-after-scope crash on DOM ready.)
+    // Owns the PrismaUI service for the program's lifetime.
+    // The feature views borrow it by pointer (PrismaViewHandle::m_service).
+    // Their OnDomReady callbacks fire asynchronously on the PrismaUI thread after OnDataLoaded returns,
+    // so the service must outlive this function.
     std::optional<PrismaUIService> g_prismaUI;
 }
 
@@ -30,6 +32,8 @@ void UISystem::OnDataLoaded() {
     Persuasion::PersuasionView::Initialize(*g_prismaUI);
     SpellMaking::SpellMakingView::Initialize(*g_prismaUI);
     SpellMaking::SpellMakingStore::Initialize();
+    Stats::StatsView::Initialize(*g_prismaUI);
+    Stats::StatsMenuHook::Initialize();
     Log::INFO("UISystem: OnDataLoaded Complete");
 }
 

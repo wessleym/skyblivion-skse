@@ -20,6 +20,16 @@ namespace REBridge
 #endif
 	}
 
+	//PlayerCharacter::GameStatsData: perkCount, difficulty, murder counts.
+	[[nodiscard]] inline auto& GameStats(RE::PlayerCharacter* a_player)
+	{
+#if SKY_COMMONLIB == SKY_COMMONLIB_NG
+		return a_player->GetGameStatsData();
+#else
+		return *a_player;
+#endif
+	}
+
 	[[nodiscard]] inline RE::ActorValueOwner* AVOwner(RE::Actor* a_actor)
 	{
 #if SKY_COMMONLIB == SKY_COMMONLIB_NG

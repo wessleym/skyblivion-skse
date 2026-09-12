@@ -161,6 +161,7 @@ class Round {
 class PersuasionGame {
     private npc: NpcSession | null;
     private round: Round | null;
+    private active = false;
     public constructor() {
         this.npc = null;
         this.round = null;
@@ -173,6 +174,16 @@ class PersuasionGame {
     private get roundNonNull() {
         if (this.round != null) { return this.round; }
         throw new Error("this.round was null.");
+    }
+
+    //True only while a persuasion is actually running. The view stays loaded and keeps animating
+    //when it is hidden, so anything driven by a frame loop has to ask this first.
+    public get isActive() {
+        return this.active;
+    }
+
+    public deactivate() {
+        this.active = false;
     }
 
     public get disposition() {
@@ -249,6 +260,7 @@ class PersuasionGame {
 
     //Resets and starts round 1.
     public reset(preferences: Record<PersuasionActionId, Preference>, disposition: number) {
+        this.active = true;
         this.npc = new NpcSession(preferences, disposition);
         this.startRound();
     }
@@ -278,7 +290,11 @@ class PersuasionBridges {
     //JS -> C++:
     public wedgeHover(preference: PreferenceString | "") { window.persuasionWedgeHover(preference); }
     public dispositionChanged(disposition: string) { window.persuasionDispositionChanged(disposition); }
-    public close(closeMethod: string) { window.persuasionClose(closeMethod); }
+    public close(closeMethod: string) {
+        //Every close goes through here, so this is where the frame loop stops steering the view.
+        this.game.deactivate();
+        window.persuasionClose(closeMethod);
+    }
     public bribe(disposition: string) { window.persuasionBribe(disposition); }
 
     // --- Inbound handler logic (instance) -----------------------------------------
@@ -875,6 +891,15 @@ class FocusNavigator {
 
     let lastGamepadDirection: NavDirection | null = null;
     function onAnimationFrame() {
+        //navigator.getGamepads() reports the pad no matter which view the player is actually using,
+        //and this loop keeps running while this view is hidden.
+        //Without this check, driving another screen with the stick steers this one too.
+        //The focus navigator is then called with no session and throws on every frame.
+        if (!game.isActive) {
+            lastGamepadDirection = null;
+            requestAnimationFrame(onAnimationFrame);
+            return;
+        }
         const gamepadDirection = getGamepadDirection();
         if (gamepadDirection != null && lastGamepadDirection != gamepadDirection) {
             focusNavigator.handle(gamepadDirection);

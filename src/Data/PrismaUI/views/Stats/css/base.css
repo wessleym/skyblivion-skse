@@ -1,0 +1,23 @@
+/* Reset, font, palette and button defaults come from ../../_Shared/shared.css, linked first. */
+
+body {
+    display: flex;
+    flex-direction: column;
+    /* 1.5x the 14px shared default. */
+    font-size: 21px;
+}
+
+main {
+    flex: 1;
+    display: flex;
+    min-height: 0;
+}
+
+#side-panels {
+    width: 380px;
+    border-left: none;
+    padding: 12px;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+}

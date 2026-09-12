@@ -20,6 +20,9 @@ function parseIntOrThrow(str) {
     }
     throw new Error("str was NaN: " + str);
 }
+function isInGame() {
+    return typeof window.prismaUi != "undefined";
+}
 //Throws if C++ hasn't registered the named JS->C++ bridge functions on window.
 //label is the view's name, used only in the error message.
 function verifyBridges(label, requiredFns) {
@@ -135,7 +138,10 @@ class GamepadDebugDisplay {
     }
 }
 //Activates the gamepad debug overlay. Comment out to disable.
-window.addEventListener("load", () => { GamepadDebugDisplay.install(); });
+/*window.addEventListener("load", () => {
+    if (!isInGame()) { return; }
+    GamepadDebugDisplay.install();
+});*/
 function addEscapeListener(callback, preCallbackCheck = null) {
     document.addEventListener("keydown", (e) => {
         const escape = e.key == "Escape" || e.keyCode == 27; //PrismaUI doesn't seem to include .key. <any> suppresses the warning of keyCode.

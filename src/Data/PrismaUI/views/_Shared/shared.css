@@ -1,0 +1,34 @@
+@font-face {
+    font-family: 'kingthings_petrockregular';
+    src: url('kingthings_petrock-webfont.woff2') format('woff2'),
+         url('kingthings_petrock-webfont.woff') format('woff');
+    font-weight: normal;
+    font-style: normal;
+}
+
+:root {
+    --skyblivion-tan: #E2CEAA;
+}
+
+html, body {
+    margin: 0;
+    padding: 0;
+    width: 100%;
+    height: 100%;
+    color: #FFFFFF;
+    font-family: "kingthings_petrockregular", "Trebuchet MS", "Segoe UI", sans-serif;
+    font-size: 14px;
+    -webkit-user-select: none;
+    user-select: none;
+}
+
+input, textarea, select {
+    font: inherit;
+    -webkit-user-select: text;
+    user-select: text;
+}
+
+button {
+    font: inherit;
+    cursor: pointer;
+}

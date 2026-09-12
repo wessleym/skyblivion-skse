@@ -1,30 +1,6 @@
-/* Skyrim theme — overrides style.css to give the SpellMaking view the look of
-   Skyrim's in-game popup-notice panel (translucent black panel, gray borders,
-   light-gray serif text, centered title). Purely visual: colors, fonts,
-   borders, shadows. No positioning, no margins/padding, no widths/heights.
-   Loaded AFTER style.css in index.html so these rules win.
-
-   Palette:
-     rgba(0, 0, 0, 0.3)    viewport dim outside the window
-     rgba(0, 0, 0, 0.72)   window background — translucent black
-     #8a8a8a               rule — borders, dividers (mid gray)
-     #b0b0b0               rule-strong — focus / hover borders
-     #d4d4d4               ink — primary text (light gray)
-     #ffffff               ink-bright — titlebar, selected items
-     #888888               ink-dim — hint rows, disabled labels
-     #d68070               soft-red — × remove button only
-
-   Font: clean humanist sans-serif. Skyrim's UI font (Futura Condensed Medium)
-   isn't preinstalled on Windows; "Trebuchet MS" is the closest commonly-
-   available fallback (humanist sans with a similar vertical feel), then
-   Segoe UI, then the generic sans-serif. Header prominence is carried by
-   size + brightness — no caps, no extra letter-spacing, no bold beyond what
-   style.css already sets on .titlebar.                                       */
-
 html, body {
     background: rgba(0, 0, 0, 0.3);
     color: #d4d4d4;
-    font-family: "Trebuchet MS", "Segoe UI", sans-serif;
 }
 
 .window {

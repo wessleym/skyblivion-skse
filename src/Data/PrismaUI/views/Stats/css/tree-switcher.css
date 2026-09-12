@@ -1,0 +1,81 @@
+#tree-switcher {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 8px 16px;
+}
+
+#tree-switcher-row {
+    display: grid;
+    grid-template-columns: 1fr auto 1fr;
+    align-items: center;
+}
+
+#tree-switcher-nav {
+    grid-column: 2;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+#tree-heading {
+    margin: 0;
+    font-size: 30px;
+    min-width: 220px;
+    text-align: center;
+}
+
+#tree-heading-name {
+    color: var(--skyblivion-tan);
+}
+
+#tree-heading-level {
+    color: #ffffff;
+}
+
+/* Spaced from the name only when a level is shown. */
+#tree-heading-level:not(:empty) {
+    margin-left: 10px;
+}
+
+/* Shoulder-button equivalents; still buttons, so they stay clickable. */
+#previous-tree-button, #next-tree-button {
+    padding: 1px 6px;
+    font-size: 18px;
+    font-weight: bold;
+    color: var(--skyblivion-tan);
+    background: transparent;
+    border: 1px solid var(--skyblivion-tan);
+    border-radius: 4px;
+}
+
+#edit-toggle-button {
+    grid-column: 3;
+    justify-self: end;
+}
+
+#tree-position {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    /* The scaled diamond keeps its original box, so the visual gap needs narrowing. */
+    gap: 10px;
+    padding: 4px 0;
+}
+
+/* A square rotated 45deg into a diamond, then narrowed; the order matters, scaling first would
+   lean it. The outline rotates with it, which draws the ring on .current. */
+.tree-position-dot {
+    width: 9px;
+    height: 9px;
+    padding: 0;
+    border: none;
+    border-radius: 0;
+    background: var(--skyblivion-tan);
+    transform: scaleX(0.6) rotate(45deg);
+}
+
+.tree-position-dot.current {
+    outline: 1px solid var(--skyblivion-tan);
+    outline-offset: 4px;
+}

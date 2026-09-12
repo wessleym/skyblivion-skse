@@ -1,0 +1,3 @@
+interface PerkTreeDocumentJson {
+    trees: PerkTreeJson[];
+}

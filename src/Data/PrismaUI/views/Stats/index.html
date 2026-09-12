@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Perk Trees</title>
+    <link rel="stylesheet" href="../_Shared/shared.css" />
+    <link rel="stylesheet" href="css/base.css" />
+    <link rel="stylesheet" href="css/tree-switcher.css" />
+    <link rel="stylesheet" href="css/tree-view.css" />
+    <link rel="stylesheet" href="css/detail-panel.css" />
+    <link rel="stylesheet" href="css/edit-panel.css" />
+    <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+    <header id="tree-switcher">
+        <div id="tree-switcher-row">
+            <div id="tree-switcher-nav">
+                <button type="button" id="previous-tree-button" title="Previous Tree">LB</button>
+                <h1 id="tree-heading"><span id="tree-heading-name"></span><span id="tree-heading-level"></span></h1>
+                <button type="button" id="next-tree-button" title="Next Tree">RB</button>
+            </div>
+            <button type="button" id="edit-toggle-button" hidden>Edit</button>
+        </div>
+        <div id="tree-position"></div>
+    </header>
+
+    <main>
+        <div id="tree-canvas">
+            <svg id="tree-svg" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid meet">
+                <g id="tree-edge-layer"></g>
+                <g id="tree-node-layer"></g>
+            </svg>
+            <p id="perk-points">Perk Points Available:<span id="perk-points-value">0</span></p>
+            <p id="tree-hints"><button type="button" class="hint" id="tree-exit-button"><span class="hint-key">B</span>Exit</button></p>
+        </div>
+
+        <aside id="side-panels">
+            <section id="detail-panel">
+                <div id="detail-heading">
+                    <h2 id="detail-name"></h2>
+                    <span id="detail-rank-count"></span>
+                </div>
+                <p id="detail-requires"><span id="detail-requires-label"></span><span id="detail-requires-name"></span><span id="detail-requires-value"></span></p>
+                <p id="detail-status"><span id="detail-status-lead"></span><span id="detail-status-name"></span><span id="detail-status-value"></span></p>
+                <p id="detail-description"></p>
+                <hr id="detail-divider" />
+                <div id="detail-actions">
+                    <button type="button" id="detail-acquire-button"><span class="hint-key">A</span>Acquire</button>
+                </div>
+            </section>
+
+            <section id="edit-panel" hidden>
+                <fieldset>
+                    <legend>Perk</legend>
+                    <p id="edit-no-selection">Select a perk to edit it.</p>
+                    <div id="edit-perk-fields" hidden>
+                        <label for="edit-name">Name <span class="from-esm">(from the ESM)</span></label>
+                        <input type="text" id="edit-name" readonly />
+                        <label for="edit-description">Description <span class="from-esm">(from the ESM)</span></label>
+                        <textarea id="edit-description" rows="3" readonly></textarea>
+
+                        <h3>Ranks</h3>
+                        <div class="rank-header">
+                            <span class="rank-header-number"></span>
+                            <span class="rank-header-perk">Perk</span>
+                            <span class="rank-header-minimum">Minimum</span>
+                            <span class="rank-header-remove"></span>
+                        </div>
+                        <ul id="edit-rank-list"></ul>
+                        <button type="button" id="add-rank-button">Add Rank</button>
+
+                        <h3>Requires Perks</h3>
+                        <ul id="edit-parent-list"></ul>
+                        <div class="button-row">
+                            <select id="add-parent-select"></select>
+                            <button type="button" id="add-parent-button">Add Requirement</button>
+                        </div>
+
+                        <h3>Add Child Perk</h3>
+                        <div class="button-row">
+                            <select id="add-child-select"></select>
+                            <button type="button" id="add-child-button">Add Child</button>
+                        </div>
+
+                        <div class="button-row">
+                            <button type="button" id="delete-perk-button">Delete Perk</button>
+                        </div>
+                    </div>
+                </fieldset>
+
+                <fieldset>
+                    <legend>File</legend>
+                    <div class="button-row">
+                        <button type="button" id="save-file-button">Save to File</button>
+                    </div>
+                </fieldset>
+            </section>
+        </aside>
+    </main>
+
+    <template id="perk-node-template">
+        <svg xmlns="http://www.w3.org/2000/svg">
+            <g class="perk-node" tabindex="0" role="button">
+                <title></title>
+                <image class="perk-node-fallback" x="-26" y="-26" width="52" height="52"></image>
+                <image class="perk-node-icon" x="-26" y="-26" width="52" height="52"></image>
+                <polygon class="perk-node-shape" points="0,-26 26,0 0,26 -26,0"></polygon>
+                <g class="perk-node-ranks"></g>
+                <text class="perk-node-label" x="0" y="54" text-anchor="middle"></text>
+            </g>
+        </svg>
+    </template>
+
+    <template id="perk-rank-dot-template">
+        <svg xmlns="http://www.w3.org/2000/svg">
+            <circle class="perk-rank-dot" cy="36" r="3.5"></circle>
+        </svg>
+    </template>
+
+    <template id="perk-edge-template">
+        <svg xmlns="http://www.w3.org/2000/svg">
+            <line class="perk-edge"></line>
+        </svg>
+    </template>
+
+    <template id="option-template">
+        <option></option>
+    </template>
+
+    <template id="tree-position-dot-template">
+        <button type="button" class="tree-position-dot"></button>
+    </template>
+
+    <template id="parent-row-template">
+        <li class="parent-row">
+            <span class="parent-row-name"></span>
+            <button type="button" class="parent-row-remove">Remove</button>
+        </li>
+    </template>
+
+    <template id="rank-row-template">
+        <li class="rank-row">
+            <span class="rank-row-number"></span>
+            <select class="rank-row-perk" title="The perk this rank grants"></select>
+            <input type="number" class="rank-row-min-attribute" />
+            <button type="button" class="rank-row-remove">Remove</button>
+        </li>
+    </template>
+
+    <script src="js/PerkIcons.js"></script>
+    <script src="js/PerkCatalog.js"></script>
+    <script src="js/Percent.js"></script>
+    <script src="js/IdFactory.js"></script>
+    <script src="js/Dom.js"></script>
+    <script src="js/PerkRank.js"></script>
+    <script src="js/PerkNode.js"></script>
+    <script src="js/PerkTree.js"></script>
+    <script src="js/PerkTreeDocument.js"></script>
+    <script src="js/InitialPerkTrees.js"></script>
+    <script src="js/LayoutNode.js"></script>
+    <script src="js/LayoutEdge.js"></script>
+    <script src="js/PerkTreeLayout.js"></script>
+    <script src="js/TreeView.js"></script>
+    <script src="js/GamepadInput.js"></script>
+    <script src="js/DetailPanel.js"></script>
+    <script src="js/PerkPointsDisplay.js"></script>
+    <script src="js/TreeSwitcher.js"></script>
+    <script src="js/EditModeSwitch.js"></script>
+    <script src="js/PerkTreeFileService.js"></script>
+    <script src="js/EditPanel.js"></script>
+    <script src="js/PerkTreeController.js"></script>
+    <script src="perk-trees.js"></script>
+    <script src="../_Shared/shared.js"></script>
+    <script src="script.js"></script>
+</body>
+</html>

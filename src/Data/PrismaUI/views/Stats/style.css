@@ -1,0 +1,98 @@
+/* In-game overrides. The page's own sheets are copied under css/; this file is linked last. */
+
+html, body {
+    /* PrismaUI renders no scrollbars, so anything that overflows would be unreachable. */
+    overflow: hidden;
+}
+
+/* This view's own colours; the tan comes from ../_Shared/shared.css. */
+:root {
+    --skyblivion-cream: #f4ecdb;
+    --skyblivion-green: #8fbf5c;
+}
+
+/* On body only: html's background propagates to the canvas, so setting both paints it twice.
+   backdrop-filter cannot blur the game's frame, which is not part of the document. */
+body, #side-panels {
+    background-color: rgba(65, 65, 65, 0.75);
+}
+
+/* Set by DetailPanel when the attribute level is below the rank's minAttribute. */
+#detail-requires.requirement-unmet {
+    color: #a00000;
+}
+
+/* Stacks the SVG above #perk-points. TreeView sets background-image per tree; the longhands below
+   are kept so the shorthand cannot reset them. */
+#tree-canvas {
+    display: flex;
+    flex-direction: column;
+    /* Positioning context for #tree-hints. */
+    position: relative;
+    background-size: cover;
+    background-position: center;
+    background-repeat: no-repeat;
+}
+
+#tree-svg {
+    flex: 1;
+    /* Overrides height: 100% in css/tree-view.css; min-height: 0 lets the flex item shrink. */
+    height: auto;
+    min-height: 0;
+}
+
+#perk-points {
+    margin: 0;
+    padding: 8px 12px 12px;
+    text-align: center;
+    color: var(--skyblivion-tan);
+}
+
+/* Own line under the label. */
+#perk-points-value {
+    display: block;
+    font-size: 30px;
+}
+
+/* Gamepad hints, bottom right of the canvas. */
+#tree-hints {
+    position: absolute;
+    right: 16px;
+    bottom: 12px;
+    margin: 0;
+    display: flex;
+    gap: 18px;
+}
+
+/* One rule for the canvas hint and the panel action so their size and weight cannot drift. */
+.hint, #detail-actions button {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 0;
+    font-size: 24px;
+    color: var(--skyblivion-tan);
+    background: transparent;
+    border: none;
+}
+
+button.hint {
+    cursor: pointer;
+}
+
+/* The lettered badge, shared by the canvas hint and the panel action. */
+.hint-key {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    font-size: 19.5px;
+    font-weight: bold;
+    line-height: 1;
+    /* Full strength: the disabled dimming comes from the button, not the badge. */
+    color: var(--skyblivion-tan);
+    background: rgba(232, 220, 176, 0.18);
+    border: 2px solid var(--skyblivion-tan);
+}

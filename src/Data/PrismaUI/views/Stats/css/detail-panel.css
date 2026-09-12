@@ -1,0 +1,92 @@
+/* Card ground shared by both side panels. */
+#detail-panel, #edit-panel {
+    background: rgba(38, 30, 27, 0.72);
+    border: 2px solid var(--skyblivion-tan);
+    border-radius: 16px;
+    padding: 18px 20px;
+    color: var(--skyblivion-cream);
+}
+
+/* Auto margins, not justify-content: content taller than the column stays reachable. */
+#detail-panel {
+    margin-top: auto;
+    margin-bottom: auto;
+}
+
+/* With the editor open the panels stack from the top. */
+#side-panels.editing #detail-panel {
+    margin-top: 0;
+    margin-bottom: 12px;
+}
+
+#detail-heading {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 12px;
+}
+
+#detail-name {
+    margin: 0;
+    font-size: 30px;
+    color: #ffffff;
+}
+
+#detail-rank-count {
+    font-size: 30px;
+    color: #ffffff;
+}
+
+/* Three colours on one line: label tan, attribute white, number green. */
+#detail-requires {
+    margin: 3px 0 0 0;
+    font-size: 18px;
+    color: var(--skyblivion-tan);
+}
+
+#detail-requires-name {
+    color: #ffffff;
+}
+
+#detail-description {
+    margin: 14px 0 0 0;
+    font-size: 22.5px;
+    color: #ffffff;
+}
+
+#detail-requires-value {
+    color: var(--skyblivion-green);
+}
+
+/* The reference's centre ornament is artwork and is not reproduced. */
+#detail-divider {
+    border: none;
+    border-top: 1px solid var(--skyblivion-tan);
+    opacity: 0.55;
+    margin: 16px 4px;
+}
+
+#detail-actions {
+    display: flex;
+    gap: 16px;
+}
+
+#detail-actions button:disabled {
+    opacity: 0.45;
+}
+
+/* Set by DetailPanel: why the next rank cannot be taken. Sized like the requirement line. */
+#detail-status {
+    margin: 3px 0 0 0;
+    font-size: 18px;
+    color: var(--skyblivion-tan);
+    opacity: 0.8;
+}
+
+#detail-status-name {
+    color: #ffffff;
+}
+
+#detail-status-value {
+    color: var(--skyblivion-green);
+}

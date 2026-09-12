@@ -3,15 +3,13 @@
 
 #include <filesystem>
 
-namespace {
-	std::filesystem::path ResolveViewFile(const char* htmlPath) {
-		wchar_t exePath[MAX_PATH];
-		const auto exePathLength = GetModuleFileNameW(nullptr, exePath, MAX_PATH);
-		std::filesystem::path gameRoot = (exePathLength > 0 && exePathLength < MAX_PATH)
-			? std::filesystem::path(exePath).parent_path()
-			: std::filesystem::current_path();
-		return gameRoot / "Data" / "PrismaUI" / "views" / htmlPath;
-	}
+std::filesystem::path ViewUtility::ResolveViewFile(const char* relativePath) {
+	wchar_t exePath[MAX_PATH];
+	const auto exePathLength = GetModuleFileNameW(nullptr, exePath, MAX_PATH);
+	std::filesystem::path gameRoot = (exePathLength > 0 && exePathLength < MAX_PATH)
+		? std::filesystem::path(exePath).parent_path()
+		: std::filesystem::current_path();
+	return gameRoot / "Data" / "PrismaUI" / "views" / relativePath;
 }
 
 PrismaView ViewUtility::CreateHiddenView(const PrismaUIService& service, const char* htmlPath, PRISMA_UI_API::OnDomReadyCallback onDomReady) {
