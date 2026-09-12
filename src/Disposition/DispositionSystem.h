@@ -4,7 +4,7 @@ class DispositionSystem {
 public:
     static void Initialize();
     static void OnDataLoaded();
-    static void SetInitialDisposition(RE::Actor* actor, std::string_view edid);
+    static void SetInitialDisposition(RE::Actor* actor);
     static int GetDispositionActorValue(RE::Actor* actor);
     static void SetDispositionActorValue(RE::Actor* actor, float value, bool force = false);
 
@@ -29,5 +29,6 @@ private:
     static void LookUpGlobals();
     static void LookUpRaces();
     static float CalcDisposition(RE::Actor* npc);
+    static bool RaceAllowsPlayerDialogue(RE::Actor* actor);
     static void PapyrusSetActorValue(RE::TESObjectREFR* a_ref, RE::BSFixedString valueName, float value, bool force);
 };

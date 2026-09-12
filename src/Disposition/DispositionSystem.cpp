@@ -1,14 +1,15 @@
 #include "DispositionSystem.h"
 #include "TESFactions.h"
 #include "TESGlobals.h"
-#include "TESNPCActivateHook.h"
+#include "CharacterLoad3DHook.h"
 #include "TESRaces.h"
+#include <ClibUtil/EditorID.hpp>
 #include <ClibUtil/RNG.hpp>
 #include <cmath>
 
 void DispositionSystem::Initialize() {
-	TESNPCActivateHook::Apply();
-	Log::INFO("DispositionSystem: Applied TESNPCActivateHook");
+	CharacterLoad3DHook::Apply();
+	Log::INFO("DispositionSystem: Applied CharacterLoad3DHook");
 }
 
 void DispositionSystem::OnDataLoaded() {
@@ -65,9 +66,6 @@ float DispositionSystem::CalcDisposition(RE::Actor* npc) {
 	//player and npc are non null.
 	auto playerAVOwner = REBridge::AVOwner(player);
 	auto npcAVOwner = REBridge::AVOwner(npc);
-	//if (!playerAVOwner || !npcAVOwner) {//Unreachable since playerAVOwner npcAVOwner are non null
-	//    return 40.0f;
-	//}
 
 	auto NormalizeRace = [](RE::TESRace* race) -> RE::TESRace* {
 		if (race == TESRaces::HighElfRaceVampire) return TESRaces::HighElfRace;
@@ -170,9 +168,11 @@ float DispositionSystem::CalcDisposition(RE::Actor* npc) {
 		}
 	}
 
-	if (REBridge::ActorStateOf(player)->IsWeaponDrawn()) {
-		disp -= 10.0f;
-	}
+	// This was previously used but is no longer useful since it would affect disposition
+	// at the moment an NPC's 3D loads instead of at the moment the conversation starts.
+	// if (REBridge::ActorStateOf(player)->IsWeaponDrawn()) {
+	//	 disp -= 10.0f;
+	// }
 
 	const float speechDiff =
 		(playerAVOwner->GetActorValue(RE::ActorValue::kSpeech) -
@@ -224,31 +224,42 @@ void DispositionSystem::PapyrusSetActorValue(RE::TESObjectREFR* a_ref, RE::BSFix
 	Log::DEBUG("Actor.{}({})", functionName, value);
 }
 
-void DispositionSystem::SetInitialDisposition(RE::Actor* actor, std::string_view edid) {
+bool DispositionSystem::RaceAllowsPlayerDialogue(RE::Actor* actor) {
+	auto* race = actor->GetRace();
+	return race && race->data.flags.any(RE::RACE_DATA::Flag::kAllowPCDialogue);
+}
+
+void DispositionSystem::SetInitialDisposition(RE::Actor* actor) {
 	if (!actor) {
 		Log::WARN("DispositionSystem::SetInitialDisposition: actor was null.");
+		return;
+	}
+	
+	if (!RaceAllowsPlayerDialogue(actor)) {
 		return;
 	}
 
 	auto avOwner = REBridge::AVOwner(actor);
 
-	const auto currentDisp = avOwner->GetActorValue(kDispositionAV);
-
-	Log::DEBUG("actor {} disp == {}", edid, currentDisp);
-
-	// If current disp == 0.0, this actor hasn't had disposition set yet this save game.
-	if (currentDisp == 0.0f) {
-		auto disposition = CalcDisposition(actor);
-
-		// Mark NPC disposition so it isn't needlessly recalced if it happened to be 0.0f first try.
-		if (disposition < 1.0f) {
-			disposition = 1.0f;
-		}
-
-		disposition = std::round(disposition);
-		// Papyrus call so changes persist.
-		SetDispositionActorValue(actor, disposition);
-
-		Log::DEBUG("set actor {} disp to {}", edid, disposition);
+	// Non-zero means this actor already had disposition set this save game.
+	if (avOwner->GetActorValue(kDispositionAV) != 0.0f) {
+		return;
 	}
+
+	auto disposition = CalcDisposition(actor);
+
+	// Mark NPC disposition so it isn't needlessly recalced if it happened to be 0.0f first try.
+	if (disposition < 1.0f) {
+		disposition = 1.0f;
+	}
+
+	disposition = std::round(disposition);
+	// Papyrus call so changes persist.
+	SetDispositionActorValue(actor, disposition);
+
+	auto* actorBase = actor->GetActorBase();
+	const std::string edid = actorBase ? clib_util::editorID::get_editorID(actorBase) : std::string{};
+	auto* race = actor->GetRace();
+	const std::string raceEdid = race ? clib_util::editorID::get_editorID(race) : std::string{};
+	Log::INFO("Set initial disposition for {} ({:08X}) [{}] to {}", edid, actor->GetFormID(), raceEdid, disposition);
 }
