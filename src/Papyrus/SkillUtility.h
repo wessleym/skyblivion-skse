@@ -10,14 +10,21 @@ public:
 private:
     static std::vector<float> GetSkillDataArray(RE::StaticFunctionTag*, int mode) {
         int listSize = RE::PlayerCharacter::PlayerSkills::Data::Skill::kTotal;
-        RE::PlayerCharacter* pPC = RE::PlayerCharacter::GetSingleton();
-        auto skills = REBridge::PlayerData(pPC).skills->data->skills;
         std::vector<float> returnValue(listSize, 0.0f);
+        // Zeros until the player's skill data exists (the main menu, early load).
+        RE::PlayerCharacter* player = RE::PlayerCharacter::GetSingleton();
+        auto playerSkills = player ? REBridge::PlayerSkills(player) : nullptr;
+        if (!playerSkills || !playerSkills->data) {
+            Log::WARN("SkillUtility: Player skill data unavailable. Returning zeros.");
+            return returnValue;
+        }
+        auto skills = playerSkills->data->skills;
         for (int i = 0; i < listSize; i++) {
             auto skill = skills[i];
             returnValue[i] = mode == 0   ? skill.xp
                              : mode == 1 ? skill.levelThreshold
-                                         : (skill.xp / skill.levelThreshold) * 100;
+                             : skill.levelThreshold > 0.0f ? (skill.xp / skill.levelThreshold) * 100
+                                                           : 0.0f;
         }
         return returnValue;
     }

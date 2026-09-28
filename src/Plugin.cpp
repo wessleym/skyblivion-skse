@@ -1,7 +1,10 @@
 #include "Plugin.h"
 
+#include "Achievements/AchievementStore.h"
 #include "Disposition/DispositionSystem.h"
 #include "Papyrus/SKSEScriptRegistrar.h"
+#include "Settings/SettingsService.h"
+#include "Sigil/SigilSystem.h"
 #include "UIs/UISystem.h"
 
 bool Plugin::OnLoad(const SKSE::LoadInterface* a_skse)
@@ -31,11 +34,36 @@ bool Plugin::OnLoad(const SKSE::LoadInterface* a_skse)
 
 	//SKSE::GetMessagingInterface()->RegisterListener only calls back to the first registered listener.
 	auto OnMessage = [](SKSE::MessagingInterface::Message* msg) {
-		if (msg->type == SKSE::MessagingInterface::kDataLoaded) {
+		switch (msg->type) {
+		case SKSE::MessagingInterface::kPostLoad:
+			UISystem::OnPostLoad();
+			break;
+		case SKSE::MessagingInterface::kInputLoaded:
+			UISystem::OnInputLoaded();
+			break;
+		case SKSE::MessagingInterface::kPreLoadGame:
+			UISystem::OnGameStarting();
+			break;
+		case SKSE::MessagingInterface::kNewGame:
+			UISystem::OnGameStarting();
+			//The new game's globals exist a frame later.
+			SKSE::GetTaskInterface()->AddTask([] { Settings::SettingsService::ApplyToGame(); });
+			break;
+		case SKSE::MessagingInterface::kPostLoadGame:
+			Settings::SettingsService::ApplyToGame();
+			break;
+		case SKSE::MessagingInterface::kDataLoaded:
 			Log::INFO("SKSE Data Loaded...");
 			DispositionSystem::OnDataLoaded();
+			Sigil::SigilSystem::Register();
+			Achievements::AchievementStore::Register();
+			//Before UISystem: the title screen and the journal read the settings.
+			Settings::SettingsService::Register();
 			UISystem::OnDataLoaded();
 			Log::INFO("SKSE Data Loaded Complete");
+			break;
+		default:
+			break;
 		}
 	};
 	if (!SKSE::GetMessagingInterface()->RegisterListener(OnMessage)) {

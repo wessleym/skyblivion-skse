@@ -14,7 +14,7 @@ std::vector<RE::TESForm*> FormUtility::GetAssociatedMenuForm(RE::BSScript::Inter
 	// GiftMenu - GiftActor
 	// Lockpicking Menu - Locked door
 	// Training Menu - Training Actor
-	// CraftingMenu - Furniture of menu. Kinda hard-ish to do, gonna not handle it for now.
+	// CraftingMenu - Furniture of menu. Not handled.
 	// Dialogue Menu- Talking actor
 	if (a_menu == "BookMenu") {
 		result.push_back(RE::BookMenu::GetTargetForm());
@@ -53,28 +53,28 @@ std::vector<RE::TESForm*> FormUtility::GetAssociatedMenuForm(RE::BSScript::Inter
 		result.push_back(RE::LockpickingMenu::GetTargetReference().get());
 	}
 	else if (a_menu == "Training Menu") {
-		// Likely the first thing is the actor but it's not confirmed yet and I don't want to rn
+		// Not implemented. The trainer actor is the probable target; unverified.
 	}
 	else if (a_menu == "GiftMenu") {
 		auto handle = RE::GiftMenu::GetReceiverRefHandle();
 
 		if (handle) {
-			auto vendor = RE::Actor::LookupByHandle(handle);
+			auto receiver = RE::Actor::LookupByHandle(handle);
 
-			if (vendor) {
-				result.push_back(vendor.get());
+			if (receiver) {
+				result.push_back(receiver.get());
 			}
 		}
 
 	}
 	else if (a_menu == "Dialogue Menu") {
-		// Not really sure where this one's is
-		auto topic_man = RE::MenuTopicManager::GetSingleton();
-		result.push_back(topic_man->speaker ? topic_man->speaker.get().get() : nullptr);
-		result.push_back(topic_man->lastSpeaker ? topic_man->lastSpeaker.get().get() : nullptr);
+		// Always two entries, speaker then last speaker: callers index them. Each is null when the manager is unavailable.
+		auto menuTopicManager = RE::MenuTopicManager::GetSingleton();
+		result.push_back(menuTopicManager && menuTopicManager->speaker ? menuTopicManager->speaker.get().get() : nullptr);
+		result.push_back(menuTopicManager && menuTopicManager->lastSpeaker ? menuTopicManager->lastSpeaker.get().get() : nullptr);
 	}
 	else {
-		// TODO: tell someone
+		// TODO: report the unsupported menu name
 	}
 
 	result.shrink_to_fit();

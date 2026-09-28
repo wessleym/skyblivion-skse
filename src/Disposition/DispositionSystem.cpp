@@ -1,3 +1,4 @@
+#include <Windows.h> //ClibUtil/EditorID.hpp calls GetModuleHandleA. The libxse backend does not include it.
 #include "DispositionSystem.h"
 #include "TESFactions.h"
 #include "TESGlobals.h"
@@ -56,7 +57,7 @@ void DispositionSystem::LookUpRaces() {
 }
 
 // Calculates the actor's disposition toward the player. Runs only the first time an
-// actor loads in a save (gated by the caller checking disp == 0).
+// actor loads in a save (the caller skips actors whose disposition actor value is non-zero).
 float DispositionSystem::CalcDisposition(RE::Actor* npc) {
 	auto player = RE::PlayerCharacter::GetSingleton();
 	if (!player || !npc) {
@@ -93,85 +94,85 @@ float DispositionSystem::CalcDisposition(RE::Actor* npc) {
 	auto playerBase = player->GetActorBase();
 	const int playerSex = playerBase ? static_cast<int>(playerBase->GetSex()) : 0;
 
-	float disp = 40.0f;
+	float disposition = 40.0f;
 
 	if (playerRaceNormalized == TESRaces::ArgonianRace) {
-		disp -= 10.0f;
+		disposition -= 10.0f;
 	}
 	else if (playerRaceNormalized == TESRaces::WoodElfRace && playerSex == 0) {
-		disp -= 10.0f;
+		disposition -= 10.0f;
 	}
 	else if (playerRaceNormalized == TESRaces::DarkElfRace && playerSex == 0) {
-		disp -= 10.0f;
+		disposition -= 10.0f;
 	}
 	else if (playerRaceNormalized == TESRaces::NordRace) {
-		disp -= 10.0f;
+		disposition -= 10.0f;
 	}
 	else if (playerRaceNormalized == TESRaces::RedguardRace && playerSex == 0) {
-		disp -= 10.0f;
+		disposition -= 10.0f;
 	}
 	else if (playerRaceNormalized == TESRaces::ImperialRace) {
-		disp += 10.0f;
+		disposition += 10.0f;
 	}
 	else if (playerRaceNormalized == TESRaces::OrcRace) {
-		disp += playerSex == 0 ? -15.0f : -10.0f;
+		disposition += playerSex == 0 ? -15.0f : -10.0f;
 	}
 
 	if (playerRaceNormalized == npcRaceNormalized) {
-		disp += 5.0f;
+		disposition += 5.0f;
 	}
 
 	if (playerRaceNormalized == TESRaces::OrcRace) {
-		disp -= 5.0f;
+		disposition -= 5.0f;
 	}
 
 	if (playerRaceNormalized == TESRaces::DarkElfRace) {
-		disp -= 5.0f;
+		disposition -= 5.0f;
 
 		if (npcRaceNormalized == TESRaces::HighElfRace) {
-			disp -= 5.0f;
+			disposition -= 5.0f;
 		}
 		else if (npcRaceNormalized == TESRaces::ArgonianRace) {
-			disp -= 5.0f;
+			disposition -= 5.0f;
 		}
 	}
 
 	if (playerRaceNormalized == TESRaces::HighElfRace) {
-		disp -= 5.0f;
+		disposition -= 5.0f;
 
 		if (npcRaceNormalized == TESRaces::HighElfRace) {
-			disp += 5.0f;
+			disposition += 5.0f;
 		}
 		else if (npcRaceNormalized == TESRaces::NordRace) {
-			disp += 5.0f;
+			disposition += 5.0f;
 		}
 		else if (npcRaceNormalized == TESRaces::OrcRace) {
-			disp += 5.0f;
+			disposition += 5.0f;
 		}
 		else if (npcRaceNormalized == TESRaces::ArgonianRace) {
-			disp -= 5.0f;
+			disposition -= 5.0f;
 		}
 		else if (npcRaceNormalized == TESRaces::DarkElfRace) {
-			disp -= 5.0f;
+			disposition -= 5.0f;
 		}
 		else if (npcRaceNormalized == TESRaces::KhajiitRace) {
-			disp -= 5.0f;
+			disposition -= 5.0f;
 		}
 	}
 
 	if (playerRaceNormalized == TESRaces::RedguardRace) {
 		if (npcRaceNormalized == TESRaces::BretonRace) {
-			disp -= 5.0f;
+			disposition -= 5.0f;
 		}
 		else if (npcRaceNormalized == TESRaces::ImperialRace) {
-			disp -= 5.0f;
+			disposition -= 5.0f;
 		}
 	}
 
 	// This was previously used but is no longer useful since it would affect disposition
 	// at the moment an NPC's 3D loads instead of at the moment the conversation starts.
 	// if (REBridge::ActorStateOf(player)->IsWeaponDrawn()) {
-	//	 disp -= 10.0f;
+	//	 disposition -= 10.0f;
 	// }
 
 	const float speechDiff =
@@ -179,19 +180,19 @@ float DispositionSystem::CalcDisposition(RE::Actor* npc) {
 			npcAVOwner->GetActorValue(RE::ActorValue::kSpeech)) /
 		4.0f;
 
-	disp += speechDiff;
+	disposition += speechDiff;
 
-	if (disp > 100.0f) {
-		disp = 100.0f;
+	if (disposition > 100.0f) {
+		disposition = 100.0f;
 	}
-	else if (disp < 0.0f) {
-		disp = 0.0f;
+	else if (disposition < 0.0f) {
+		disposition = 0.0f;
 	}
 
 	static thread_local clib_util::RNG rng;
-	disp += rng.generate<float>(-15.0f, 15.0f);
+	disposition += rng.generate<float>(-15.0f, 15.0f);
 
-	return disp;
+	return disposition;
 }
 
 int DispositionSystem::GetDispositionActorValue(RE::Actor* actor) {
@@ -204,9 +205,8 @@ void DispositionSystem::SetDispositionActorValue(RE::Actor* actor, float value, 
 	PapyrusSetActorValue(actor, kDispositionAVName, value, force);
 }
 
-// SKSE data changes to actor values don't persist, so next time the player loads the game
-// any changes we made through SKSE would be gone. We use SKSE to calc data and papyrus to
-// set it (papyrus persists).
+// Actor values set directly through SKSE are not saved, so they are lost when the game is
+// reloaded. The value is calculated in SKSE and set through a Papyrus call, which persists.
 void DispositionSystem::PapyrusSetActorValue(RE::TESObjectREFR* a_ref, RE::BSFixedString valueName, float value, bool force) {
 	auto actor = a_ref ? a_ref->As<RE::Actor>() : nullptr;
 	if (!actor || valueName.empty()) {
@@ -218,9 +218,9 @@ void DispositionSystem::PapyrusSetActorValue(RE::TESObjectREFR* a_ref, RE::BSFix
 	auto handle = policy->GetHandleForObject(actor->FORMTYPE, actor);
 
 	auto args = RE::MakeFunctionArguments(RE::BSFixedString{ valueName }, float{ value });
-	RE::BSTSmartPointer<RE::BSScript::IStackCallbackFunctor> cb;
+	RE::BSTSmartPointer<RE::BSScript::IStackCallbackFunctor> callback;
 	const auto functionName = force ? "ForceActorValue" : "SetActorValue";
-	vm->DispatchMethodCall(handle, "Actor", functionName, args, cb);
+	vm->DispatchMethodCall(handle, "Actor", functionName, args, callback);
 	Log::DEBUG("Actor.{}({})", functionName, value);
 }
 
@@ -248,7 +248,7 @@ void DispositionSystem::SetInitialDisposition(RE::Actor* actor) {
 
 	auto disposition = CalcDisposition(actor);
 
-	// Mark NPC disposition so it isn't needlessly recalced if it happened to be 0.0f first try.
+	// Clamped to at least 1 so a calculated 0 is not read as unset and recalculated.
 	if (disposition < 1.0f) {
 		disposition = 1.0f;
 	}
@@ -258,8 +258,8 @@ void DispositionSystem::SetInitialDisposition(RE::Actor* actor) {
 	SetDispositionActorValue(actor, disposition);
 
 	auto* actorBase = actor->GetActorBase();
-	const std::string edid = actorBase ? clib_util::editorID::get_editorID(actorBase) : std::string{};
+	const std::string actorBaseEditorID = actorBase ? clib_util::editorID::get_editorID(actorBase) : std::string{};
 	auto* race = actor->GetRace();
-	const std::string raceEdid = race ? clib_util::editorID::get_editorID(race) : std::string{};
-	Log::INFO("Set initial disposition for {} ({:08X}) [{}] to {}", edid, actor->GetFormID(), raceEdid, disposition);
+	const std::string raceEditorID = race ? clib_util::editorID::get_editorID(race) : std::string{};
+	Log::INFO("Set initial disposition for {} ({:08X}) [{}] to {}", actorBaseEditorID, actor->GetFormID(), raceEditorID, disposition);
 }

@@ -48,8 +48,8 @@ class CastMode {
         return this.castingType == "Concentration";
     }
     get label() {
-        const ct = this.isConcentration ? "Concentration" : "Fire & Forget";
-        return ct + " · " + this.delivery.name;
+        const castingType = this.isConcentration ? "Concentration" : "Fire & Forget";
+        return castingType + " · " + this.delivery.name;
     }
 }
 class MagicEffect {
