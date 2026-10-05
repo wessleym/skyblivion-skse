@@ -388,8 +388,13 @@ namespace Dialogue {
 	//led to a list without the row. Both are gated by the speaker's factions, the topic's own condition.
 	void DialogueServices::Open(const std::string& serviceID, RE::Actor* speaker) {
 		ServiceDef* service = nullptr;
+		//Without case: the id can arrive as "Recharge" when the BSFixedString pool already holds that spelling.
+		const auto sameId = [&serviceID](const std::string& id) {
+			return id.size() == serviceID.size() && std::equal(id.begin(), id.end(), serviceID.begin(),
+				[](char a, char b) { return std::tolower(static_cast<unsigned char>(a)) == std::tolower(static_cast<unsigned char>(b)); });
+		};
 		for (auto& candidate : Services()) {
-			if (candidate.id == serviceID) {
+			if (sameId(candidate.id)) {
 				service = &candidate;
 			}
 		}

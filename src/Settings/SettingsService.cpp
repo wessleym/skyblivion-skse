@@ -149,6 +149,28 @@ namespace Settings {
 		Log::INFO("SettingsService: [{}] {}={}", section, key, value);
 	}
 
+	bool SettingsService::RemoveKey(std::string_view section, std::string_view key) {
+		bool removed = false;
+		{
+			std::scoped_lock lock(s_lock);
+			for (auto& [name, rows] : s_sectionEntries) {
+				if (!EqualsIgnoreCase(name, section)) {
+					continue;
+				}
+				if (std::erase_if(rows, [&](const auto& row) { return EqualsIgnoreCase(row.first, key); }) > 0) {
+					removed = true;
+				}
+			}
+			if (removed) {
+				Save();
+			}
+		}
+		if (removed) {
+			Log::INFO("SettingsService: [{}] {} removed", section, key);
+		}
+		return removed;
+	}
+
 	void SettingsService::SetInt(std::string_view section, std::string_view key, int value) {
 		SetString(section, key, std::to_string(value));
 	}
