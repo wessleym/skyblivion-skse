@@ -1,6 +1,7 @@
 #include "SpellMakingStore.h"
 #include "MadeSpellEquipRefresh.h"
 #include "Resources.h"
+#include "Storage/CoSave.h"
 
 #include <algorithm>
 #include <string_view>
@@ -17,7 +18,6 @@ namespace SpellMaking {
 		constexpr std::string_view kPoolMarkerName = "SKYBSpellMakingSpell";//Spell Making Required Plugin Data (1/2)
 
 		//Co-Save Record:
-		constexpr std::uint32_t kSerializationID = 'SKYB';
 		constexpr std::uint32_t kRecipeRecord = 'SPRC';
 		constexpr std::uint32_t kRecipeVersion = 1;//OpenRecord requires a version.
 
@@ -208,17 +208,18 @@ namespace SpellMaking {
 		}
 	}
 
+	//The plugin's co-save (Storage/CoSave) owns the SKSE callbacks: the settings menu's store keeps
+	//its record there too, and SKSE allows a plugin only one set.
 	void SpellMakingStore::RegisterSerialization() {
-		auto* serializationInterface = SKSE::GetSerializationInterface();
-		if (!serializationInterface) {
-			Log::WARN("SpellMakingStore::RegisterSerialization: Serialization Interface Unavailable");
-			return;
-		}
-		serializationInterface->SetUniqueID(kSerializationID);
-		serializationInterface->SetSaveCallback(OnGameSaved);
-		serializationInterface->SetLoadCallback(OnGameLoaded);
-		serializationInterface->SetRevertCallback(OnRevert);
-		Log::INFO("SpellMakingStore::RegisterSerialization: Serialization Callbacks Registered");
+		Storage::CoSave::Store store;
+		store.name = "SpellMakingStore";
+		store.recordType = kRecipeRecord;
+		store.save = OnGameSaved;
+		store.load = OnRecipeRecord;
+		store.revert = OnRevert;
+		store.loaded = OnGameLoaded;
+		Storage::CoSave::Add(store);
+		Log::INFO("SpellMakingStore::RegisterSerialization: Recipe Record Added to the Co-Save");
 	}
 
 	void SpellMakingStore::OnGameSaved(SKSE::SerializationInterface* intfc) {
@@ -244,52 +245,47 @@ namespace SpellMaking {
 		Log::INFO("SpellMakingStore::OnGameSaved: Wrote {} Made-Spell Recipe(s) to Co-Save", usedCount);
 	}
 
-	void SpellMakingStore::OnGameLoaded(SKSE::SerializationInterface* intfc) {
-		ResetSlots();//These slots are soon filled with co-save data.
+	//The co-save reverts every store before it reads a save, so the slots start free.
+	void SpellMakingStore::OnRecipeRecord(SKSE::SerializationInterface* intfc, std::uint32_t, std::uint32_t) {
+		std::uint32_t count = 0;
+		intfc->ReadRecordData(count);
+		for (std::uint32_t n = 0; n < count; ++n) {
+			std::uint32_t slotIndex = 0;
+			intfc->ReadRecordData(slotIndex);
 
-		std::uint32_t restored = 0;
-		std::uint32_t type = 0;
-		std::uint32_t version = 0;
-		std::uint32_t length = 0;
-		while (intfc->GetNextRecordInfo(type, version, length)) {
-			if (type != kRecipeRecord) {
-				continue;
+			SpellRecipe recipe;
+			ReadRecipe(intfc, recipe);
+
+			if (slotIndex < s_slots.size()) {
+				auto& slot = s_slots[slotIndex];
+				slot.used = true;
+				slot.recipe = recipe;
+				if (slot.form) {
+					//Refill the placeholder.
+					//The game contains information about the spell being in the inventory, equipped, favorited, or set to a hotkey via its stable FormID.
+					//Only the contents need to be rebuilt.
+					PopulateSpell(slot.form, recipe);
+					++s_restored;
+				}
 			}
-			std::uint32_t count = 0;
-			intfc->ReadRecordData(count);
-			for (std::uint32_t n = 0; n < count; ++n) {
-				std::uint32_t slotIndex = 0;
-				intfc->ReadRecordData(slotIndex);
-
-				SpellRecipe recipe;
-				ReadRecipe(intfc, recipe);
-
-				if (slotIndex < s_slots.size()) {
-					auto& slot = s_slots[slotIndex];
-					slot.used = true;
-					slot.recipe = recipe;
-					if (slot.form) {
-						//Refill the placeholder.
-						//The game contains information about the spell being in the inventory, equipped, favorited, or set to a hotkey via its stable FormID.
-						//Only the contents need to be rebuilt.
-						PopulateSpell(slot.form, recipe);
-						++restored;
-					}
-				}
-				else {
-					Log::WARN("SpellMakingStore::OnGameLoaded: Co-Save Slot Index {} Out of Pool Range ({})",
-						slotIndex, s_slots.size());
-				}
+			else {
+				Log::WARN("SpellMakingStore::OnGameLoaded: Co-Save Slot Index {} Out of Pool Range ({})",
+					slotIndex, s_slots.size());
 			}
 		}
-		Log::INFO("SpellMakingStore::OnGameLoaded: Refilled {} Made-Spell Placeholder(s) from Co-Save", restored);
-		if (restored > 0) {
+	}
+
+	void SpellMakingStore::OnGameLoaded() {
+		Log::INFO("SpellMakingStore::OnGameLoaded: Refilled {} Made-Spell Placeholder(s) from Co-Save", s_restored);
+		if (s_restored > 0) {
 			MadeSpellEquipRefresh::Schedule();
 		}
+		s_restored = 0;
 	}
 
 	void SpellMakingStore::OnRevert(SKSE::SerializationInterface*) {
 		ResetSlots();
+		s_restored = 0;
 	}
 
 }

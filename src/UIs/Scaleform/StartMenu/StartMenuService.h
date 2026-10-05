@@ -16,6 +16,11 @@ namespace StartMenu {
 		//Call once, at kDataLoaded, after SettingsService.
 		static void Register();
 
+		//At kPostLoadGame, and inside the kNewGame task: logs the UI's state as the game starts and clears
+		//UI::modal when it is set with no modal menu left on the stack (seen after the title screen's
+		//Creations entry, whose login menu can close without clearing it: only the console then took input).
+		static void RepairInputAfterMenus();
+
 	private:
 		static void PushOptions();
 		static void PushLocations();
@@ -27,6 +32,14 @@ namespace StartMenu {
 				RE::BSTEventSource<SKSE::ModCallbackEvent>* a_source) override;
 		};
 		static inline Sink s_sink;
+
+		//Observes the menus that open and close over the title screen, by name, with the UI's state.
+		class MenuSink : public RE::BSTEventSink<RE::MenuOpenCloseEvent> {
+		public:
+			RE::BSEventNotifyControl ProcessEvent(const RE::MenuOpenCloseEvent* a_event,
+				RE::BSTEventSource<RE::MenuOpenCloseEvent>* a_source) override;
+		};
+		static inline MenuSink s_menuSink;
 	};
 
 }

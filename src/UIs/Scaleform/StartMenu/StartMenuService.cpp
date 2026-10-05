@@ -7,6 +7,8 @@
 
 #include <algorithm>
 #include <array>
+#include <format>
+#include <string>
 
 namespace StartMenu {
 
@@ -66,14 +68,73 @@ namespace StartMenu {
 		const char* OrEmpty(const RE::BSFixedString& text) {
 			return text.c_str() ? text.c_str() : "";
 		}
+
+		//The menu stack by name with each menu's flags, and the counters the UI keeps per open menu flag.
+		std::string UiState() {
+#if SKY_COMMONLIB == SKY_COMMONLIB_NG
+			auto* ui = RE::UI::GetSingleton();
+			if (!ui) {
+				return "(no UI)";
+			}
+			std::string stack;
+			for (const auto& menu : ui->menuStack) {
+				if (!menu) {
+					continue;
+				}
+				for (const auto& [name, entry] : ui->menuMap) {
+					if (entry.menu == menu) {
+						stack += std::format("{}{}({:#x})", stack.empty() ? "" : ",", name.c_str() ? name.c_str() : "?",
+							static_cast<std::uint32_t>(menu->menuFlags.underlying()));
+					}
+				}
+			}
+			return std::format("stack=[{}] pauses={} itemMenus={} disablePause={} allowSaving={} modal={} paused={}",
+				stack, ui->numPausesGame, ui->numItemMenus, ui->numDisablePauseMenu, ui->numAllowSaving,
+				ui->modal, ui->GameIsPaused());
+#else
+			return "(not read on this backend)";
+#endif
+		}
 	}
 
 	void StartMenuService::Register() {
+		if (auto* ui = RE::UI::GetSingleton()) {
+			ui->AddEventSink<RE::MenuOpenCloseEvent>(&s_menuSink);
+		}
 		if (!ModEvents::AddSink(&s_sink)) {
 			Log::WARN("StartMenuService: No mod-event source. Title screen requests will not be heard.");
 			return;
 		}
 		Log::INFO("StartMenuService: Registered.");
+	}
+
+	void StartMenuService::RepairInputAfterMenus() {
+		Log::INFO("StartMenuService: UI state at game start: {}", UiState());
+#if SKY_COMMONLIB == SKY_COMMONLIB_NG
+		auto* ui = RE::UI::GetSingleton();
+		if (!ui || !ui->modal) {
+			return;
+		}
+		for (const auto& menu : ui->menuStack) {
+			if (menu && menu->menuFlags.all(RE::UI_MENU_FLAGS::kModal)) {
+				return;
+			}
+		}
+		ui->modal = false;
+		Log::INFO("StartMenuService: UI.modal was set with no modal menu on the stack. Cleared.");
+#endif
+	}
+
+	RE::BSEventNotifyControl StartMenuService::MenuSink::ProcessEvent(const RE::MenuOpenCloseEvent* a_event,
+		RE::BSTEventSource<RE::MenuOpenCloseEvent>*) {
+		auto* ui = RE::UI::GetSingleton();
+		if (!a_event || !ui || !ui->IsMenuOpen(RE::MainMenu::MENU_NAME)) {
+			return RE::BSEventNotifyControl::kContinue;
+		}
+		if (a_event->menuName != RE::LoadingMenu::MENU_NAME && a_event->menuName != RE::CursorMenu::MENU_NAME) {
+			Log::INFO("StartMenuService: '{}' {} -> {}", OrEmpty(a_event->menuName), a_event->opening ? "opened" : "closed", UiState());
+		}
+		return RE::BSEventNotifyControl::kContinue;
 	}
 
 	void StartMenuService::PushOptions() {

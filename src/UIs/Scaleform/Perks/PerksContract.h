@@ -12,12 +12,14 @@ namespace PerksView::PerksContract {
 		//strArg: "treeId^perkId^HEX|Plugin^currencyType[^globalEditorId]". numArg: the rank record's form ID.
 		//Papyrus adds the perk; C++ deducts its cost (PerkCurrency).
 		inline constexpr const char* Acquire = "SKYBUIPerkAcquire";
-		//strArg: a menu tab. The existing menu-switching event; Papyrus opens the menu it names.
-		inline constexpr const char* OpenCustomMenu = "SKYBUIOpenCustomMenu";
+		//strArg: a menu tab. The menu-switching event the new tab strip sends; Papyrus
+		//(SKYBUIUtility) opens the menu it names. It replaces SKYBUIOpenCustomMenu, which the
+		//dispatcher also still answers while the old menus send it.
+		inline constexpr const char* MenuSwitch = "SKYBMenuSwitch";
 	}
 
 	namespace Menu {
-		//OpenCustomMenu's strArg for this menu.
+		//MenuSwitch's strArg for this menu.
 		inline constexpr const char* Tab = "PerkMenu";
 		//Relative to Data, for checking the menu is installed, loose or in an archive.
 		inline constexpr const char* SwfFile = "Interface/Skyblivion/SKYBPerksView.swf";

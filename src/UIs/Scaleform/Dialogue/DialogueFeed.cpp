@@ -170,7 +170,13 @@ namespace Dialogue {
 			return RE::BSEventNotifyControl::kContinue;
 		}
 		if (a_event->eventName == DialogueContract::ModEvent::RequestDialogueData) {
-			SKSE::GetTaskInterface()->AddTask([request = ModEvents::StrArg(*a_event)] { PushDialogueData(request); });
+			//Two hops on the general task queue, as SKYBUIDemo's dialogue feed answered (22 conversations
+			//without a crash, 2026-10-05). Answered on the first hop, the menu crashed in Scaleform as it
+			//opened (2026-10-05, the first conversation with this feed as the only answer). The dialogue
+			//menu does not pause the game; on the UI task queue it crashed in each of four sessions.
+			SKSE::GetTaskInterface()->AddTask([request = ModEvents::StrArg(*a_event)] {
+				SKSE::GetTaskInterface()->AddTask([request] { PushDialogueData(request); });
+			});
 		}
 		else if (a_event->eventName == DialogueContract::ModEvent::OpenPersuasion) {
 			SKSE::GetTaskInterface()->AddTask([] { OpenPersuasion(); });

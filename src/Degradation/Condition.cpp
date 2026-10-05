@@ -1,0 +1,800 @@
+// Moved from SKYBDegradation.dll into Skyblivion.dll, 2026-10-05 (fold-in, UI integration workspace
+// ledger L-0058). Source of record until then: game\native\SKYBDegradation\src in that workspace.
+#include "Degradation/Condition.h"
+
+#include "Degradation/Settings.h"
+#include "Degradation/TemperHook.h"
+#include <algorithm>
+#include <array>
+#include <charconv>
+#include <cmath>
+#include <cstdint>
+#include <cstring>
+#include <filesystem>
+#include <format>
+#include <fstream>
+#include <optional>
+#include <random>
+#include <string>
+#include <string_view>
+#include <unordered_map>
+#include <vector>
+
+using namespace std::literals;
+
+namespace SKYBDeg::Condition
+{
+	namespace
+	{
+		std::string Spaced(std::string_view a_camel)
+		{
+			std::string out;
+			for (std::size_t i = 0; i < a_camel.size(); ++i) {
+				const char c = a_camel[i];
+				if (i > 0 && std::isupper(static_cast<unsigned char>(c)) &&
+					std::islower(static_cast<unsigned char>(a_camel[i - 1]))) {
+					out.push_back(' ');
+				}
+				out.push_back(c);
+			}
+			return out;
+		}
+
+		template <class F>
+		void ForEachLiveList(const RE::TESBoundObject* a_obj, F&& a_fn)
+		{
+			auto player = RE::PlayerCharacter::GetSingleton();
+			auto changes = player ? player->GetInventoryChanges() : nullptr;
+			if (!changes || !changes->entryList) {
+				return;
+			}
+			for (auto entry : *changes->entryList) {
+				if (!entry || !entry->object || !entry->extraLists) {
+					continue;
+				}
+				if (a_obj && entry->object != a_obj) {
+					continue;
+				}
+				for (auto list : *entry->extraLists) {
+					if (list && a_fn(entry->object, list)) {
+						return;
+					}
+				}
+			}
+		}
+	}
+
+	Kind Classify(const RE::TESForm* a_form)
+	{
+		if (!a_form) {
+			return Kind::kNone;
+		}
+		if (auto weap = a_form->As<RE::TESObjectWEAP>()) {
+			if (weap->IsBound() || weap->IsStaff() || weap->IsHandToHandMelee()) {
+				return Kind::kNone;
+			}
+			return Kind::kWeapon;
+		}
+		if (auto armo = a_form->As<RE::TESObjectARMO>()) {
+			if (!armo->IsHeavyArmor() && !armo->IsLightArmor()) {
+				return Kind::kNone;  // clothing, jewelry
+			}
+			return armo->IsShield() ? Kind::kShield : Kind::kArmor;
+		}
+		return Kind::kNone;
+	}
+
+	float GetHealth(const RE::ExtraDataList* a_list)
+	{
+		if (a_list) {
+			if (auto h = a_list->GetByType<RE::ExtraHealth>()) {
+				return h->health;
+			}
+		}
+		return 1.0f;
+	}
+
+	void SetHealth(RE::ExtraDataList* a_list, float a_value)
+	{
+		if (!a_list) {
+			return;
+		}
+		if (auto h = a_list->GetByType<RE::ExtraHealth>()) {
+			h->health = a_value;
+		} else {
+			a_list->Add(new RE::ExtraHealth(a_value));
+		}
+	}
+
+	const Material& MaterialOf(const RE::TESBoundObject* a_obj)
+	{
+		static std::unordered_map<RE::FormID, Material> cache;
+		if (auto it = cache.find(a_obj->GetFormID()); it != cache.end()) {
+			return it->second;
+		}
+
+		const bool weapon = a_obj->Is(RE::FormType::Weapon);
+		const std::string_view kwPrefix = weapon ? "WeapMaterial"sv : "ArmorMaterial"sv;
+		const std::string_view wearSection = weapon ? "WeaponMaterialWear"sv : "ArmorMaterialWear"sv;
+
+		Material mat;
+		if (auto kwForm = a_obj->As<RE::BGSKeywordForm>()) {
+			for (auto kw : kwForm->GetKeywords()) {
+				if (!kw) {
+					continue;
+				}
+				std::string_view edid = kw->GetFormEditorID();
+				auto pos = edid.find(kwPrefix);  // also matches DLC2ArmorMaterial...
+				if (pos == std::string_view::npos) {
+					continue;
+				}
+				auto name = edid.substr(pos + kwPrefix.size());
+				if (name.empty()) {
+					continue;
+				}
+				if (const int idx = Settings::Find(wearSection, name); idx >= 0) {
+					mat.wear = idx;
+					mat.name = Spaced(name);
+					mat.key = name;
+					break;
+				}
+			}
+		}
+		{
+			// hardness: the material's own row, else the Default row
+			const auto hardSection = weapon ? "WeaponMaterialHardness"sv : "ArmorMaterialHardness"sv;
+			mat.hard = mat.key.empty() ? -1 : Settings::Find(hardSection, mat.key);
+			if (mat.hard < 0) {
+				mat.hard = Settings::Find(hardSection, "Default");
+			}
+		}
+		if (mat.name.empty()) {
+			mat.wear = Settings::Find(wearSection, "Default");
+		} else {
+			// per-material repair limit at full skill
+			mat.cap = Settings::Find(weapon ? "WeaponMaterialCaps"sv : "ArmorMaterialCaps"sv, mat.key);
+		}
+		return cache.emplace(a_obj->GetFormID(), std::move(mat)).first->second;
+	}
+
+	float MaterialMult(const RE::TESBoundObject* a_obj)
+	{
+		const auto& m = MaterialOf(a_obj);
+		return m.wear >= 0 ? Settings::At(m.wear) : 1.0f;
+	}
+
+	float CapAtFullSkill(const RE::TESBoundObject* a_obj)
+	{
+		const auto& m = MaterialOf(a_obj);
+		const float cap = m.cap >= 0 ? Settings::At(m.cap) : Settings::Get(G::RepairCapAtSkillMax);
+		return cap + Settings::Get(G::RepairCapBonus);
+	}
+
+	float Hardness(const RE::TESBoundObject* a_obj)
+	{
+		const auto& m = MaterialOf(a_obj);
+		return m.hard >= 0 ? Settings::At(m.hard) : 2.0f;
+	}
+
+	float WearSkillMult()
+	{
+		const float skillMax = std::max(1.0f, Settings::Get(G::RepairCapSkillMax));
+		const float share = std::clamp(Smithing() / skillMax, 0.0f, 1.0f);
+		return std::clamp(1.0f - Settings::Get(G::SkillWearReduction) * share, 0.0f, 1.0f);
+	}
+
+	float CurveMult(float a_q)
+	{
+		// Above the knee: accelerating. Knee .. band low: the working band,
+		// easing from 1.0 down to BandLowMult. Band low .. floor: slowing
+		// further to FloorMult at QualityMin (INI). Lower is always slower.
+		const float knee = Settings::Get(G::CurveKnee);
+		const float low = std::min(Settings::Get(G::CurveBandLow), knee - 0.001f);
+		const float lowMult = Settings::Get(G::CurveBandLowMult);
+		const float floorQ = std::min(Settings::Get(G::QualityMin), low - 0.001f);
+		const float floorMult = Settings::Get(G::CurveFloorMult);
+		float mult;
+		if (a_q > knee) {
+			mult = 1.0f + Settings::Get(G::CurveSteepness) * std::pow(a_q - knee, Settings::Get(G::CurveExponent));
+		} else if (a_q >= low) {
+			mult = lowMult + (1.0f - lowMult) * (a_q - low) / (knee - low);
+		} else {
+			mult = floorMult + (lowMult - floorMult) * std::clamp((a_q - floorQ) / (low - floorQ), 0.0f, 1.0f);
+		}
+		mult *= Settings::Get(G::CurveBelowKnee);
+		if (a_q < 1.0f) {
+			mult *= Settings::Get(G::CurveBelowBase);
+		}
+		return std::clamp(mult, 0.0f, Settings::Get(G::CurveMaxMult));
+	}
+
+	float StatMult(float a_q)
+	{
+		if (a_q >= 1.0f || !Settings::On(G::StatEnabled)) {
+			return 1.0f;
+		}
+		const float q = std::max(a_q, Settings::Get(G::StatFloor));
+		return std::clamp(1.0f - (1.0f - q) * Settings::Get(G::StatStrength), 0.0f, 1.0f);
+	}
+
+	float Smithing()
+	{
+		auto player = RE::PlayerCharacter::GetSingleton();
+		return player ? player->AsActorValueOwner()->GetActorValue(RE::ActorValue::kSmithing) : 0.0f;
+	}
+
+	float RepairCap(const RE::TESBoundObject* a_obj)
+	{
+		return RepairCap(a_obj, Smithing());
+	}
+
+	float RepairCap(const RE::TESBoundObject* a_obj, float a_skill)
+	{
+		const float skillMax = std::max(1.0f, Settings::Get(G::RepairCapSkillMax));
+		const float t = std::pow(std::clamp(a_skill / skillMax, 0.0f, 1.0f),
+								 std::max(0.01f, Settings::Get(G::RepairCapCurve)));
+		const float lo = Settings::Get(G::RepairCapAtSkill0);
+		const float hi = CapAtFullSkill(a_obj) - Settings::Get(G::RepairCapBonus);
+		return std::max(Settings::Get(G::QualityMin), lo + (hi - lo) * t + Settings::Get(G::RepairCapBonus));
+	}
+
+	float StrikeResult(float a_q, float a_cap)
+	{
+		if (a_q >= a_cap) {
+			return a_q;  // never lowers an item the smithing menu pushed past our cap
+		}
+		const float step = std::max(0.0f, (Settings::Get(G::RepairStepBase) +
+										   Settings::Get(G::RepairStepPerSkill) * Smithing()) *
+											  Settings::Get(G::RepairStepMult));
+		const float improve = std::max(0.0f, Settings::Get(G::ImproveStepMult));
+		float q = a_q;
+		if (q < 1.0f) {
+			const float toBase = 1.0f - q;
+			if (step <= toBase) {
+				q += step;
+			} else {
+				q = 1.0f + (step - toBase) * improve;  // leftover of the strike at the improve rate
+			}
+		} else {
+			q += step * improve;
+		}
+		// a sliver left below the limit (under a quarter of the next strike)
+		// is folded into this one, so no strike ever buys a fraction of a percent
+		const float nextStep = step * (q >= 1.0f ? improve : 1.0f);
+		if (a_cap - q < 0.25f * nextStep) {
+			q = a_cap;
+		}
+		return std::min(q, a_cap);
+	}
+
+	int HammerIndex(const RE::TESForm* a_form)
+	{
+		const auto& hammers = Settings::Hammers();
+		for (std::size_t i = 0; i < hammers.size(); ++i) {
+			if (hammers[i].form == a_form) {
+				return static_cast<int>(i);
+			}
+		}
+		return -1;
+	}
+
+	bool Unbreakable(int a_hammer)
+	{
+		const auto& hammers = Settings::Hammers();
+		return a_hammer >= 0 && a_hammer < static_cast<int>(hammers.size()) && Settings::At(hammers[a_hammer].breakChance) <= 0.0f;
+	}
+
+	float BreakChance(int a_hammer, const RE::TESBoundObject* a_obj)
+	{
+		const auto& hammers = Settings::Hammers();
+		if (a_hammer < 0 || a_hammer >= static_cast<int>(hammers.size())) {
+			return 1.0f;
+		}
+		const auto& h = hammers[a_hammer];
+		const float base = Settings::At(h.breakChance);
+		if (base <= 0.0f) {
+			return 0.0f;  // the unique hammer
+		}
+		const float over = a_obj ? std::max(0.0f, Hardness(a_obj) - Settings::At(h.tier)) : 0.0f;
+		const float skillMax = std::max(1.0f, Settings::Get(G::RepairCapSkillMax));
+		const float skill = 1.0f - Settings::Get(G::HammerSkillReduction) * std::clamp(Smithing() / skillMax, 0.0f, 1.0f);
+		const float chance = base * (1.0f + Settings::Get(G::HammerOverTierMult) * over) * skill * Settings::Get(G::HammerBreakMult);
+		return std::clamp(std::max(chance, Settings::Get(G::HammerBreakMin)), 0.0f, 1.0f);
+	}
+
+	std::int32_t Owned(int a_hammer)
+	{
+		const auto& hammers = Settings::Hammers();
+		auto player = RE::PlayerCharacter::GetSingleton();
+		if (!player || a_hammer < 0 || a_hammer >= static_cast<int>(hammers.size())) {
+			return 0;
+		}
+		return std::max(0, player->GetItemCount(hammers[a_hammer].form));
+	}
+
+	RE::ExtraDataList* FindWornList(const RE::TESBoundObject* a_obj, bool a_leftHand)
+	{
+		RE::ExtraDataList* found = nullptr;
+		ForEachLiveList(a_obj, [&](RE::TESBoundObject*, RE::ExtraDataList* a_list) {
+			if (a_leftHand ? a_list->HasType<RE::ExtraWornLeft>() : a_list->HasType<RE::ExtraWorn>()) {
+				found = a_list;
+				return true;
+			}
+			return false;
+		});
+		return found;
+	}
+
+	bool ListIsLive(const RE::TESBoundObject* a_obj, const RE::ExtraDataList* a_list)
+	{
+		bool live = false;
+		ForEachLiveList(a_obj, [&](RE::TESBoundObject*, RE::ExtraDataList* a_candidate) {
+			live = a_candidate == a_list;
+			return live;
+		});
+		return live;
+	}
+
+	std::vector<WornPiece> WornArmor()
+	{
+		std::vector<WornPiece> out;
+		ForEachLiveList(nullptr, [&](RE::TESBoundObject* a_obj, RE::ExtraDataList* a_list) {
+			const auto kind = Classify(a_obj);
+			if ((kind == Kind::kArmor || kind == Kind::kShield) && a_list->HasType<RE::ExtraWorn>()) {
+				out.push_back({ a_obj, a_list, kind });
+			}
+			return false;
+		});
+		return out;
+	}
+
+	bool IsEnchanted(const RE::TESBoundObject* a_obj, const RE::ExtraDataList* a_list)
+	{
+		if (a_list && a_list->HasType<RE::ExtraEnchantment>()) {
+			return true;
+		}
+		auto ench = a_obj ? a_obj->As<RE::TESEnchantableForm>() : nullptr;
+		return ench && ench->formEnchanting;
+	}
+
+	bool PlayerMayRepair(const RE::TESBoundObject* a_obj, const RE::ExtraDataList* a_list)
+	{
+		return !IsEnchanted(a_obj, a_list) || Smithing() >= Settings::Get(G::EnchantRepairSkill);
+	}
+
+	float VendorSkill(RE::Actor* a_vendor)
+	{
+		const float own = a_vendor ? a_vendor->AsActorValueOwner()->GetActorValue(RE::ActorValue::kSmithing) : 0.0f;
+		return std::clamp(own + Settings::Get(G::VendorSkillBonus), 0.0f, 100.0f);
+	}
+
+	std::int32_t PlayerGold()
+	{
+		auto player = RE::PlayerCharacter::GetSingleton();
+		auto gold = RE::TESForm::LookupByID<RE::TESBoundObject>(0xF);
+		return player && gold ? std::max(0, player->GetItemCount(gold)) : 0;
+	}
+
+	std::int32_t VendorCost(const RE::TESBoundObject* a_obj, bool a_enchanted, float a_from, float a_to, float a_vendorSkill)
+	{
+		if (a_to <= a_from + 1e-4f) {
+			return 0;
+		}
+		const float repairPts = std::max(0.0f, std::min(a_to, 1.0f) - a_from) * 100.0f;
+		const float improvePts = std::max(0.0f, a_to - std::max(a_from, 1.0f)) * 100.0f;
+		float gold = (repairPts + improvePts * Settings::Get(G::VendorImproveCostMult)) * Settings::Get(G::VendorGoldPerPoint);
+		gold *= 1.0f + Settings::Get(G::VendorHardnessCostMult) * std::max(0.0f, Hardness(a_obj) - 1.0f);
+		gold *= 1.0f + Settings::Get(G::VendorSkillCostMult) * a_vendorSkill / 100.0f;
+		if (a_enchanted) {
+			gold *= Settings::Get(G::VendorEnchantedCostMult);
+		}
+		gold *= Settings::Get(G::VendorPriceMult);
+		return std::max(static_cast<std::int32_t>(std::ceil(gold)), static_cast<std::int32_t>(Settings::Get(G::VendorMinCost)));
+	}
+
+	namespace
+	{
+		// The AI process keeps its OWN entry for each equipped weapon, and that is
+		// where the engine stores the live charge while it is equipped (runtime
+		// dump 2026-09-29: id 39806 = AIProcess -> middleHigh +0x220 left / +0x260
+		// right, weapons only; used by the engine's own equipped-damage display,
+		// id 40252). The inventory copy carries no charge meanwhile, and the hand
+		// actor value is rebuilt from this entry - so this entry is the truth.
+		RE::AIProcess* PlayerProcess()
+		{
+			auto player = RE::PlayerCharacter::GetSingleton();
+			if (!player) {
+				return nullptr;
+			}
+			auto viaLib = player->GetActorRuntimeData().currentProcess;
+			// Version-safe (fold-in, L-0058): the raw offset below is the AE layout; elsewhere
+			// CommonLib's own member is the only reading.
+			if (!REL::Module::IsAE()) {
+				return viaLib;
+			}
+			// the engine reads it at actor + 0xF8 on 1.6.1170 (id 40252)
+			auto viaEngine = *reinterpret_cast<RE::AIProcess**>(reinterpret_cast<std::uintptr_t>(player) + 0xF8);
+			static bool warned = false;
+			if (viaLib != viaEngine && !warned) {
+				warned = true;
+				Log::WARN("charge: CommonLib currentProcess {:p} != engine actor+0xF8 {:p}; using the engine's",
+							 static_cast<void*>(viaLib), static_cast<void*>(viaEngine));
+			}
+			return viaEngine;
+		}
+
+		RE::InventoryEntryData* EquippedWeaponEntry(bool a_left)
+		{
+			auto proc = PlayerProcess();
+			if (!proc) {
+				return nullptr;
+			}
+			// AE id 39806 is CommonLib's AIProcess::GetCurrentWeapon (SE 38781), so it holds on every runtime
+			return proc->GetCurrentWeapon(a_left);
+		}
+
+		// the ExtraCharge on the process's entry for this equipped copy, if any
+		RE::ExtraCharge* ProcessCharge(const RE::TESBoundObject* a_obj, const RE::ExtraDataList* a_list)
+		{
+			if (!a_list || !(a_list->HasType<RE::ExtraWorn>() || a_list->HasType<RE::ExtraWornLeft>())) {
+				return nullptr;
+			}
+			auto entry = EquippedWeaponEntry(a_list->HasType<RE::ExtraWornLeft>());
+			if (!entry || entry->object != a_obj || !entry->extraLists) {
+				return nullptr;
+			}
+			for (auto list : *entry->extraLists) {
+				if (list) {
+					if (auto xc = list->GetByType<RE::ExtraCharge>()) {
+						return xc;
+					}
+				}
+			}
+			return nullptr;
+		}
+
+		// which hand's charge actor value tracks this list, if it is equipped
+		std::optional<RE::ActorValue> HandCharge(const RE::ExtraDataList* a_list)
+		{
+			if (!a_list) {
+				return std::nullopt;
+			}
+			if (a_list->HasType<RE::ExtraWornLeft>()) {
+				return RE::ActorValue::kLeftItemCharge;
+			}
+			if (a_list->HasType<RE::ExtraWorn>()) {
+				return RE::ActorValue::kRightItemCharge;
+			}
+			return std::nullopt;
+		}
+
+		// Exactly what the inventory item card computes (runtime dump 2026-09-29,
+		// id 51897 = item card info): enchantment id 14563 and max id 14564 (base
+		// form first, then the list); a WORN weapon's charge = the hand actor
+		// value's current value (id 34609 picks the hand), otherwise the list's
+		// ExtraCharge (id 15991, none = max). 'charge' = cur / max; the meter
+		// fills to 'usedCharge' = charge minus one cast (id 11321 = the
+		// enchantment's cost for the player) and flashes the rest.
+		std::string ItemCardLine(const RE::TESBoundObject* a_obj, RE::ExtraDataList* a_list)
+		{
+			// Ids 14563 / 14564 are known for AE only (no SE pair in CommonLib): off elsewhere.
+			if (!REL::Module::IsAE()) {
+				return "item card: not read on this runtime (AE only)";
+			}
+			using ench_t = RE::MagicItem*(const RE::TESBoundObject*, RE::ExtraDataList*);
+			using max_t = std::uint16_t(const RE::TESBoundObject*, RE::ExtraDataList*);
+			using cost_t = float(const RE::MagicItem*, RE::Actor*);
+			static REL::Relocation<ench_t> enchOf{ REL::ID(14563) };
+			static REL::Relocation<max_t>  maxOf{ REL::ID(14564) };
+			// MagicItem::CalculateCost (protected in this CommonLib): its own SE / AE pair
+			static REL::Relocation<cost_t> costOf{ RELOCATION_ID(11213, 11321) };
+			auto player = RE::PlayerCharacter::GetSingleton();
+			auto ench = enchOf(a_obj, a_list);
+			const float max = static_cast<float>(maxOf(a_obj, a_list));
+			if (!player || !ench || max <= 0.0f) {
+				return "item card: no charge meter";
+			}
+			float cur = max;
+			const char* src = "no ExtraCharge = max";
+			if (auto av = HandCharge(a_list)) {
+				cur = player->AsActorValueOwner()->GetActorValue(*av);
+				src = *av == RE::ActorValue::kLeftItemCharge ? "LeftItemCharge current" : "RightItemCharge current";
+			} else if (a_list) {
+				if (auto xc = a_list->GetByType<RE::ExtraCharge>()) {
+					cur = xc->charge;
+					src = "ExtraCharge";
+				}
+			}
+			const float cost = costOf(ench, player);
+			const float pct = cur * 100.0f / max;
+			const float used = std::max(0.0f, pct - cost * 100.0f / max);
+			return std::format("item card: charge {:.1f}% ({:.1f} / {:.0f} from {}), meter fill after one cast {:.1f}% (cost per cast {:.1f})",
+							   pct, cur, max, src, used, cost);
+		}
+	}
+
+	Charge ChargeOf(const RE::TESBoundObject* a_obj, RE::ExtraDataList* a_list)
+	{
+		Charge c;
+		auto weap = a_obj ? a_obj->As<RE::TESObjectWEAP>() : nullptr;
+		if (!weap || weap->IsBound()) {
+			return c;
+		}
+		if (a_list) {
+			if (auto xe = a_list->GetByType<RE::ExtraEnchantment>(); xe && xe->enchantment && xe->charge > 0) {
+				c.enchantment = xe->enchantment;
+				c.max = static_cast<float>(xe->charge);
+			}
+		}
+		if (!c.enchantment && weap->formEnchanting && weap->amountofEnchantment > 0) {
+			c.enchantment = weap->formEnchanting;
+			c.max = static_cast<float>(weap->amountofEnchantment);
+		}
+		if (!c.enchantment || c.max <= 0.0f) {
+			return c;
+		}
+		c.valid = true;
+		c.current = c.max;
+		if (a_list) {
+			if (auto xc = a_list->GetByType<RE::ExtraCharge>()) {
+				c.current = xc->charge;
+			}
+			// Equipped: the hand's charge actor value's CURRENT value is the live
+			// charge - casting drains it and the inventory item card reads it (id
+			// 51897 via id 34609). The item's ExtraCharge (and the process entry's)
+			// is only synced from it at times (inventory open, unequip), so after a
+			// save/load it can be stale: 2026-09-29 log, loaded staff = ExtraCharge
+			// 3000 while the hand value was 222.8 (unusable). The process entry is
+			// the fallback only while the hand value is not set up (base 0).
+			bool fromHand = false;
+			if (auto av = HandCharge(a_list)) {
+				auto owner = RE::PlayerCharacter::GetSingleton()->AsActorValueOwner();
+				if (owner->GetBaseActorValue(*av) > 0.0f) {
+					c.current = owner->GetActorValue(*av);
+					fromHand = true;
+				}
+			}
+			if (!fromHand) {
+				if (auto pc = ProcessCharge(a_obj, a_list)) {
+					c.current = pc->charge;
+				}
+			}
+		}
+		c.current = std::clamp(c.current, 0.0f, c.max);
+		return c;
+	}
+
+	void LogChargeSources(const RE::TESBoundObject* a_obj, RE::ExtraDataList* a_list)
+	{
+		const auto c = ChargeOf(a_obj, a_list);
+		if (!c.valid || !a_list) {
+			return;
+		}
+		auto xc = a_list->GetByType<RE::ExtraCharge>();
+		std::string hand = "not equipped";
+		if (auto av = HandCharge(a_list)) {
+			auto owner = RE::PlayerCharacter::GetSingleton()->AsActorValueOwner();
+			hand = std::format("{} current {:.1f} / base {:.1f} / permanent {:.1f}",
+							   *av == RE::ActorValue::kLeftItemCharge ? "LeftItemCharge" : "RightItemCharge",
+							   owner->GetActorValue(*av), owner->GetBaseActorValue(*av), owner->GetPermanentActorValue(*av));
+		}
+		auto pc = ProcessCharge(a_obj, a_list);
+		Log::INFO("charge sources '{}': max {:.0f}, item ExtraCharge {}, process entry {}, {} -> shown {:.1f}; {}",
+					 a_obj->GetName(), c.max, xc ? std::format("{:.1f}", xc->charge) : "none (= full)",
+					 pc ? std::format("{:.1f}", pc->charge) : "none", hand, c.current, ItemCardLine(a_obj, a_list));
+	}
+
+	void LogEquippedCharges(std::string_view a_why)
+	{
+		auto player = RE::PlayerCharacter::GetSingleton();
+		if (!player) {
+			return;
+		}
+		auto changes = player->GetInventoryChanges();
+		if (!changes || !changes->entryList) {
+			return;
+		}
+		bool any = false;
+		for (auto entry : *changes->entryList) {
+			auto obj = entry ? entry->object : nullptr;
+			if (!obj || !obj->Is(RE::FormType::Weapon) || !entry->extraLists) {
+				continue;
+			}
+			for (auto list : *entry->extraLists) {
+				if (list && (list->HasType<RE::ExtraWorn>() || list->HasType<RE::ExtraWornLeft>()) && ChargeOf(obj, list).valid) {
+					if (!any) {
+						Log::INFO("equipped charge ({}):", a_why);
+						any = true;
+					}
+					LogChargeSources(obj, list);
+				}
+			}
+		}
+	}
+
+	void FillCharge(const RE::TESBoundObject* a_obj, RE::ExtraDataList* a_list)
+	{
+		const auto c = ChargeOf(a_obj, a_list);
+		if (!c.valid || !a_list) {
+			return;  // no list = no ExtraCharge = already full
+		}
+		if (auto xc = a_list->GetByType<RE::ExtraCharge>()) {
+			xc->charge = c.max;
+		}
+		if (auto pc = ProcessCharge(a_obj, a_list)) {
+			pc->charge = c.max;  // the live copy the engine rebuilds the hand value from
+		}
+		if (auto av = HandCharge(a_list)) {
+			// Put the hand's charge value right: base = the TRUE maximum (the
+			// engine set it to the charge at equip time, which capped every
+			// refill at that level), then clear the damage the weapon has used.
+			auto owner = RE::PlayerCharacter::GetSingleton()->AsActorValueOwner();
+			const float before = owner->GetActorValue(*av);
+			const float baseBefore = owner->GetBaseActorValue(*av);
+			owner->SetBaseActorValue(*av, c.max);
+			const float missing = c.max - owner->GetActorValue(*av);
+			if (missing > 0.0f) {
+				// vfunc 06 (named RestoreActorValue in newer CommonLib builds)
+				owner->ModActorValue(RE::ACTOR_VALUE_MODIFIER::kDamage, *av, missing);
+			}
+			Log::INFO("recharge: equipped '{}' hand charge {:.1f} (base {:.1f}) -> {:.1f} (base {:.1f}), max {:.0f}",
+						 a_obj->GetName(), before, baseBefore, owner->GetActorValue(*av), owner->GetBaseActorValue(*av), c.max);
+		}
+	}
+
+	std::int32_t RechargeCost(float a_missing, float a_vendorEnchanting)
+	{
+		if (a_missing <= 0.5f) {
+			return 0;
+		}
+		float gold = a_missing * Settings::Get(G::RechargeGoldPerCharge);
+		gold *= 1.0f + Settings::Get(G::RechargeSkillCostMult) * a_vendorEnchanting / 100.0f;
+		gold *= Settings::Get(G::RechargePriceMult);
+		return std::max(static_cast<std::int32_t>(std::ceil(gold)), static_cast<std::int32_t>(Settings::Get(G::RechargeMinCost)));
+	}
+
+	bool IsRepairTool(const RE::TESForm* a_form)
+	{
+		auto tools = Settings::RepairTools();
+		return a_form && tools && tools->HasForm(a_form);
+	}
+
+	std::int32_t CountRepairTools(RE::TESBoundObject** a_firstOwned)
+	{
+		auto tools = Settings::RepairTools();
+		auto player = RE::PlayerCharacter::GetSingleton();
+		if (a_firstOwned) {
+			*a_firstOwned = nullptr;
+		}
+		if (!tools || !player) {
+			return 0;
+		}
+		std::int32_t total = 0;
+		auto inv = player->GetInventory([&](RE::TESBoundObject& a_obj) { return tools->HasForm(&a_obj); });
+		for (auto& [obj, data] : inv) {
+			if (data.first > 0) {
+				total += data.first;
+				if (a_firstOwned && !*a_firstOwned) {
+					*a_firstOwned = obj;
+				}
+			}
+		}
+		return total;
+	}
+
+	float EngineStat(RE::TESBoundObject* a_obj, RE::ExtraDataList* a_list)
+	{
+		auto player = RE::PlayerCharacter::GetSingleton();
+		if (!player || !a_obj) {
+			return 0.0f;
+		}
+		// A throwaway entry holding just this instance's list. The list and the
+		// entry never own anything: the pointer is detached before either dies.
+		// ~InventoryEntryData deletes extraLists, so the guard detaches the
+		// stack list on every exit path.
+		RE::BSSimpleList<RE::ExtraDataList*> lists;
+		RE::InventoryEntryData                entry(a_obj, 1);
+		struct Detach
+		{
+			RE::InventoryEntryData& e;
+			~Detach()
+			{
+				e.extraLists = nullptr;
+				e.object = nullptr;
+			}
+		} detach{ entry };
+		if (a_list) {
+			lists.push_front(a_list);
+			entry.extraLists = std::addressof(lists);
+		}
+		return Classify(a_obj) == Kind::kWeapon ? player->GetDamage(std::addressof(entry)) :
+												  player->GetArmorValue(std::addressof(entry));
+	}
+
+	float EngineStatAt(RE::TESBoundObject* a_obj, RE::ExtraDataList* a_list, float a_q)
+	{
+		if (!a_list) {
+			return -1.0f;
+		}
+		auto h = a_list->GetByType<RE::ExtraHealth>();
+		const bool temporary = h == nullptr;
+		if (temporary) {
+			// probe only: added for the measurement, removed again right after,
+			// so opening the menu never changes an untouched item's extra data
+			h = new RE::ExtraHealth(a_q);
+			a_list->Add(h);
+		}
+		const float saved = h->health;
+		h->health = a_q;
+		const float value = EngineStat(a_obj, a_list);
+		if (temporary) {
+			a_list->Remove(h);  // not RemoveByType: it can dereference null on a one-entry list
+			delete h;
+		} else {
+			h->health = saved;
+		}
+		return value;
+	}
+
+	float EffectiveStat(RE::TESBoundObject* a_obj, RE::ExtraDataList* a_list)
+	{
+		return EngineStat(a_obj, a_list);
+	}
+
+	float EffectiveStatAt(RE::TESBoundObject* a_obj, RE::ExtraDataList* a_list, float a_q)
+	{
+		return EngineStatAt(a_obj, a_list, a_q);
+	}
+
+	void LogEngineProbe()
+	{
+		static bool done = false;
+		if (done) {
+			return;
+		}
+		auto player = RE::PlayerCharacter::GetSingleton();
+		if (!player) {
+			return;
+		}
+		std::vector<std::pair<RE::TESBoundObject*, RE::ExtraDataList*>> probes;
+		if (auto right = player->GetEquippedObject(false)) {
+			if (Classify(right) == Kind::kWeapon) {
+				auto obj = right->As<RE::TESBoundObject>();
+				if (auto list = FindWornList(obj, false)) {
+					probes.emplace_back(obj, list);
+				}
+			}
+		}
+		for (auto& piece : WornArmor()) {
+			if (piece.kind == Kind::kArmor) {
+				probes.emplace_back(piece.obj, piece.list);
+				break;
+			}
+		}
+		if (probes.empty()) {
+			return;  // try again next time the menu opens
+		}
+		done = true;
+		for (auto& [obj, list] : probes) {
+			std::string line;
+			for (float q : { 0.5f, 0.75f, 1.0f, 1.1f, 1.6f, 2.0f, 2.5f }) {
+				line += std::format("  {:.0f}%={:.1f}", q * 100.0f, EffectiveStatAt(obj, list, q));
+			}
+			Log::INFO("ENGINE PROBE ({}) {} '{}' (now {:.0f}%):{}", TemperHook::Active() ? "temper hook" : "NO HOOK - condition below 100% has no effect",
+						 Classify(obj) == Kind::kWeapon ? "damage" : "armor", obj->GetName(),
+						 GetHealth(list) * 100.0f, line);
+		}
+		Log::INFO("ENGINE PROBE: 50%/75% should read 60%/75% of the 100% value (stat floor 60%)");
+	}
+
+	std::mt19937& Rng()
+	{
+		static std::mt19937 rng{ std::random_device{}() };
+		return rng;
+	}
+
+	float Roll()
+	{
+		return std::uniform_real_distribution<float>(0.0f, 1.0f)(Rng());
+	}
+}
