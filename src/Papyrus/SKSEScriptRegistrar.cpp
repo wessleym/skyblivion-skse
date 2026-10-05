@@ -7,6 +7,7 @@
 #include "QuestUtility.h"
 #include "SkillUtility.h"
 #include "UILauncher.h"
+#include "Degradation/RepairMenu.h"
 
 static bool RegisterFuncs(RE::BSScript::Internal::VirtualMachine* vm) {
     Log::INFO("SKSEScriptRegistrar: Registering Custom Functions...");
@@ -18,6 +19,8 @@ static bool RegisterFuncs(RE::BSScript::Internal::VirtualMachine* vm) {
     QuestUtility::Register(vm);
     SkillUtility::Register(vm);
     UILauncher::Register(vm);
+    //SKYBDegradation.OpenVendorRepair (the script name is bound in SKYBDegradation.esp).
+    SKYBDeg::RepairMenu::RegisterPapyrus(vm);
     Log::INFO("SKSEScriptRegistrar: Registering Custom Functions Complete");
     return true;
 }

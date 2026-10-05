@@ -15,7 +15,8 @@ namespace Settings {
 	//A plain INI: sections, key=value, # or ; comments. Read once at kDataLoaded, held in memory,
 	//and written through on every Set. Sections and keys compare case-insensitively, and unknown ones are kept.
 	//A missing file or key reads as its default; the file is created on the first Set.
-	//Nothing else reads the file: StartMenuService and AchievementJournal go through this service.
+	//Nothing else reads the file: StartMenuService, AchievementJournal, the settings menu's store and the
+	//hotkey service go through this service.
 	//
 	//The toast setting is also copied into the SKYBAchieveNotifications global on every game load,
 	//and the journal's toggle row sets it, so the file, the global and the journal agree.
@@ -33,6 +34,8 @@ namespace Settings {
 		static void SetInt(std::string_view section, std::string_view key, int value);
 		[[nodiscard]] static std::string GetString(std::string_view section, std::string_view key, std::string_view defaultValue);
 		static void SetString(std::string_view section, std::string_view key, std::string_view value);
+		//Deletes the key and writes the file. True if it was there.
+		static bool RemoveKey(std::string_view section, std::string_view key);
 
 	private:
 		[[nodiscard]] static std::filesystem::path Path();

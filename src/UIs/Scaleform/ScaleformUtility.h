@@ -48,3 +48,16 @@ struct FeedRequest {
 	//Pushes the value to the target as the mode says. False, having pushed nothing, for an unknown mode.
 	bool Push(const RE::GFxValue& value) const;
 };
+
+//A new menu's data request, "menu|target" ('|' as in the hotkey service's requests):
+//the open menu, and the absolute path of the function the answer is passed to as its one argument.
+struct MenuCallback {
+	RE::GPtr<RE::GFxMovieView> movie;
+	std::string target;
+
+	//Null when the request is malformed, which is logged under source,
+	//or when its menu is closed, which is silent (see ScaleformUtility::OpenMenuMovie).
+	[[nodiscard]] static std::optional<MenuCallback> Open(const std::string& request, std::string_view source);
+
+	void Invoke(const RE::GFxValue& value) const;
+};

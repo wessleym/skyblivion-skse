@@ -62,3 +62,20 @@ bool FeedRequest::Push(const RE::GFxValue& value) const {
 	Log::INFO("FeedRequest: Unknown push mode '{}'. Nothing pushed to {}.", mode, target);
 	return false;
 }
+
+std::optional<MenuCallback> MenuCallback::Open(const std::string& request, std::string_view source) {
+	const auto pieces = ModEvents::Split(request, '|');
+	if (pieces.size() < 2 || pieces[0].empty() || pieces[1].empty()) {
+		Log::WARN("{}: Malformed request '{}'.", source, request);
+		return std::nullopt;
+	}
+	auto movie = ScaleformUtility::OpenMenuMovie(pieces[0]);
+	if (!movie) {
+		return std::nullopt;
+	}
+	return MenuCallback{ std::move(movie), pieces[1] };
+}
+
+void MenuCallback::Invoke(const RE::GFxValue& value) const {
+	movie->Invoke(target.c_str(), nullptr, &value, 1);
+}

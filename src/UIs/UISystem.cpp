@@ -7,12 +7,14 @@
 #include "PrismaUI/Stats/StatsView.h"
 #include "Scaleform/Achievements/AchievementJournal.h"
 #include "Scaleform/Dialogue/DialogueFeed.h"
+#include "Scaleform/Factions/CharFactionsFeed.h"
 #include "Scaleform/Factions/FactionFeed.h"
 #include "Scaleform/LoadingScreen/LoadingScreenService.h"
 #include "Scaleform/Perks/PerkCurrency.h"
 #include "Scaleform/Perks/PerkDataStore.h"
 #include "Scaleform/Perks/PerksFeed.h"
 #include "Scaleform/Sigil/SigilMenuFeed.h"
+#include "Scaleform/Skills/SkillSheetFeed.h"
 #include "Scaleform/Skills/SkillsFeed.h"
 #include "Scaleform/StartMenu/StartMenuService.h"
 #include "Scaleform/Toast/ToastService.h"
@@ -40,6 +42,9 @@ namespace {
         LoadingScreen::LoadingScreenService::Register();
         Skills::SkillsFeed::Register();
         Factions::FactionFeed::Register();
+        // The new Skills and Character menus' feeds; the two above retire with the old menus.
+        Skills::SkillSheetFeed::Register();
+        Factions::CharFactionsFeed::Register();
         Dialogue::DialogueFeed::Register();
         Sigil::SigilMenuFeed::Register();
         StartMenu::StartMenuService::Register();
