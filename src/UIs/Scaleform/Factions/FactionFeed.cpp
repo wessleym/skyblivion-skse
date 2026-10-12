@@ -2,6 +2,7 @@
 #include "FactionData.h"
 #include "FactionsContract.h"
 #include "Papyrus/ModEvents.h"
+#include "Platform/MainThread.h"
 #include "UIs/Scaleform/ScaleformUtility.h"
 
 #include <chrono>
@@ -56,7 +57,7 @@ namespace Factions {
 	RE::BSEventNotifyControl FactionFeed::Sink::ProcessEvent(const SKSE::ModCallbackEvent* a_event,
 		RE::BSTEventSource<SKSE::ModCallbackEvent>*) {
 		if (a_event && a_event->eventName == FactionsContract::ModEvent::RequestFactions) {
-			SKSE::GetTaskInterface()->AddTask([request = ModEvents::StrArg(*a_event)] { PushFactions(request); });
+			MainThread::Post([request = ModEvents::StrArg(*a_event)] { PushFactions(request); });
 		}
 		return RE::BSEventNotifyControl::kContinue;
 	}

@@ -1,50 +1,38 @@
 #pragma once
-// Moved from SKYBUIDemo.dll into Skyblivion.dll, 2026-10-05 (fold-in, UI integration workspace
-// ledger L-0056). Source of record until then: game\native\SKYBUIDemo\src in that workspace.
 #include <string>
 #include <string_view>
 #include <vector>
-// Rebindable keys for Skyblivion's menus (settings menu › Hotkeys).
+// Rebindable keys for Skyblivion's menus (settings menu > Hotkeys).
 //
-// Every action is a wired row of SKYBSettingsMenu\Hotkeys.csv (generated into
-// SettingsMenuTable.h: kHotkeys, kHotkeyGroups, kKeyNames). A binding is one
-// keyboard key and one gamepad button, as the Flash key codes the menus see
-// (gamepad buttons arrive as 96..107). Stored for every character alike in
-// SKYBSettings.ini [Hotkeys] <id>=<pc>,<pad> (-1 = none); absent = default.
+// Each action is a row of SKYBSettingsMenu\Hotkeys.csv, generated into
+// SettingsMenuTable.h (kHotkeys, kHotkeyGroups, kKeyNames). A binding is one
+// keyboard key and one gamepad button, as the Flash key codes menus see
+// (gamepad buttons are 96..107). Stored for all characters in
+// SKYBSettings.ini [Hotkeys] <id>=<pc>,<pad> (-1 = none, absent = default).
 //
-// Consumers (any menu movie):
-//   skse.SendModEvent("SKYBRequestHotkeys", "<IMenu name>|<AS function path>")
-//   -> next frame this service calls <path>(map) in that menu's movie, where
-//   map = {<action id>: {pc, pad, pcGlyph, padGlyph, ps3Glyph}} for every
-//   wired action (glyphs = SKYBLibInputGlyphs export names, "" = none). A
-//   menu keeps its built-in defaults until the answer arrives, so it works
-//   without this plugin.
+// A menu asks with skse.SendModEvent("SKYBRequestHotkeys", "<IMenu name>|<AS function path>");
+// next frame <path>(map) is called in that menu's movie, with
+// map = {<action id>: {pc, pad, pcGlyph, padGlyph, ps3Glyph}} (glyphs are
+// SKYBLibInputGlyphs export names, "" = none). Menus keep their built-in keys
+// until the answer arrives.
 //
-// In-world keys (groups with game = true: QuickLoot's loot keys, moreHUD's
-// toggle) are DirectInput scan codes + SKSE gamepad codes (kGameKeyNames).
-// No menu asks for them: every change, and every game load (ApplyGameKeys),
-// writes them to the action's targets through InterfaceAdapters
-// ("quickloot:<property>" / "global:<editor id>"). An action may take only a
-// keyboard key or only a button (HotkeyDef::devices).
+// In-world keys (groups with game = true: QuickLoot, moreHUD) use DirectInput
+// scan codes and SKSE gamepad codes (kGameKeyNames). Every change and every
+// game load (ApplyGameKeys) writes them to the action's targets through
+// InterfaceAdapters ("quickloot:<property>" / "global:<editor id>"). An action
+// may take only a key or only a button (HotkeyDef::devices).
 //
-// Capture (the settings menu): BeginCapture(id) arms an input-event sink for
-// the NEXT key or button press (from the next frame, so the press that asked
-// for it is not taken). Esc cancels. Mouse is ignored. Numpad keys and the
-// d-pad cannot be bound (they collide with the menus' own codes). A key the
-// menu uses for itself (its group's reserved keys) is refused; a key another
-// action of the same menu already uses is swapped with it; a key used by a
-// LINKED group (on screen at the same time, e.g. the tab bar) is refused.
+// Capture: BeginCapture(id) takes the next key or button press, ignoring the
+// press that started it. Esc cancels, the mouse is ignored, numpad keys and the
+// d-pad cannot be bound (they collide with the menus' own codes). A key the menu
+// reserves, or one used by a linked group (on screen at the same time) or a
+// shared action, is refused; one used by another action of the same menu is swapped.
 //
-// Shared actions (group "shared": Tooltip, Close, Previous / Next Page, ...):
-// one binding that several menus' actions follow (Hotkeys.csv `shares`,
-// optionally for one device only). The menus still ask for and receive
-// their own ids (Resolve): a member takes the shared binding on the devices
-// it shares, its own binding elsewhere. The Hotkeys tab lists the shared
-// actions plus the rows that still have a device of their own (Listed). A
-// capture for a shared action checks every member's menu: a key fixed in any
-// of them is refused, a menu-specific action using it is swapped, and another
-// shared action (or a linked menu) using it refuses. A menu-specific action
-// can't take a key a shared action uses in its menu.
+// Shared actions (group "shared"): one binding that several menus' actions
+// follow (Hotkeys.csv `shares`, optionally for one device). Menus still receive
+// their own ids (Resolve). The Hotkeys tab lists the shared actions plus rows
+// that still bind a device of their own (Listed). A capture for a shared action
+// checks every member's menu.
 #include <chrono>
 #include <functional>
 #include <span>

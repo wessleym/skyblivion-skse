@@ -1,6 +1,4 @@
 #pragma once
-// Moved from SKYBDegradation.dll into Skyblivion.dll, 2026-10-05 (fold-in, UI integration workspace
-// ledger L-0058). Source of record until then: game\native\SKYBDegradation\src in that workspace.
 #include <algorithm>
 #include <array>
 #include <charconv>
@@ -17,7 +15,7 @@
 #include <unordered_map>
 #include <vector>
 
-// The repair menu: a native IMenu around Interface\SKYBRepairMenu.swf.
+// The repair menu: a native IMenu around Interface\Skyblivion\SKYBGearService.swf.
 //
 // Contract with the movie (all through gfx.io.GameDelegate / Invoke):
 //   movie -> DLL   SKYBRepair_Ready()                 movie is up, send data
@@ -32,17 +30,15 @@
 //   DLL -> movie   _root.gearService.SetRepairData(header, rows, selectRow)
 //                  _root.gearService.SetStatus(lines)     lines = [{key, args:[...]}]
 //
-// Opening: InventoryHook (repair tool activated), the mod event
-// SKYBDegOpenRepairMenu from any script, or - VENDOR MODE - the native
-// SKYBDegradation.OpenVendorRepair(Actor) the dialogue Repair button calls:
-// the vendor's Smithing sets the limit, hammers are unlimited, the player
-// pays gold (Condition::VendorCost) to 100% or to the vendor's limit.
-// RECHARGE MODE (SKYBDegradation.OpenVendorRecharge, the Recharge button):
-// the same menu lists every charged weapon / staff; Recharge (E) fills the
-// selected one, Recharge All (R) every one; price = missing charge
-// (Condition::RechargeCost). Opening from the inventory closes
-// it first (no inventory mutation happens under a live item list) and, with
-// ReturnToInventory (INI) = 1, reopens it when the repair menu closes.
+// Opened by InventoryHook (repair tool activated), the SKYBDegOpenRepairMenu mod event, or the
+// dialogue natives:
+//   vendor mode    SKYBDegradation.OpenVendorRepair: the vendor's Smithing sets the limit, no hammers,
+//                  the player pays gold (Condition::VendorCost) to 100% or to the vendor's limit
+//   recharge mode  SKYBDegradation.OpenVendorRecharge: lists every charged weapon / staff; Recharge (E)
+//                  fills the selected one, Recharge All (R) every one; price = missing charge
+//                  (Condition::RechargeCost)
+// Opening from the inventory closes it first (no inventory changes under a live item list); with
+// ReturnToInventory = 1 in the INI it reopens when the repair menu closes.
 namespace SKYBDeg
 {
 	class RepairMenu : public RE::IMenu
@@ -88,18 +84,4 @@ namespace SKYBDeg
 											  RE::BSTEventSource<SKSE::ModCallbackEvent>*) override;
 	};
 
-	// Diagnostics: logs what the inventory item card will show for every
-	// equipped charged weapon when the inventory opens and closes.
-	class ChargeWatcher : public RE::BSTEventSink<RE::MenuOpenCloseEvent>
-	{
-	public:
-		static ChargeWatcher* GetSingleton()
-		{
-			static ChargeWatcher singleton;
-			return std::addressof(singleton);
-		}
-		void                     Register();
-		RE::BSEventNotifyControl ProcessEvent(const RE::MenuOpenCloseEvent* a_event,
-											  RE::BSTEventSource<RE::MenuOpenCloseEvent>*) override;
-	};
 }

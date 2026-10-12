@@ -31,7 +31,8 @@ namespace Sigil::SigilMenuContract {
 		//(count)
 		inline constexpr const char* GearDone = "_root.SigilMenu_mc.gearDone";
 		//(rows, pad[, selection]) Each row:
-		//"index|name|count|tier|weaponEffect|weaponMagnitude|weaponDuration|armorEffect|armorMagnitude|armorDuration|gemCount|gemName".
+		//"index|name|count|tier|weaponEffect|weaponMagnitude|weaponDuration|armorEffect|armorMagnitude|armorDuration|gemCount|gemName|weaponEffects|armorEffects".
+		//The last two list every effect: "name^magnitude^duration^description~...".
 		inline constexpr const char* SetStones = "_root.SigilMenu_mc.setStones";
 	}
 }

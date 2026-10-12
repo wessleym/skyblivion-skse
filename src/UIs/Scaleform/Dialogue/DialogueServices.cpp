@@ -1,5 +1,6 @@
 #include "DialogueServices.h"
 #include "DialogueContract.h"
+#include "Degradation/RepairMenu.h"
 
 #include <cstdint>
 #include <fstream>
@@ -172,16 +173,17 @@ namespace Dialogue {
 			}
 			services.push_back(std::move(training));
 
-			//Reserved: the build has the factions but no menu, topic or launcher yet.
-			//They appear once the INI gives them an open= call and fallback=1.
+			//Repair and recharge have no topic: the button shows for any member of their factions.
 			ServiceDef repair;
 			repair.id = "repair";
+			repair.fallback = true;
 			repair.factions.push_back(MakeFaction("SKYBRepairFaction|0D8209:Skyblivion.esm"));
 			repair.factions.push_back(MakeFaction("SKYBRepairmanFaction|295CE7:Skyblivion.esm"));
 			services.push_back(std::move(repair));
 
 			ServiceDef recharge;
 			recharge.id = "recharge";
+			recharge.fallback = true;
 			recharge.factions.push_back(MakeFaction("SKYBRechargeFaction|0D820A:Skyblivion.esm"));
 			services.push_back(std::move(recharge));
 
@@ -331,7 +333,8 @@ namespace Dialogue {
 
 		//Whether the fallback path has anything to call: an open= from the table, or a built-in call.
 		bool CanOpen(const ServiceDef& service) {
-			return !service.openClass.empty() || service.id == "barter" || service.id == "training";
+			return !service.openClass.empty() || service.id == "barter" || service.id == "training" ||
+				   service.id == "repair" || service.id == "recharge";
 		}
 
 		//The first row of the dialogue list holding one of the service's topics, with that topic's icon.
@@ -441,6 +444,12 @@ namespace Dialogue {
 			auto* args = RE::MakeFunctionArguments(static_cast<RE::Actor*>(speaker));
 			const bool dispatched = vm->DispatchStaticCall("Game", "ShowTrainingMenu", args, callback);
 			Log::INFO("DialogueServices: 'training': Game.ShowTrainingMenu({}) dispatched={}.", speaker->GetName(), dispatched);
+		}
+		else if (service->id == "repair") {
+			SKYBDeg::RepairMenu::OpenVendor(speaker);
+		}
+		else if (service->id == "recharge") {
+			SKYBDeg::RepairMenu::OpenRecharge(speaker);
 		}
 	}
 

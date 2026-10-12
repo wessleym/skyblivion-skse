@@ -1,6 +1,5 @@
-// Moved from SKYBDegradation.dll into Skyblivion.dll, 2026-10-05 (fold-in, UI integration workspace
-// ledger L-0058). Source of record until then: game\native\SKYBDegradation\src in that workspace.
 #include "Degradation/Condition.h"
+#include "Degradation/Breakage.h"
 
 #include "Degradation/Settings.h"
 #include "Degradation/TemperHook.h"
@@ -104,6 +103,8 @@ namespace SKYBDeg::Condition
 		} else {
 			a_list->Add(new RE::ExtraHealth(a_value));
 		}
+		// a broken weapon repaired far enough is usable again
+		Breakage::OnConditionSet(a_list, a_value);
 	}
 
 	const Material& MaterialOf(const RE::TESBoundObject* a_obj)
@@ -394,33 +395,13 @@ namespace SKYBDeg::Condition
 
 	namespace
 	{
-		// The AI process keeps its OWN entry for each equipped weapon, and that is
-		// where the engine stores the live charge while it is equipped (runtime
-		// dump 2026-09-29: id 39806 = AIProcess -> middleHigh +0x220 left / +0x260
-		// right, weapons only; used by the engine's own equipped-damage display,
-		// id 40252). The inventory copy carries no charge meanwhile, and the hand
-		// actor value is rebuilt from this entry - so this entry is the truth.
+		// While a weapon is equipped, the engine keeps its live charge on the AI process's own
+		// entry (39806: middleHigh +0x220 left / +0x260 right), not on the inventory copy;
+		// the hand's charge actor value is rebuilt from that entry.
 		RE::AIProcess* PlayerProcess()
 		{
 			auto player = RE::PlayerCharacter::GetSingleton();
-			if (!player) {
-				return nullptr;
-			}
-			auto viaLib = player->GetActorRuntimeData().currentProcess;
-			// Version-safe (fold-in, L-0058): the raw offset below is the AE layout; elsewhere
-			// CommonLib's own member is the only reading.
-			if (!REL::Module::IsAE()) {
-				return viaLib;
-			}
-			// the engine reads it at actor + 0xF8 on 1.6.1170 (id 40252)
-			auto viaEngine = *reinterpret_cast<RE::AIProcess**>(reinterpret_cast<std::uintptr_t>(player) + 0xF8);
-			static bool warned = false;
-			if (viaLib != viaEngine && !warned) {
-				warned = true;
-				Log::WARN("charge: CommonLib currentProcess {:p} != engine actor+0xF8 {:p}; using the engine's",
-							 static_cast<void*>(viaLib), static_cast<void*>(viaEngine));
-			}
-			return viaEngine;
+			return player ? player->GetActorRuntimeData().currentProcess : nullptr;
 		}
 
 		RE::InventoryEntryData* EquippedWeaponEntry(bool a_left)
@@ -467,50 +448,6 @@ namespace SKYBDeg::Condition
 			}
 			return std::nullopt;
 		}
-
-		// Exactly what the inventory item card computes (runtime dump 2026-09-29,
-		// id 51897 = item card info): enchantment id 14563 and max id 14564 (base
-		// form first, then the list); a WORN weapon's charge = the hand actor
-		// value's current value (id 34609 picks the hand), otherwise the list's
-		// ExtraCharge (id 15991, none = max). 'charge' = cur / max; the meter
-		// fills to 'usedCharge' = charge minus one cast (id 11321 = the
-		// enchantment's cost for the player) and flashes the rest.
-		std::string ItemCardLine(const RE::TESBoundObject* a_obj, RE::ExtraDataList* a_list)
-		{
-			// Ids 14563 / 14564 are known for AE only (no SE pair in CommonLib): off elsewhere.
-			if (!REL::Module::IsAE()) {
-				return "item card: not read on this runtime (AE only)";
-			}
-			using ench_t = RE::MagicItem*(const RE::TESBoundObject*, RE::ExtraDataList*);
-			using max_t = std::uint16_t(const RE::TESBoundObject*, RE::ExtraDataList*);
-			using cost_t = float(const RE::MagicItem*, RE::Actor*);
-			static REL::Relocation<ench_t> enchOf{ REL::ID(14563) };
-			static REL::Relocation<max_t>  maxOf{ REL::ID(14564) };
-			// MagicItem::CalculateCost (protected in this CommonLib): its own SE / AE pair
-			static REL::Relocation<cost_t> costOf{ RELOCATION_ID(11213, 11321) };
-			auto player = RE::PlayerCharacter::GetSingleton();
-			auto ench = enchOf(a_obj, a_list);
-			const float max = static_cast<float>(maxOf(a_obj, a_list));
-			if (!player || !ench || max <= 0.0f) {
-				return "item card: no charge meter";
-			}
-			float cur = max;
-			const char* src = "no ExtraCharge = max";
-			if (auto av = HandCharge(a_list)) {
-				cur = player->AsActorValueOwner()->GetActorValue(*av);
-				src = *av == RE::ActorValue::kLeftItemCharge ? "LeftItemCharge current" : "RightItemCharge current";
-			} else if (a_list) {
-				if (auto xc = a_list->GetByType<RE::ExtraCharge>()) {
-					cur = xc->charge;
-					src = "ExtraCharge";
-				}
-			}
-			const float cost = costOf(ench, player);
-			const float pct = cur * 100.0f / max;
-			const float used = std::max(0.0f, pct - cost * 100.0f / max);
-			return std::format("item card: charge {:.1f}% ({:.1f} / {:.0f} from {}), meter fill after one cast {:.1f}% (cost per cast {:.1f})",
-							   pct, cur, max, src, used, cost);
-		}
 	}
 
 	Charge ChargeOf(const RE::TESBoundObject* a_obj, RE::ExtraDataList* a_list)
@@ -539,13 +476,10 @@ namespace SKYBDeg::Condition
 			if (auto xc = a_list->GetByType<RE::ExtraCharge>()) {
 				c.current = xc->charge;
 			}
-			// Equipped: the hand's charge actor value's CURRENT value is the live
-			// charge - casting drains it and the inventory item card reads it (id
-			// 51897 via id 34609). The item's ExtraCharge (and the process entry's)
-			// is only synced from it at times (inventory open, unequip), so after a
-			// save/load it can be stale: 2026-09-29 log, loaded staff = ExtraCharge
-			// 3000 while the hand value was 222.8 (unusable). The process entry is
-			// the fallback only while the hand value is not set up (base 0).
+			// Equipped: the hand's charge actor value is the live charge (casting drains it,
+			// the item card reads it via 51897 / 34609). ExtraCharge is synced from it only on
+			// inventory open or unequip, so it can be stale after a load. The process entry
+			// is the fallback while the hand value is not set up (base 0).
 			bool fromHand = false;
 			if (auto av = HandCharge(a_list)) {
 				auto owner = RE::PlayerCharacter::GetSingleton()->AsActorValueOwner();
@@ -562,54 +496,6 @@ namespace SKYBDeg::Condition
 		}
 		c.current = std::clamp(c.current, 0.0f, c.max);
 		return c;
-	}
-
-	void LogChargeSources(const RE::TESBoundObject* a_obj, RE::ExtraDataList* a_list)
-	{
-		const auto c = ChargeOf(a_obj, a_list);
-		if (!c.valid || !a_list) {
-			return;
-		}
-		auto xc = a_list->GetByType<RE::ExtraCharge>();
-		std::string hand = "not equipped";
-		if (auto av = HandCharge(a_list)) {
-			auto owner = RE::PlayerCharacter::GetSingleton()->AsActorValueOwner();
-			hand = std::format("{} current {:.1f} / base {:.1f} / permanent {:.1f}",
-							   *av == RE::ActorValue::kLeftItemCharge ? "LeftItemCharge" : "RightItemCharge",
-							   owner->GetActorValue(*av), owner->GetBaseActorValue(*av), owner->GetPermanentActorValue(*av));
-		}
-		auto pc = ProcessCharge(a_obj, a_list);
-		Log::INFO("charge sources '{}': max {:.0f}, item ExtraCharge {}, process entry {}, {} -> shown {:.1f}; {}",
-					 a_obj->GetName(), c.max, xc ? std::format("{:.1f}", xc->charge) : "none (= full)",
-					 pc ? std::format("{:.1f}", pc->charge) : "none", hand, c.current, ItemCardLine(a_obj, a_list));
-	}
-
-	void LogEquippedCharges(std::string_view a_why)
-	{
-		auto player = RE::PlayerCharacter::GetSingleton();
-		if (!player) {
-			return;
-		}
-		auto changes = player->GetInventoryChanges();
-		if (!changes || !changes->entryList) {
-			return;
-		}
-		bool any = false;
-		for (auto entry : *changes->entryList) {
-			auto obj = entry ? entry->object : nullptr;
-			if (!obj || !obj->Is(RE::FormType::Weapon) || !entry->extraLists) {
-				continue;
-			}
-			for (auto list : *entry->extraLists) {
-				if (list && (list->HasType<RE::ExtraWorn>() || list->HasType<RE::ExtraWornLeft>()) && ChargeOf(obj, list).valid) {
-					if (!any) {
-						Log::INFO("equipped charge ({}):", a_why);
-						any = true;
-					}
-					LogChargeSources(obj, list);
-				}
-			}
-		}
 	}
 
 	void FillCharge(const RE::TESBoundObject* a_obj, RE::ExtraDataList* a_list)
@@ -744,47 +630,6 @@ namespace SKYBDeg::Condition
 	float EffectiveStatAt(RE::TESBoundObject* a_obj, RE::ExtraDataList* a_list, float a_q)
 	{
 		return EngineStatAt(a_obj, a_list, a_q);
-	}
-
-	void LogEngineProbe()
-	{
-		static bool done = false;
-		if (done) {
-			return;
-		}
-		auto player = RE::PlayerCharacter::GetSingleton();
-		if (!player) {
-			return;
-		}
-		std::vector<std::pair<RE::TESBoundObject*, RE::ExtraDataList*>> probes;
-		if (auto right = player->GetEquippedObject(false)) {
-			if (Classify(right) == Kind::kWeapon) {
-				auto obj = right->As<RE::TESBoundObject>();
-				if (auto list = FindWornList(obj, false)) {
-					probes.emplace_back(obj, list);
-				}
-			}
-		}
-		for (auto& piece : WornArmor()) {
-			if (piece.kind == Kind::kArmor) {
-				probes.emplace_back(piece.obj, piece.list);
-				break;
-			}
-		}
-		if (probes.empty()) {
-			return;  // try again next time the menu opens
-		}
-		done = true;
-		for (auto& [obj, list] : probes) {
-			std::string line;
-			for (float q : { 0.5f, 0.75f, 1.0f, 1.1f, 1.6f, 2.0f, 2.5f }) {
-				line += std::format("  {:.0f}%={:.1f}", q * 100.0f, EffectiveStatAt(obj, list, q));
-			}
-			Log::INFO("ENGINE PROBE ({}) {} '{}' (now {:.0f}%):{}", TemperHook::Active() ? "temper hook" : "NO HOOK - condition below 100% has no effect",
-						 Classify(obj) == Kind::kWeapon ? "damage" : "armor", obj->GetName(),
-						 GetHealth(list) * 100.0f, line);
-		}
-		Log::INFO("ENGINE PROBE: 50%/75% should read 60%/75% of the 100% value (stat floor 60%)");
 	}
 
 	std::mt19937& Rng()

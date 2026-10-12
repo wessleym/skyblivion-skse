@@ -1,13 +1,11 @@
-// Moved from SKYBUIDemo.dll into Skyblivion.dll, 2026-10-05 (fold-in, UI integration workspace
-// ledger L-0056). Source of record until then: game\native\SKYBUIDemo\src in that workspace.
 #include "SettingsMenu/EconomyService.h"
 
 #include "SettingsMenu/SettingsMenuTable.h"
 
 namespace {
 	constexpr RE::FormID       kGold001 = 0x0000000F;
-	constexpr std::string_view kPlugin = "SKYBEconomy.esp";
-	constexpr RE::FormID       kPerk = 0x800;
+	//by editor ID: the perk may ship in SKYBEconomy.esp, SKYBCombined.esp or the ESM
+	constexpr const char*      kPerk = "SKYBEconomyPerk";
 
 	bool StartsWith(std::string_view a, std::string_view b) { return a.substr(0, b.size()) == b; }
 	bool Contains(std::string_view a, std::string_view b) { return a.find(b) != std::string_view::npos; }
@@ -24,6 +22,21 @@ namespace {
 			}
 		}
 		return GoldClass::kLoot;
+	}
+
+	// Leveled lists keep no editor ID of their own; the engine's editor-ID map (filled by po3 Tweaks) has them.
+	std::unordered_map<const RE::TESForm*, std::string> LeveledItemNames() {
+		std::unordered_map<const RE::TESForm*, std::string> names;
+		const auto& [map, lock] = RE::TESForm::GetAllFormsByEditorID();
+		const RE::BSReadLockGuard guard{ lock };
+		if (map) {
+			for (const auto& [edid, form] : *map) {
+				if (form && form->Is(RE::FormType::LeveledItem) && edid.c_str()) {
+					names.emplace(form, edid.c_str());
+				}
+			}
+		}
+		return names;
 	}
 
 	template <class F>
@@ -54,9 +67,13 @@ void EconomyService::Register() {
 	}
 
 	// ---- gold in leveled lists, classified by the list's editor ID
+	const auto names = LeveledItemNames();
+	if (names.empty()) {
+		Log::ERROR("economy: no leveled-list editor IDs loaded (po3 Tweaks with Load EditorIDs) - gold rows do nothing");
+	}
 	std::size_t lists[3]{}, unnamed = 0;
 	for (auto* list : dh->GetFormArray<RE::TESLevItem>()) {
-		if (!list) {
+		if (!list || names.empty()) {
 			continue;
 		}
 		bool hasGold = false;
@@ -69,7 +86,8 @@ void EconomyService::Register() {
 		if (!hasGold) {
 			continue;
 		}
-		const std::string_view edid = list->GetFormEditorID() ? list->GetFormEditorID() : "";
+		const auto              named = names.find(list);
+		const std::string_view edid = named != names.end() ? std::string_view{ named->second } : std::string_view{};
 		if (edid.empty()) {
 			++unnamed;  // treated as loot
 		}
@@ -104,9 +122,9 @@ void EconomyService::Register() {
 	}
 
 	// ---- the player's price perk
-	_perk = dh->LookupForm<RE::BGSPerk>(kPerk, kPlugin);
+	_perk = RE::TESForm::LookupByEditorID<RE::BGSPerk>(kPerk);
 	if (!_perk) {
-		Log::WARN("economy: {} not active - Buying / Selling Prices do nothing", kPlugin);
+		Log::WARN("economy: perk {} not found in any loaded plugin - Buying / Selling Prices do nothing", kPerk);
 		return;
 	}
 	for (auto* e : _perk->perkEntries) {

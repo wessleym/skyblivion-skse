@@ -3,6 +3,7 @@
 #include "Papyrus/ModEvents.h"
 #include "Settings/SettingsContract.h"
 #include "Settings/SettingsService.h"
+#include "SettingsMenu/SettingsStore.h"
 #include "UIs/Scaleform/ScaleformUtility.h"
 
 #include <algorithm>
@@ -13,94 +14,17 @@
 namespace StartMenu {
 
 	namespace {
-		//The difficulty ladder the settings menu offers, in iDifficulty order.
-		constexpr std::array<const char*, 6> kDifficultyKeys{
-			"$Novice", "$Apprentice", "$Adept", "$Expert", "$Master", "$Legendary"
-		};
-		constexpr int kDefaultDifficulty = 2;
-
 		RE::GPtr<RE::GFxMovieView> MainMenuMovie() {
 			return ScaleformUtility::OpenMenuMovie(RE::MainMenu::MENU_NAME);
 		}
 
-		//The prefs collection first, where the game keeps it; the base collection as a fallback when prefs lacks it.
-		RE::Setting* DifficultySetting() {
-			if (auto* prefs = RE::INIPrefSettingCollection::GetSingleton()) {
-				if (auto* setting = prefs->GetSetting("iDifficulty:GamePlay")) {
-					return setting;
-				}
-			}
-			if (auto* baseSettings = RE::INISettingCollection::GetSingleton()) {
-				return baseSettings->GetSetting("iDifficulty:GamePlay");
-			}
-			return nullptr;
-		}
-
-		int ClampDifficulty(int index) {
-			return std::clamp(index, 0, static_cast<int>(kDifficultyKeys.size()) - 1);
-		}
-
-		int CurrentDifficulty() {
-			auto* setting = DifficultySetting();
-			return setting ? ClampDifficulty(setting->data.i) : kDefaultDifficulty;
-		}
-
-		//One option row. values: translation keys, one per choice.
-		RE::GFxValue OptionObject(RE::GFxMovieView& movie, const char* key, const char* label, const char* description,
-			const char* groups, std::initializer_list<const char*> values, int index, int defaultIndex) {
-			RE::GFxValue option;
-			movie.CreateObject(&option);
-			option.SetMember("key", RE::GFxValue(key));
-			option.SetMember("label", RE::GFxValue(label));
-			option.SetMember("desc", RE::GFxValue(description));
-			option.SetMember("groups", RE::GFxValue(groups));
-			RE::GFxValue valueArray;
-			movie.CreateArray(&valueArray);
-			for (const char* value : values) {
-				valueArray.PushBack(RE::GFxValue(value));
-			}
-			option.SetMember("values", valueArray);
-			option.SetMember("index", RE::GFxValue(static_cast<double>(index)));
-			option.SetMember("defaultIndex", RE::GFxValue(static_cast<double>(defaultIndex)));
-			return option;
-		}
 
 		const char* OrEmpty(const RE::BSFixedString& text) {
 			return text.c_str() ? text.c_str() : "";
 		}
-
-		//The menu stack by name with each menu's flags, and the counters the UI keeps per open menu flag.
-		std::string UiState() {
-#if SKY_COMMONLIB == SKY_COMMONLIB_NG
-			auto* ui = RE::UI::GetSingleton();
-			if (!ui) {
-				return "(no UI)";
-			}
-			std::string stack;
-			for (const auto& menu : ui->menuStack) {
-				if (!menu) {
-					continue;
-				}
-				for (const auto& [name, entry] : ui->menuMap) {
-					if (entry.menu == menu) {
-						stack += std::format("{}{}({:#x})", stack.empty() ? "" : ",", name.c_str() ? name.c_str() : "?",
-							static_cast<std::uint32_t>(menu->menuFlags.underlying()));
-					}
-				}
-			}
-			return std::format("stack=[{}] pauses={} itemMenus={} disablePause={} allowSaving={} modal={} paused={}",
-				stack, ui->numPausesGame, ui->numItemMenus, ui->numDisablePauseMenu, ui->numAllowSaving,
-				ui->modal, ui->GameIsPaused());
-#else
-			return "(not read on this backend)";
-#endif
-		}
 	}
 
 	void StartMenuService::Register() {
-		if (auto* ui = RE::UI::GetSingleton()) {
-			ui->AddEventSink<RE::MenuOpenCloseEvent>(&s_menuSink);
-		}
 		if (!ModEvents::AddSink(&s_sink)) {
 			Log::WARN("StartMenuService: No mod-event source. Title screen requests will not be heard.");
 			return;
@@ -109,7 +33,6 @@ namespace StartMenu {
 	}
 
 	void StartMenuService::RepairInputAfterMenus() {
-		Log::INFO("StartMenuService: UI state at game start: {}", UiState());
 #if SKY_COMMONLIB == SKY_COMMONLIB_NG
 		auto* ui = RE::UI::GetSingleton();
 		if (!ui || !ui->modal) {
@@ -125,47 +48,60 @@ namespace StartMenu {
 #endif
 	}
 
-	RE::BSEventNotifyControl StartMenuService::MenuSink::ProcessEvent(const RE::MenuOpenCloseEvent* a_event,
-		RE::BSTEventSource<RE::MenuOpenCloseEvent>*) {
-		auto* ui = RE::UI::GetSingleton();
-		if (!a_event || !ui || !ui->IsMenuOpen(RE::MainMenu::MENU_NAME)) {
-			return RE::BSEventNotifyControl::kContinue;
-		}
-		if (a_event->menuName != RE::LoadingMenu::MENU_NAME && a_event->menuName != RE::CursorMenu::MENU_NAME) {
-			Log::INFO("StartMenuService: '{}' {} -> {}", OrEmpty(a_event->menuName), a_event->opening ? "opened" : "closed", UiState());
-		}
-		return RE::BSEventNotifyControl::kContinue;
-	}
-
 	void StartMenuService::PushOptions() {
 		auto movie = MainMenuMovie();
 		if (!movie) {
 			Log::INFO("StartMenuService: Options requested, but the Main Menu is not open.");
 			return;
 		}
-		using Settings::SettingsService;
-		namespace Keys = Settings::SettingsContract;
-
-		const int difficulty = CurrentDifficulty();
-		const int toasts = SettingsService::GetInt(Keys::AchievementsSection, Keys::ToastKey, 1) ? 1 : 0;
-		const int shared = SettingsService::GetInt(Keys::AchievementsSection, Keys::SharedKey, 0) ? 1 : 0;
-
 		RE::GFxValue options;
 		movie->CreateArray(&options);
-		options.PushBack(OptionObject(*movie, StartMenuContract::Option::Difficulty,
-			"$SKYB_start_difficulty", "$SKYB_start_difficulty_desc", "newgame,settings",
-			{ kDifficultyKeys[0], kDifficultyKeys[1], kDifficultyKeys[2], kDifficultyKeys[3], kDifficultyKeys[4], kDifficultyKeys[5] },
-			difficulty, difficulty));
-		options.PushBack(OptionObject(*movie, StartMenuContract::Option::ToastNotifications,
-			"$SKYB_start_ach_toasts", "$SKYB_start_ach_toasts_desc", "newgame",
-			{ "$SKYB_start_off", "$SKYB_start_on" }, toasts, 1));
-		options.PushBack(OptionObject(*movie, StartMenuContract::Option::AchievementScope,
-			"$SKYB_start_ach_scope", "$SKYB_start_ach_scope_desc", "newgame",
-			{ "$SKYB_start_ach_scope_character", "$SKYB_start_ach_scope_shared" }, shared, 0));
+		//one row per settings-menu category with a newgame label (Categories.csv): its presets, led by
+		//"Current Settings" only when the new-game values match none of them (the player changed something);
+		//otherwise the row starts on the preset they match. Nothing changes until a different choice is made.
+		using SKYBSettingsMenu::kCategories;
+		using SKYBSettingsMenu::kPresetCount;
+		using SKYBSettingsMenu::kPresetLabels;
+		auto* store = SKYBSettingsMenu::Store::GetSingleton();
+		s_pending.assign(kCategories.size(), -1);
+		s_hasCurrent.assign(kCategories.size(), false);
+		int presetRows = 0;
+		for (std::size_t c = 0; c < kCategories.size(); ++c) {
+			const auto& cat = kCategories[c];
+			if (!cat.newgame || !*cat.newgame) {
+				continue;
+			}
+			const int matched = store->PresetOf(cat.id);
+			const bool custom = matched < 0;
+			s_hasCurrent[c] = custom;
+			RE::GFxValue option;
+			movie->CreateObject(&option);
+			const auto key = std::string(StartMenuContract::Option::PresetPrefix) + cat.id;
+			const auto desc = std::string(cat.newgame) + "_desc";
+			option.SetMember("key", RE::GFxValue(key.c_str()));
+			option.SetMember("label", RE::GFxValue(cat.newgame));
+			option.SetMember("desc", RE::GFxValue(desc.c_str()));
+			option.SetMember("groups", RE::GFxValue("newgame"));
+			RE::GFxValue values;
+			movie->CreateArray(&values);
+			if (custom) {
+				values.PushBack(RE::GFxValue("$SKYB_start_preset_current"));
+			}
+			for (std::size_t p = 0; p < kPresetCount; ++p) {
+				values.PushBack(RE::GFxValue(kPresetLabels[p]));
+			}
+			option.SetMember("values", values);
+			const double index = custom ? 0.0 : static_cast<double>(matched);
+			option.SetMember("index", RE::GFxValue(index));
+			option.SetMember("defaultIndex", RE::GFxValue(index));
+			options.PushBack(option);
+			++presetRows;
+		}
+		//the achievement pop-up and scope rows are not offered here: they are in
+		//Settings > Interface > Skyblivion; a choice sent for them is still recorded (ApplyOption)
 
 		const bool delivered = movie->Invoke(StartMenuContract::AsPath::SetOptions, nullptr, &options, 1);
-		Log::INFO("StartMenuService: Pushed 3 options (difficulty={}, toasts={}, shared={}), delivered={}.",
-			difficulty, toasts, shared, delivered);
+		Log::INFO("StartMenuService: Pushed {} preset row(s), delivered={}.", presetRows, delivered);
 	}
 
 	void StartMenuService::PushLocations() {
@@ -204,26 +140,40 @@ namespace StartMenu {
 		}
 		if (key == StartMenuContract::Option::ToastNotifications) {
 			SettingsService::SetInt(Keys::AchievementsSection, Keys::ToastKey, index ? 1 : 0);
-			SettingsService::ApplyToGame();
 			return;
 		}
-		if (key == StartMenuContract::Option::Difficulty) {
-			if (auto* setting = DifficultySetting()) {
-				setting->data.i = ClampDifficulty(index);
-				if (auto* prefs = RE::INIPrefSettingCollection::GetSingleton()) {
-					prefs->WriteSetting(setting);
+		//the presets wait for the new game (OnNewGame): nothing is written until it starts
+		if (key.starts_with(StartMenuContract::Option::PresetPrefix)) {
+			const auto id = key.substr(std::string_view(StartMenuContract::Option::PresetPrefix).size());
+			const auto& cats = SKYBSettingsMenu::kCategories;
+			for (std::size_t c = 0; c < cats.size() && c < s_pending.size(); ++c) {
+				if (id == cats[c].id) {
+					const int preset = s_hasCurrent[c] ? index - 1 : index;
+					s_pending[c] = std::clamp(preset, -1, static_cast<int>(SKYBSettingsMenu::kPresetCount) - 1);
+					Log::INFO("StartMenuService: new game's {} -> {}.", id,
+						s_pending[c] < 0 ? "current settings" : SKYBSettingsMenu::kPresetIds[s_pending[c]]);
+					return;
 				}
-				Log::INFO("StartMenuService: Difficulty -> {}.", setting->data.i);
 			}
-			else {
-				Log::WARN("StartMenuService: iDifficulty:GamePlay not found. The difficulty choice is ignored.");
-			}
+			Log::WARN("StartMenuService: no settings category '{}'.", id);
+			return;
 		}
-		else {
-			Log::INFO("StartMenuService: Option '{}' -> {} (recorded only).", key, index);
-		}
-		//Difficulty and unknown options are also recorded under [NewGame].
+		Log::INFO("StartMenuService: Option '{}' -> {} (recorded only).", key, index);
+		//Unknown options are recorded under [NewGame].
 		SettingsService::SetInt(Keys::NewGameSection, key, index);
+	}
+
+	void StartMenuService::OnNewGame() {
+		auto* store = SKYBSettingsMenu::Store::GetSingleton();
+		const auto& cats = SKYBSettingsMenu::kCategories;
+		for (std::size_t c = 0; c < cats.size() && c < s_pending.size(); ++c) {
+			if (s_pending[c] >= 0) {
+				Log::INFO("StartMenuService: new game takes the {} preset {}.", cats[c].id,
+					SKYBSettingsMenu::kPresetIds[s_pending[c]]);
+				store->ApplyPresetToCharacter(cats[c].id, static_cast<std::size_t>(s_pending[c]));
+			}
+		}
+		s_pending.assign(cats.size(), -1);
 	}
 
 	RE::BSEventNotifyControl StartMenuService::Sink::ProcessEvent(const SKSE::ModCallbackEvent* a_event,

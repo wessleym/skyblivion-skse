@@ -1,6 +1,4 @@
 #pragma once
-// Moved from SKYBDegradation.dll into Skyblivion.dll, 2026-10-05 (fold-in, UI integration workspace
-// ledger L-0058). Source of record until then: game\native\SKYBDegradation\src in that workspace.
 #include <algorithm>
 #include <array>
 #include <charconv>
@@ -19,20 +17,14 @@
 
 #include "Degradation/SettingsTable.h"
 
-// Every tunable of the degradation system lives in
-// Data\SKSE\Plugins\SKYBDegradation.ini (one key per row of Settings.csv; the
-// built-in defaults come from the same table). The file is read at
-// kDataLoaded and re-read whenever its write time changes - checked on every
-// save load and every menu open - so edits apply without a restart. Values are
-// NOT stored in the save. SKYBDegradation.esp only carries the hammers and the
-// repair tool list.
+// Every tunable of the degradation system lives in Data\SKSE\Plugins\SKYBDegradation.ini, one key
+// per row of Settings.csv (which also gives the built-in defaults). The file is read at kDataLoaded
+// and re-read when its write time changes (checked on every save load and menu open). Values are not
+// stored in the save.
 //
-// OVERRIDES: the Skyblivion settings menu (in Skyblivion.dll with this code since
-// 2026-10-05, L-0058) owns the handful of player-facing values (wear rate, stat
-// floor, prices...) and keeps them per character. Its store calls SetOverride for
-// each one on every game load and every change; an override replaces the INI value
-// for that key until it is cleared, and survives INI reloads. Keys the menu never
-// sends keep their INI value.
+// Overrides: the settings menu owns the player-facing values (wear rate, stat floor, prices...) per
+// character and calls SetOverride for each on every game load and change. An override replaces the
+// INI value until it is cleared and survives INI reloads.
 namespace SKYBDeg
 {
 	class Settings
@@ -43,7 +35,7 @@ namespace SKYBDeg
 		// Re-read the INI if it changed on disk since the last read.
 		static void ReloadIfChanged();
 
-		// The settings menu's store (same DLL): set or clear one override.
+		// Set or clear one override (called by the settings menu's store).
 		static bool SetOverride(std::string_view a_section, std::string_view a_key, float a_value);
 		static bool ClearOverride(std::string_view a_section, std::string_view a_key);
 
@@ -71,7 +63,8 @@ namespace SKYBDeg
 		[[nodiscard]] static const std::vector<Hammer>& Hammers() { return s_hammers; }
 		[[nodiscard]] static bool             PluginLoaded() { return s_pluginLoaded; }
 
-		static constexpr std::string_view kPlugin = "SKYBDegradation.esp";
+		//the tool list by editor ID: SKYBDegradation.esp, SKYBCombined.esp or the ESM
+		static constexpr const char* kToolsList = "SKYBDegRepairTools";
 		static constexpr std::string_view kIniPath = "Data/SKSE/Plugins/SKYBDegradation.ini";
 
 	private:

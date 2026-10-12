@@ -31,7 +31,7 @@ namespace LoadingScreen {
 				return nullptr;
 			}
 			auto* location = REBridge::LoadingMenuLocation(menu.get());
-			//Checked before use: this slot was read by raw offset until CommonLib named it.
+			//Checked before use, in case the slot CommonLib names does not hold a location.
 			if (!location || location->GetFormType() != RE::FormType::Location) {
 				return nullptr;
 			}

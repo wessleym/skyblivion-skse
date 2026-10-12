@@ -1,9 +1,8 @@
-// Moved from SKYBDegradation.dll into Skyblivion.dll, 2026-10-05 (fold-in, UI integration workspace
-// ledger L-0058). Source of record until then: game\native\SKYBDegradation\src in that workspace.
 #include "Degradation/RepairMenu.h"
 
 #include "Degradation/Condition.h"
 #include "Degradation/Settings.h"
+#include "Platform/MainThread.h"
 #include <algorithm>
 #include <array>
 #include <charconv>
@@ -19,6 +18,7 @@
 #include <string_view>
 #include <unordered_map>
 #include <vector>
+#include "UIs/Scaleform/ScaleformUtility.h"
 
 // <Windows.h>, which this plugin's CommonLib build includes, maps PlaySound to PlaySoundA.
 #ifdef PlaySound
@@ -224,7 +224,6 @@ namespace SKYBDeg
 				if (!c.valid) {
 					return;
 				}
-				Condition::LogChargeSources(a_obj, a_list);
 				Row r;
 				r.obj = a_obj;
 				r.list = a_list;
@@ -374,7 +373,8 @@ namespace SKYBDeg
 		// ------------------------------------------------------------ push -----
 		void Push(PushHeader a_header, std::vector<PushRow> a_rows, std::int32_t a_select, std::vector<StatusLine> a_status)
 		{
-			SKSE::GetTaskInterface()->AddUITask([header = std::move(a_header), rows = std::move(a_rows), a_select,
+			//Into the movie on the main thread, next frame.
+			MainThread::Post([header = std::move(a_header), rows = std::move(a_rows), a_select,
 												 status = std::move(a_status)]() {
 				auto ui = RE::UI::GetSingleton();
 				auto menu = ui ? ui->GetMenu(RepairMenu::MENU_NAME) : nullptr;
@@ -791,7 +791,11 @@ namespace SKYBDeg
 			fxDelegate->Release();
 		});
 		if (!loaded) {
-			Log::ERROR("repair menu: Interface\\{}.swf failed to load", FILE_NAME);
+			//Closed at once: a menu without its movie would sit invisible and modal.
+			Log::ERROR("repair menu: Interface\\{}.swf failed to load - closing", FILE_NAME);
+			if (auto queue = RE::UIMessageQueue::GetSingleton()) {
+				queue->AddMessage(MENU_NAME, RE::UI_MESSAGE_TYPE::kHide, nullptr);
+			}
 		}
 
 		depthPriority = 5;
@@ -820,6 +824,10 @@ namespace SKYBDeg
 		if (!queue || !ui || ui->IsMenuOpen(MENU_NAME)) {
 			return;
 		}
+		if (!ScaleformUtility::MovieExists(FILE_NAME)) {
+			Log::ERROR("repair menu: Interface\\{}.swf not found - not opened", FILE_NAME);
+			return;
+		}
 		g_fromInventory = a_fromInventory;
 		g_vendorMode = false;
 		g_recharge = false;
@@ -838,6 +846,10 @@ namespace SKYBDeg
 		if (!queue || !ui || !a_vendor || ui->IsMenuOpen(MENU_NAME)) {
 			return;
 		}
+		if (!ScaleformUtility::MovieExists(FILE_NAME)) {
+			Log::ERROR("repair menu: Interface\\{}.swf not found - not opened", FILE_NAME);
+			return;
+		}
 		g_fromInventory = false;
 		g_vendorMode = true;
 		g_recharge = false;
@@ -852,6 +864,10 @@ namespace SKYBDeg
 		auto queue = RE::UIMessageQueue::GetSingleton();
 		auto ui = RE::UI::GetSingleton();
 		if (!queue || !ui || !a_vendor || ui->IsMenuOpen(MENU_NAME)) {
+			return;
+		}
+		if (!ScaleformUtility::MovieExists(FILE_NAME)) {
+			Log::ERROR("repair menu: Interface\\{}.swf not found - not opened", FILE_NAME);
 			return;
 		}
 		g_fromInventory = false;
@@ -907,7 +923,6 @@ namespace SKYBDeg
 			g_hammer = g_pendingHammer >= 0 && Condition::Owned(g_pendingHammer) > 0 ? g_pendingHammer : BestOwned();
 			g_pendingHammer = -1;
 			Settings::ReloadIfChanged();  // INI edits apply on the next menu open
-			Condition::LogEngineProbe();
 			Refresh({});
 		});
 	}
@@ -945,11 +960,8 @@ namespace SKYBDeg
 		Close();
 	}
 
-	// The rebindable keys live in the settings menu's HotkeyService (also in
-	// Skyblivion.dll), which answers the SKSE mod event SKYBRequestHotkeys.
-	// Menus the engine or SKSE load send it with skse.SendModEvent; a movie
-	// loaded by our own IMenu (CommonLib LoadMovieEx) gets no skse object, so
-	// this menu asks through GameDelegate and the request is re-sent here.
+	// The settings menu's HotkeyService answers the SKSE mod event SKYBRequestHotkeys. A movie loaded
+	// by our own IMenu has no skse object, so it asks through GameDelegate and the event is sent here.
 	void RepairMenu::OnRequestHotkeys(const RE::FxDelegateArgs& a_params)
 	{
 		if (a_params.GetArgCount() < 1 || !a_params[0].IsString()) {
@@ -1035,19 +1047,4 @@ namespace SKYBDeg
 		return RE::BSEventNotifyControl::kContinue;
 	}
 
-	void ChargeWatcher::Register()
-	{
-		if (auto ui = RE::UI::GetSingleton()) {
-			ui->AddEventSink<RE::MenuOpenCloseEvent>(this);
-		}
-	}
-
-	RE::BSEventNotifyControl ChargeWatcher::ProcessEvent(const RE::MenuOpenCloseEvent* a_event,
-														 RE::BSTEventSource<RE::MenuOpenCloseEvent>*)
-	{
-		if (a_event && a_event->menuName == RE::InventoryMenu::MENU_NAME) {
-			Condition::LogEquippedCharges(a_event->opening ? "inventory opened" : "inventory closed");
-		}
-		return RE::BSEventNotifyControl::kContinue;
-	}
 }

@@ -1,7 +1,6 @@
 #pragma once
 
-//The skill sheet's feeds: the Skills menu of the new menus, keyed by actor value.
-//Replaces SkillsContract's events when the old skills menu retires.
+//The skill sheet's feeds, keyed by actor value.
 namespace Skills::SkillSheetContract {
 	//Skill sheet -> C++:
 	namespace ModEvent {

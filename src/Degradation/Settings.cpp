@@ -1,5 +1,3 @@
-// Moved from SKYBDegradation.dll into Skyblivion.dll, 2026-10-05 (fold-in, UI integration workspace
-// ledger L-0058). Source of record until then: game\native\SKYBDegradation\src in that workspace.
 #include "Degradation/Settings.h"
 #include <algorithm>
 #include <array>
@@ -175,18 +173,11 @@ namespace SKYBDeg
 	{
 		Load();
 
-		auto dh = RE::TESDataHandler::GetSingleton();
-		s_pluginLoaded = dh && dh->LookupModByName(kPlugin) != nullptr;
-		if (!s_pluginLoaded) {
-			Log::WARN("{} is not active: no repair tool is known (the hammer will not open the menu)", kPlugin);
-		}
-
-		s_tools = dh ? dh->LookupForm<RE::BGSListForm>(0x800, kPlugin) : nullptr;
+		s_tools = RE::TESForm::LookupByEditorID<RE::BGSListForm>(kToolsList);
+		s_pluginLoaded = s_tools != nullptr;
 		s_hammers.clear();
 		if (!s_tools) {
-			if (s_pluginLoaded) {
-				Log::ERROR("FLST 000800 (SKYBDegRepairTools) missing from {}", kPlugin);
-			}
+			Log::WARN("FLST {} not found in any loaded plugin: no repair tool is known (the hammer will not open the menu)", kToolsList);
 			return;
 		}
 		Log::INFO("repair tools list {:08X}: {} entr{}", s_tools->GetFormID(), s_tools->forms.size(),
