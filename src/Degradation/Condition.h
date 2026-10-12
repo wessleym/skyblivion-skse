@@ -1,6 +1,4 @@
 #pragma once
-// Moved from SKYBDegradation.dll into Skyblivion.dll, 2026-10-05 (fold-in, UI integration workspace
-// ledger L-0058). Source of record until then: game\native\SKYBDegradation\src in that workspace.
 #include <algorithm>
 #include <array>
 #include <charconv>
@@ -103,9 +101,8 @@ namespace SKYBDeg::Condition
 	//   x (1 + HardnessCostMult x (hardness - 1)) x (1 + SkillCostMult x skill / 100)
 	//   x EnchantedCostMult (if enchanted) x PriceMult, rounded up, at least MinCost.
 	[[nodiscard]] float        VendorSkill(RE::Actor* a_vendor);
-	// The player's gold (Gold001, 0000000F). NOT Actor::GetGoldAmount(): that
-	// CommonLibSSE-NG 3.6.0 helper reads a bad pointer on 1.6.1170 and crashed
-	// the game when the repair menu opened (2026-09-29).
+	// The player's gold (Gold001, 0000000F). Not Actor::GetGoldAmount(): the
+	// CommonLibSSE-NG 3.6.0 helper reads a bad pointer on 1.6.1170.
 	[[nodiscard]] std::int32_t PlayerGold();
 	[[nodiscard]] std::int32_t VendorCost(const RE::TESBoundObject* a_obj, bool a_enchanted, float a_from, float a_to,
 										  float a_vendorSkill);
@@ -123,10 +120,6 @@ namespace SKYBDeg::Condition
 		bool                 valid{ false };
 	};
 	[[nodiscard]] Charge ChargeOf(const RE::TESBoundObject* a_obj, RE::ExtraDataList* a_list);
-	// One log line with every place this copy's charge lives (diagnostics).
-	void                 LogChargeSources(const RE::TESBoundObject* a_obj, RE::ExtraDataList* a_list);
-	// LogChargeSources for every equipped charged weapon (inventory open / close).
-	void                 LogEquippedCharges(std::string_view a_why);
 	// Fills this copy (and, if equipped, the hand's charge actor value) to max.
 	void                 FillCharge(const RE::TESBoundObject* a_obj, RE::ExtraDataList* a_list);
 	// Gold for a_missing charge points: missing x RechargeGoldPerCharge (INI)
@@ -148,11 +141,6 @@ namespace SKYBDeg::Condition
 	// TemperHook puts the condition penalty inside it).
 	[[nodiscard]] float EffectiveStat(RE::TESBoundObject* a_obj, RE::ExtraDataList* a_list);
 	[[nodiscard]] float EffectiveStatAt(RE::TESBoundObject* a_obj, RE::ExtraDataList* a_list, float a_q);
-
-	// One-time log line: engine damage/armor at 50/75/100/160/250% for the
-	// worn right-hand weapon and body armor - the evidence for what the temper
-	// value does to stats on this runtime.
-	void LogEngineProbe();
 
 	[[nodiscard]] std::mt19937& Rng();
 	[[nodiscard]] float         Roll();  // [0,1)

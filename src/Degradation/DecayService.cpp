@@ -1,7 +1,6 @@
-// Moved from SKYBDegradation.dll into Skyblivion.dll, 2026-10-05 (fold-in, UI integration workspace
-// ledger L-0058). Source of record until then: game\native\SKYBDegradation\src in that workspace.
 #include "Degradation/DecayService.h"
 
+#include "Degradation/Breakage.h"
 #include "Degradation/Condition.h"
 #include "Degradation/Settings.h"
 #include <algorithm>
@@ -89,6 +88,7 @@ namespace SKYBDeg
 		}
 		const float rate = Settings::Get(G::WeapRate) * Settings::Get(G::WeapRateMult) * EventMult(a_event);
 		Degrade(weap, list, rate, "attack");
+		Breakage::OnUse(weap, list, a_event.flags.any(Flag::kPowerAttack, Flag::kBashAttack), false);
 	}
 
 	void DecayService::OnPlayerStruck(const RE::TESHitEvent& a_event, RE::PlayerCharacter* a_player)
@@ -114,6 +114,7 @@ namespace SKYBDeg
 				if (auto list = Condition::FindWornList(obj, false)) {
 					const float rate = Settings::Get(G::BlockRate) * Settings::Get(G::WeapRateMult) * EventMult(a_event);
 					Degrade(obj, list, rate, "block");
+					Breakage::OnUse(obj, list, a_event.flags.any(Flag::kPowerAttack, Flag::kBashAttack), true);
 				}
 			}
 			return;

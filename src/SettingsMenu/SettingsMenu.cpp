@@ -1,9 +1,10 @@
-// Moved from SKYBUIDemo.dll into Skyblivion.dll, 2026-10-05 (fold-in, UI integration workspace
-// ledger L-0056). Source of record until then: game\native\SKYBUIDemo\src in that workspace.
 #include "SettingsMenu/SettingsMenu.h"
 
 #include "Hotkeys/HotkeyService.h"
+#include "Platform/MainThread.h"
 #include "SettingsMenu/SettingsStore.h"
+#include "SettingsMenu/SoundService.h"
+#include "UIs/Scaleform/ScaleformUtility.h"
 
 // <Windows.h>, which this plugin's CommonLib build includes, maps PlaySound to PlaySoundA.
 #ifdef PlaySound
@@ -54,7 +55,11 @@ namespace SKYBSettingsMenu
 			fxDelegate->Release();
 		});
 		if (!loaded) {
-			Log::ERROR("settings menu: Interface\\{}.swf failed to load", FILE_NAME);
+			//Closed at once: a menu without its movie would sit invisible and modal.
+			Log::ERROR("settings menu: Interface\\{}.swf failed to load - closing", FILE_NAME);
+			if (auto queue = RE::UIMessageQueue::GetSingleton()) {
+				queue->AddMessage(MENU_NAME, RE::UI_MESSAGE_TYPE::kHide, nullptr);
+			}
 		}
 
 		// above the journal and the title screen, which stay open underneath
@@ -89,6 +94,10 @@ namespace SKYBSettingsMenu
 		if (!queue || !ui || ui->IsMenuOpen(MENU_NAME)) {
 			return;
 		}
+		if (!ScaleformUtility::MovieExists(FILE_NAME)) {
+			Log::ERROR("settings menu: Interface\\{}.swf not found - not opened", FILE_NAME);
+			return;
+		}
 		Log::INFO("settings menu: opening ({})", Store::GetSingleton()->EditingDefaults() ? "new-game defaults" : "this character");
 		queue->AddMessage(MENU_NAME, RE::UI_MESSAGE_TYPE::kShow, nullptr);
 	}
@@ -110,6 +119,17 @@ namespace SKYBSettingsMenu
 		a_cbReg->Process("SKYBSettings_CaptureCancel", OnCaptureCancel);
 		a_cbReg->Process("SKYBSettings_Close", OnClose);
 		a_cbReg->Process("PlaySound", OnPlaySound);
+	}
+
+	// what Reset sets a row to: its Classic value, or for a volume the category's own default
+	static float ResetValue(const RowDef& a_row)
+	{
+		if (a_row.applier == Applier::kSound) {
+			if (const auto d = SoundService::GetSingleton()->Default(a_row.key)) {
+				return Store::Snap(a_row, *d);
+			}
+		}
+		return a_row.presets[0];
 	}
 
 	void SettingsMenu::Push()
@@ -169,7 +189,7 @@ namespace SKYBSettingsMenu
 			o.SetMember("label", RE::GFxValue(r.label));
 			o.SetMember("desc", RE::GFxValue(std::string(r.label) + "_desc"));
 			o.SetMember("value", RE::GFxValue(static_cast<double>(store->Get(r))));
-			o.SetMember("classic", RE::GFxValue(static_cast<double>(r.presets[0])));
+			o.SetMember("classic", RE::GFxValue(static_cast<double>(ResetValue(r))));
 			o.SetMember("min", RE::GFxValue(static_cast<double>(r.min)));
 			o.SetMember("max", RE::GFxValue(static_cast<double>(r.max)));
 			o.SetMember("step", RE::GFxValue(static_cast<double>(r.step)));
@@ -187,6 +207,8 @@ namespace SKYBSettingsMenu
 			o.SetMember("choices", choices);
 			o.SetMember("scope", RE::GFxValue(r.scope == Scope::kGlobal ? "global" : "save"));
 			o.SetMember("applies", RE::GFxValue(r.applies));
+			//the group's switch: at 0 the menu hides the rest of the group
+			o.SetMember("gate", RE::GFxValue(r.gate));
 			rows.PushBack(o);
 		}
 
@@ -222,23 +244,19 @@ namespace SKYBSettingsMenu
 		}
 	}
 
-	// Every callback is deferred to the UI task queue: it then runs in the
-	// engine's menu-message step, after the movie's current script has returned.
-	// Values, the co-save map and the degradation overrides are only ever touched
-	// there, and Push() builds Scaleform objects. This menu pauses the game, and
-	// for such menus the UI queue is the one that held up in the game
-	// (HotkeyService.cpp has the tally, 2026-10-05). Neither queue means "the
-	// main thread": both are emptied by engine jobs on worker threads.
+	// Every callback is deferred to the main thread's next frame (MainThread::Post), after
+	// the movie's script has returned and on the thread that advances the movie. Values,
+	// the co-save map and the setting overrides are only touched there.
 	void SettingsMenu::OnReady(const RE::FxDelegateArgs&)
 	{
-		SKSE::GetTaskInterface()->AddUITask([] { Push(); });
+		MainThread::Post([] { Push(); });
 	}
 
 	void SettingsMenu::OnStep(const RE::FxDelegateArgs& a_params)
 	{
 		const auto id = ArgString(a_params, 0);
 		const int  dir = ArgDir(a_params, 1);
-		SKSE::GetTaskInterface()->AddUITask([id, dir] {
+		MainThread::Post([id, dir] {
 			if (const auto* row = Store::FindRow(id)) {
 				const float before = Store::GetSingleton()->Get(*row);
 				Store::GetSingleton()->Step(*row, dir);
@@ -254,7 +272,7 @@ namespace SKYBSettingsMenu
 	{
 		const auto cat = ArgString(a_params, 0);
 		const int  dir = ArgDir(a_params, 1);
-		SKSE::GetTaskInterface()->AddUITask([cat, dir] {
+		MainThread::Post([cat, dir] {
 			auto*     store = Store::GetSingleton();
 			const int cur = store->PresetOf(cat);
 			if (cur == Store::kNoPresets) {
@@ -272,10 +290,10 @@ namespace SKYBSettingsMenu
 	void SettingsMenu::OnReset(const RE::FxDelegateArgs& a_params)
 	{
 		const auto id = ArgString(a_params, 0);
-		SKSE::GetTaskInterface()->AddUITask([id] {
+		MainThread::Post([id] {
 			auto* store = Store::GetSingleton();
 			if (const auto* row = Store::FindRow(id)) {
-				store->Set(*row, row->presets[0]);
+				store->Set(*row, ResetValue(*row));
 			} else if (const auto* key = HotkeyService::Find(id)) {
 				HotkeyService::GetSingleton()->Reset(*key);
 			} else if (Store::FindCategory(id)) {
@@ -292,7 +310,7 @@ namespace SKYBSettingsMenu
 	{
 		const auto id = ArgString(a_params, 0);
 		// armed next frame: the press that asked for it is already behind us
-		SKSE::GetTaskInterface()->AddUITask([id] {
+		MainThread::Post([id] {
 			HotkeyService::GetSingleton()->BeginCapture(id);
 			Push();
 		});
@@ -300,12 +318,12 @@ namespace SKYBSettingsMenu
 
 	void SettingsMenu::OnCaptureCancel(const RE::FxDelegateArgs&)
 	{
-		SKSE::GetTaskInterface()->AddUITask([] { HotkeyService::GetSingleton()->CancelCapture(); });
+		MainThread::Post([] { HotkeyService::GetSingleton()->CancelCapture(); });
 	}
 
 	void SettingsMenu::OnClose(const RE::FxDelegateArgs&)
 	{
-		SKSE::GetTaskInterface()->AddUITask([] { HotkeyService::GetSingleton()->CancelCapture(); });
+		MainThread::Post([] { HotkeyService::GetSingleton()->CancelCapture(); });
 		Close();
 	}
 

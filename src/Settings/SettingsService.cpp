@@ -1,6 +1,5 @@
 #include "SettingsService.h"
 #include "SettingsContract.h"
-#include "Papyrus/ModEvents.h"
 #include "Storage/SafeFileWrite.h"
 
 #include <cctype>
@@ -38,9 +37,6 @@ namespace Settings {
 
 	void SettingsService::Register() {
 		Load();
-		if (!ModEvents::AddSink(&s_sink)) {
-			Log::WARN("SettingsService: No mod-event source. The journal's toast toggle will not reach the file.");
-		}
 		Log::INFO("SettingsService: Registered ({} section(s) in {}).", s_order.size(), SettingsContract::FileName);
 	}
 
@@ -173,30 +169,6 @@ namespace Settings {
 
 	void SettingsService::SetInt(std::string_view section, std::string_view key, int value) {
 		SetString(section, key, std::to_string(value));
-	}
-
-	//The Papyrus toast gate (SKYBAchievementFeed.ShowAchievementToast) reads this global,
-	//and the journal's toggle row shows it.
-	void SettingsService::ApplyToGame() {
-		const int toasts = GetInt(SettingsContract::AchievementsSection, SettingsContract::ToastKey, 1);
-		auto* global = RE::TESForm::LookupByEditorID<RE::TESGlobal>(SettingsContract::ToastGlobalEditorID);
-		if (!global) {
-			Log::WARN("SettingsService: {} not found. The toast setting lives in the file only.", SettingsContract::ToastGlobalEditorID);
-			return;
-		}
-		if (static_cast<int>(global->value) != toasts) {
-			global->value = static_cast<float>(toasts);
-			Log::INFO("SettingsService: {} <- {}.", SettingsContract::ToastGlobalEditorID, toasts);
-		}
-	}
-
-	//SKYBAchievementFeed.psc still sets the global itself; this keeps the file in step.
-	RE::BSEventNotifyControl SettingsService::Sink::ProcessEvent(const SKSE::ModCallbackEvent* a_event,
-		RE::BSTEventSource<SKSE::ModCallbackEvent>*) {
-		if (a_event && a_event->eventName == SettingsContract::ModEvent::AchievementNotifyToggle) {
-			SetInt(SettingsContract::AchievementsSection, SettingsContract::ToastKey, a_event->numArg != 0.0f ? 1 : 0);
-		}
-		return RE::BSEventNotifyControl::kContinue;
 	}
 
 }

@@ -1,9 +1,8 @@
-// Moved from SKYBUIDemo.dll into Skyblivion.dll, 2026-10-05 (fold-in, UI integration workspace
-// ledger L-0056). Source of record until then: game\native\SKYBUIDemo\src in that workspace.
 #include "Hotkeys/HotkeyService.h"
 
 #include <charconv>
 
+#include "Platform/MainThread.h"
 #include "SettingsMenu/InterfaceAdapters.h"
 #include "Settings/SettingsService.h"
 
@@ -97,10 +96,8 @@ void HotkeyService::Register() {
 	DropSharedMemberEntries();
 }
 
-// A row that now follows a shared action on every device it had keeps no
-// binding of its own: its old [Hotkeys] entry is dropped (Scott, 2026-09-30:
-// the shared actions start from their defaults). A row that still binds one
-// device keeps its entry; only that device is read.
+// A row that follows a shared action on every device drops its old [Hotkeys]
+// entry; a row that still binds one device keeps it (only that device is read).
 void HotkeyService::DropSharedMemberEntries() {
 	std::size_t n = 0;
 	for (const auto& h : kHotkeys) {
@@ -510,20 +507,10 @@ RE::BSEventNotifyControl HotkeyService::ProcessEvent(const SKSE::ModCallbackEven
 	}
 	std::string menu = arg.substr(0, bar);
 	std::string path = arg.substr(bar + 1);
-	// The reply builds Scaleform objects and calls into the movie, after the asking movie's
-	// current script has returned (it may still be in its first frame). Which of SKSE's two
-	// task queues carries it was settled in the game, 2026-10-02 to 10-05, not by reasoning
-	// (two explanations of mine were refuted there):
-	//   custom menus (they pause the game)   general queue: 4 crashes in 9 opens
-	//                                        UI queue:      10 opens, no crash
-	//   Dialogue Menu (does not pause)       general queue: 11 opens, no crash
-	//                                        UI queue:      a crash in each of 4 sessions
-	// Neither queue is "the main thread": both are emptied by engine jobs on worker threads.
-	// A new asker that does not pause the game probably belongs with the dialogue menu; that
-	// is a guess until it has been tried. The log line says which queue was used and whether
-	// the game was paused, so the next cases can be read off the log.
-	const bool general = menu == "Dialogue Menu";
-	auto reply = [this, menu, path, general] {
+	// Replies on the main thread at the start of the next frame, after the asking movie's
+	// script has returned. SKSE's task queues are also drained on worker threads, which
+	// would race the main thread advancing the movie.
+	auto reply = [this, menu, path] {
 		auto ui = RE::UI::GetSingleton();
 		auto m = ui ? ui->GetMenu(menu) : nullptr;
 		auto movie = m ? m->uiMovie : nullptr;
@@ -535,13 +522,9 @@ RE::BSEventNotifyControl HotkeyService::ProcessEvent(const SKSE::ModCallbackEven
 		RE::GFxValue map;
 		BuildMap(movie.get(), map);
 		const bool ok = movie->Invoke(path.c_str(), nullptr, &map, 1);
-		Log::INFO("hotkeys: sent to {} ({}) -> {} [{} queue, game {}]", menu, path, ok ? "delivered" : "NOT delivered",
-					 general ? "general" : "UI", paused ? "paused" : "running");
+		Log::INFO("hotkeys: sent to {} ({}) -> {} [main thread, game {}]", menu, path, ok ? "delivered" : "NOT delivered",
+					 paused ? "paused" : "running");
 	};
-	if (general) {
-		SKSE::GetTaskInterface()->AddTask(reply);
-	} else {
-		SKSE::GetTaskInterface()->AddUITask(reply);
-	}
+	MainThread::Post(reply);
 	return RE::BSEventNotifyControl::kContinue;
 }

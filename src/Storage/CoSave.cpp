@@ -6,7 +6,7 @@
 namespace Storage::CoSave {
 
 	namespace {
-		//The plugin's co-save id (SpellMakingStore's before the stores shared it).
+		//The plugin's co-save id, shared by every store.
 		constexpr std::uint32_t kUniqueID = 'SKYB';
 
 		std::vector<Store>& Stores() {

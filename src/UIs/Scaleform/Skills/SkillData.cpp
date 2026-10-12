@@ -67,7 +67,7 @@ namespace Skills::SkillData {
 				continue;
 			}
 			RE::BSString description;
-			//Null parent, as in the retired DLL, which resolved description tags with no parent form.
+			//Description tags are resolved with no parent form.
 			perk->GetDescription(description, nullptr);
 			const char* fullName = perk->GetFullName();
 			perks.push_back(MasteryPerk{

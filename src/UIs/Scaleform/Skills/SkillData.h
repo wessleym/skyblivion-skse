@@ -10,8 +10,7 @@
 //the skills menu's feed (SkillsFeed) and the skill sheet's (SkillSheetFeed).
 namespace Skills::SkillData {
 	//Oblivion's skill categories, alphabetical within each.
-	//Matches the retired SkyblivionUI.dll, SKYBAttributeUtility.GetAllSkillStrings
-	//and the order of SKYBMasteryPerkList's inner lists.
+	//Matches the order of SKYBMasteryPerkList's inner lists.
 	inline constexpr std::array<RE::ActorValue, 18> kSkillOrder{
 		RE::ActorValue::kArchery,     RE::ActorValue::kBlock,       RE::ActorValue::kHeavyArmor,
 		RE::ActorValue::kOneHanded,   RE::ActorValue::kSmithing,    RE::ActorValue::kTwoHanded,

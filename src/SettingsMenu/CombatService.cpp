@@ -1,11 +1,9 @@
-// Moved from SKYBUIDemo.dll into Skyblivion.dll, 2026-10-05 (fold-in, UI integration workspace
-// ledger L-0056). Source of record until then: game\native\SKYBUIDemo\src in that workspace.
 #include "SettingsMenu/CombatService.h"
 
 namespace {
 	constexpr std::array<const char*, 6> kLevels = {"VE", "E", "N", "H", "VH", "L"};
-	constexpr std::string_view           kPlugin = "SKYBCombat.esp";
-	constexpr RE::FormID                 kAllyPerk = 0x800;
+	//by editor ID: the perk may ship in SKYBCombat.esp, SKYBCombined.esp or the ESM
+	constexpr const char*                kAllyPerk = "SKYBCombatAllyPerk";
 }
 
 CombatService* CombatService::GetSingleton() {
@@ -23,16 +21,17 @@ void CombatService::Register() {
 				Log::WARN("combat: game setting {} not found - that difficulty level is left alone", name);
 				continue;
 			}
-			(*arr)[i] = {s, s->GetFloat()};
+			//every difficulty level deals and takes x1: the settings menu's Damage rows are the only scale
+			//(the vanilla difficulty option is hidden in the journal and the title screen)
+			Log::INFO("combat: {} was {} - now 1 (times the Damage row)", name, s->GetFloat());
+			(*arr)[i] = {s, 1.0f};
 		}
 	}
-	Log::INFO("combat: difficulty bases dealt/taken VE {}/{} N {}/{} L {}/{}", _byPC[0].base, _toPC[0].base,
-				 _byPC[2].base, _toPC[2].base, _byPC[5].base, _toPC[5].base);
 
 	auto* dh = RE::TESDataHandler::GetSingleton();
-	auto* perk = dh ? dh->LookupForm<RE::BGSPerk>(kAllyPerk, kPlugin) : nullptr;
+	auto* perk = dh ? RE::TESForm::LookupByEditorID<RE::BGSPerk>(kAllyPerk) : nullptr;
 	if (!perk) {
-		Log::WARN("combat: {} not active - the damage rows reach the player only, not allies", kPlugin);
+		Log::WARN("combat: perk {} not found in any loaded plugin - the damage rows reach the player only, not allies", kAllyPerk);
 	} else {
 		for (auto* e : perk->perkEntries) {
 			if (!e || e->GetType() != RE::PERK_ENTRY_TYPE::kEntryPoint) {
@@ -66,9 +65,6 @@ void CombatService::Register() {
 			Log::ERROR("combat: SKYBCombatAllyPerk is missing one of its four entries - allies untouched");
 			_incomingWeapon = _outgoingWeapon = _incomingSpell = _outgoingSpell = nullptr;
 		} else {
-			// Distribution is Scott's (2026-09-29): whoever should count as an
-			// ally carries the perk from the data; this service only writes
-			// the four values.
 			Log::INFO("combat: SKYBCombatAllyPerk {:08X} found - values written here, distribution is in the data",
 						 perk->GetFormID());
 		}

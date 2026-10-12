@@ -1,32 +1,22 @@
 #pragma once
-// Moved from SKYBUIDemo.dll into Skyblivion.dll, 2026-10-05 (fold-in, UI integration workspace
-// ledger L-0056). Source of record until then: game\native\SKYBUIDemo\src in that workspace.
 #include <cstdint>
 #include <string>
 #include <string_view>
 #include <unordered_map>
 #include <vector>
-// Progression › Economy rows of the settings menu.
+// Progression > Economy rows of the settings menu.
 //
-//   Gold.Loot      every Gold001 entry of a loot leveled list (containers,
-//                  urns, pockets, bodies - vanilla lists included, some loot
-//                  gold runs through them) = its data-load count x the row
-//   Gold.Merchant  every Gold001 entry of a merchant list (SKYBLLVendorGold*,
-//                  vanilla VendorGold*) the same way
-//                  Lists whose editor ID names investments, quest rewards
-//                  or perk rewards (Invest, Reward, PerkMasterTrader, GoldBonus,
-//                  BelovedLaborer, MasterGold) are left alone. Classified
-//                  by editor ID (po3 Tweaks loads them); the log lists the
-//                  counts per class.
-//   Price.Buy/Sell SKYBEconomy.esp PERK 000800 SKYBEconomyPerk (the player's):
-//                  its ModBuyPrices / ModSellPrices Multiply values. The
-//                  player is given the perk on every game load if missing.
-//   chance-none    SetChanceNone scales the DROP chance (100 - value) of
-//                  leveled-list chance-none globals (enchanted gear gate,
-//                  the SKYBLootChance* rarity dials) from their data-load
-//                  (Skyblivion.esm) values.
-// Leveled lists roll when a container / body is generated, so gold and loot
-// rows reach loot not rolled yet; merchant gold as merchants restock.
+//   Gold.Loot      every Gold001 entry of a loot leveled list (vanilla lists
+//                  included) = its data-load count x the row
+//   Gold.Merchant  the same for merchant lists (SKYBLLVendorGold*, VendorGold*)
+//                  Lists are classified by editor ID (loaded by po3 Tweaks);
+//                  investment and quest / perk reward lists are left alone.
+//   Price.Buy/Sell the ModBuyPrices / ModSellPrices Multiply values of
+//                  SKYBEconomyPerk, given to the player on every game load.
+//   chance-none    SetChanceNone scales the drop chance (100 - value) of
+//                  leveled-list chance-none globals from their data-load values.
+// Leveled lists roll when a container or body is generated, so the rows reach loot
+// not rolled yet, and merchant gold as merchants restock.
 class EconomyService {
 public:
 	static EconomyService* GetSingleton();

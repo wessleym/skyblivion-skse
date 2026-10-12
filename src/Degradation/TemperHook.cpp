@@ -1,5 +1,3 @@
-// Moved from SKYBDegradation.dll into Skyblivion.dll, 2026-10-05 (fold-in, UI integration workspace
-// ledger L-0058). Source of record until then: game\native\SKYBDegradation\src in that workspace.
 #include "Degradation/TemperHook.h"
 
 #include "Degradation/Condition.h"
@@ -85,7 +83,7 @@ namespace SKYBDeg::TemperHook
 			REL::ID        target;     // vanilla callee
 		};
 
-		// 1.6.1170 offsets (the runtime dump); other AE builds are searched (Locate).
+		// 1.6.1170 offsets; other AE builds are searched (Locate).
 		const Site kHealth44100{ "combat weapon health", REL::ID(44100), 0x2CC, REL::ID(15990) };
 		const Site kDamage44100{ "combat weapon damage", REL::ID(44100), 0x2F8, REL::ID(26410) };
 		const Site kHealth40253{ "display damage health", REL::ID(40253), 0x26, REL::ID(15990) };
@@ -109,10 +107,10 @@ namespace SKYBDeg::TemperHook
 		}
 
 		// Where to patch the site on this runtime, or nothing.
-		//   1.6.1170  exactly the dumped offset, holding the vanilla call (as before the fold-in);
-		//   other AE  the dumped offset if it holds the vanilla call, else the ONE call to the
+		//   1.6.1170  exactly the known offset, holding the vanilla call;
+		//   other AE  the known offset if it holds the vanilla call, else the ONE call to the
 		//             expected callee in the function's first kScanBytes (code moves between builds).
-		// A call to anything else at the dumped offset means another mod hooked it: no search then.
+		// A call to anything else at the known offset means another mod hooked it: no search then.
 		std::optional<std::uintptr_t> Locate(const Site& a_site, bool a_exactBuild)
 		{
 			const auto func = a_site.func.address();
@@ -151,8 +149,8 @@ namespace SKYBDeg::TemperHook
 		}
 	}
 
-	// Version-safe (fold-in, L-0058): the sites are AE ids and AE code, so SE and VR are left alone
-	// (condition below 100% has no stat effect there). Nothing is patched unless all seven are found.
+	// The sites are AE ids and AE code, so SE and VR are left alone (condition below 100% has
+	// no stat effect there). Nothing is patched unless all seven are found.
 	bool Install()
 	{
 		const auto version = REL::Module::get().version();
@@ -175,7 +173,7 @@ namespace SKYBDeg::TemperHook
 			at[i] = *found;
 		}
 
-		SKSE::AllocTrampoline(1 << 8);
+		//The plugin's one trampoline, allocated in Plugin::OnLoad (shared with the frame hook).
 		auto& t = SKSE::GetTrampoline();
 		t.write_call<5>(at[0], Health);
 		g_damage44100 = t.write_call<5>(at[1], Damage44100);

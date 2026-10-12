@@ -1,7 +1,6 @@
 #pragma once
 
-//The character sheet's faction feed: the Character menu of the new menus.
-//Replaces FactionsContract's event when the old character menu retires.
+//The character sheet's faction feed.
 namespace Factions::CharFactionsContract {
 	//Character sheet -> C++:
 	namespace ModEvent {

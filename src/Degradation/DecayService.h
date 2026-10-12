@@ -1,6 +1,4 @@
 #pragma once
-// Moved from SKYBDegradation.dll into Skyblivion.dll, 2026-10-05 (fold-in, UI integration workspace
-// ledger L-0058). Source of record until then: game\native\SKYBDegradation\src in that workspace.
 #include <algorithm>
 #include <array>
 #include <charconv>
@@ -23,7 +21,7 @@
 //   player takes an unblocked hit  -> ArmorPiecesPerHit (INI) random worn armor pieces
 // Loss per event = base rate x category mult x RateMult (INI) x material
 // x curve(condition) x (power / bash / sneak / attacker-damage scaling),
-// floored at QualityMin (INI). NPC gear is untouched in this experiment.
+// floored at QualityMin (INI). NPC gear does not wear.
 namespace SKYBDeg
 {
 	class DecayService : public RE::BSTEventSink<RE::TESHitEvent>
