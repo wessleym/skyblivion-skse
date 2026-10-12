@@ -1,27 +1,20 @@
 #pragma once
-// Moved from SKYBUIDemo.dll into Skyblivion.dll, 2026-10-05 (fold-in, UI integration workspace
-// ledger L-0056). Source of record until then: game\native\SKYBUIDemo\src in that workspace.
 #include <array>
 #include <string>
 #include <string_view>
 // Combat > Damage rows of the settings menu: damage taken / dealt by the player
 // and, optionally, the player's allies.
 //
-//   player  the engine's own difficulty multipliers. Every level of
-//           fDiffMultHPByPC{VE,E,N,H,VH,L} (damage the player deals) and
-//           fDiffMultHPToPC{..} (damage the player takes) becomes its
-//           value at data load x the menu's multiplier, so the multipliers
-//           stack with the game's difficulty and cover weapons and spells.
-//           Game settings are not saved: SettingsStore re-applies on every
-//           load.
-//   allies  SKYBCombat.esp PERK 000800 SKYBCombatAllyPerk (hidden). Scott
-//           distributes it in the data (not this DLL). Its four Multiply
-//           entries - weapons taken / dealt, damaging spells taken / dealt -
-//           fire only for player teammates and commanded actors (summons,
-//           reanimated dead); this service writes their values.
-//           "Allies Follow These Rules" off = all four at 1.0.
+//   player  every level of fDiffMultHPByPC{VE,E,N,H,VH,L} (damage dealt) and
+//           fDiffMultHPToPC{..} (damage taken) = its data-load value x the row,
+//           so the rows stack with difficulty and cover weapons and spells.
+//           Game settings are not saved: SettingsStore re-applies on every load.
+//   allies  the four Multiply entries of SKYBCombatAllyPerk (weapons and damaging
+//           spells, taken / dealt), which fire only for player teammates and
+//           commanded actors. The game data distributes the perk; this service
+//           writes its values. "Allies Follow These Rules" off = all four at 1.0.
 //
-// Missing SKYBCombat.esp = the player half still works; the log says so.
+// Without the perk the player half still works; the log says so.
 class CombatService {
 public:
 	static CombatService* GetSingleton();

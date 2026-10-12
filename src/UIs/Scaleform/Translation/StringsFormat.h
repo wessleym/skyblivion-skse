@@ -54,9 +54,9 @@ namespace StringsFormat {
 	// Tab is the separator and everything after it is the value VERBATIM,
 	// edge spaces included, as in the engine's own translation files.
 	// Menus concatenate around them: the character sheet shows "Fame : " +
-	// number, the class menu "+5" + " To the highlighted attributes". (Until
-	// 2026-09-22 the whole line was trimmed first, which removed those spaces
-	// and made "$KEY<TAB>" lose its tab and be skipped.) '=' is accepted when
+	// number, the class menu "+5" + " To the highlighted attributes". The line
+	// is not trimmed first: that would remove those spaces and make "$KEY<TAB>"
+	// lose its tab and be skipped. '=' is accepted when
 	// no tab is present, so a hand-edited line without a tab still parses; that
 	// form IS trimmed, so "KEY = Value" yields key "KEY" and value "Value".
 	inline Line Parse(const std::string& line, std::string& key, std::string& value) {

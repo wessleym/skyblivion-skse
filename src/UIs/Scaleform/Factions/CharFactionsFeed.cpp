@@ -2,6 +2,7 @@
 #include "CharFactionsContract.h"
 #include "FactionData.h"
 #include "Papyrus/ModEvents.h"
+#include "Platform/MainThread.h"
 #include "UIs/Scaleform/ScaleformUtility.h"
 
 #include <chrono>
@@ -49,9 +50,9 @@ namespace Factions {
 
 	RE::BSEventNotifyControl CharFactionsFeed::Sink::ProcessEvent(const SKSE::ModCallbackEvent* a_event,
 		RE::BSTEventSource<SKSE::ModCallbackEvent>*) {
-		//A UI task, not AddTask: the sheet is a custom menu (see SkillSheetFeed).
+		//On the main thread, next frame (see SkillSheetFeed).
 		if (a_event && a_event->eventName == CharFactionsContract::ModEvent::RequestFactions) {
-			SKSE::GetTaskInterface()->AddUITask([request = ModEvents::StrArg(*a_event)] { PushFactions(request); });
+			MainThread::Post([request = ModEvents::StrArg(*a_event)] { PushFactions(request); });
 		}
 		return RE::BSEventNotifyControl::kContinue;
 	}

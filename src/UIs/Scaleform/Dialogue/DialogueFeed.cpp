@@ -3,6 +3,7 @@
 #include "DialogueServices.h"
 #include "Disposition/DispositionSystem.h"
 #include "Papyrus/ModEvents.h"
+#include "Platform/MainThread.h"
 #include "UIs/Scaleform/ScaleformUtility.h"
 #include "UIs/UISystem.h"
 
@@ -170,13 +171,8 @@ namespace Dialogue {
 			return RE::BSEventNotifyControl::kContinue;
 		}
 		if (a_event->eventName == DialogueContract::ModEvent::RequestDialogueData) {
-			//Two hops on the general task queue, as SKYBUIDemo's dialogue feed answered (22 conversations
-			//without a crash, 2026-10-05). Answered on the first hop, the menu crashed in Scaleform as it
-			//opened (2026-10-05, the first conversation with this feed as the only answer). The dialogue
-			//menu does not pause the game; on the UI task queue it crashed in each of four sessions.
-			SKSE::GetTaskInterface()->AddTask([request = ModEvents::StrArg(*a_event)] {
-				SKSE::GetTaskInterface()->AddTask([request] { PushDialogueData(request); });
-			});
+			//Built on the main thread, next frame: SKSE's task queues can run on worker threads and race the menu.
+			MainThread::Post([request = ModEvents::StrArg(*a_event)] { PushDialogueData(request); });
 		}
 		else if (a_event->eventName == DialogueContract::ModEvent::OpenPersuasion) {
 			SKSE::GetTaskInterface()->AddTask([] { OpenPersuasion(); });

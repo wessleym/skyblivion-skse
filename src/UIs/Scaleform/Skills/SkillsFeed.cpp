@@ -2,6 +2,7 @@
 #include "SkillData.h"
 #include "SkillsContract.h"
 #include "Papyrus/ModEvents.h"
+#include "Platform/MainThread.h"
 #include "UIs/Scaleform/ScaleformUtility.h"
 
 #include <chrono>
@@ -87,11 +88,11 @@ namespace Skills {
 			return RE::BSEventNotifyControl::kContinue;
 		}
 		if (a_event->eventName == SkillsContract::ModEvent::RequestSkillData) {
-			SKSE::GetTaskInterface()->AddTask([request = ModEvents::StrArg(*a_event)] { PushSkillData(request); });
+			MainThread::Post([request = ModEvents::StrArg(*a_event)] { PushSkillData(request); });
 		}
 		else if (a_event->eventName == SkillsContract::ModEvent::RequestMasteryPerks) {
 			const int skillIndex = static_cast<int>(a_event->numArg);
-			SKSE::GetTaskInterface()->AddTask([request = ModEvents::StrArg(*a_event), skillIndex] { PushMasteryPerks(request, skillIndex); });
+			MainThread::Post([request = ModEvents::StrArg(*a_event), skillIndex] { PushMasteryPerks(request, skillIndex); });
 		}
 		return RE::BSEventNotifyControl::kContinue;
 	}

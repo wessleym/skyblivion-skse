@@ -1,6 +1,4 @@
 #pragma once
-// Moved from SKYBUIDemo.dll into Skyblivion.dll, 2026-10-05 (fold-in, UI integration workspace
-// ledger L-0056). Source of record until then: game\native\SKYBUIDemo\src in that workspace.
 #include <cstdint>
 #include <mutex>
 #include <string>
@@ -15,18 +13,17 @@
 //           character (UI, hotkeys, accessibility)
 //   save    this service's SKSE co-save record, one set per character
 //           (progression, combat). On the title screen (no character loaded)
-//           a save row edits the NEW-GAME DEFAULTS instead:
+//           a save row edits the new-game defaults instead:
 //           SKYBSettings.ini [SettingsMenuNewGame] <id>=<value>
 //
-// A value never written anywhere is the row's Classic preset. A save loaded
-// without our record (an older save, or a new game) takes the new-game
-// defaults at that moment and keeps them from then on.
+// A value never written is the row's Classic preset. A save loaded without
+// this record (an older save, or a new game) takes the new-game defaults then
+// and keeps them.
 //
-// Appliers: after every change and on every game load/new game each value is
-// pushed to whoever acts on it: the degradation system (SKYBDeg::Settings::
-// SetOverride, a direct call since both moved into Skyblivion.dll), CombatService, InterfaceAdapters
-// (moreHUD globals, QuickLoot properties) and SettingsService (rows that
-// mirror an existing SKYBSettings.ini key read and write that key itself).
+// After every change and on every game load each value is pushed to what acts
+// on it: SKYBDeg::Settings, Persuasion::Settings, CombatService, EconomyService,
+// InterfaceAdapters (moreHUD globals, QuickLoot properties) and SettingsService
+// (rows that mirror an existing SKYBSettings.ini key read and write that key).
 #include "SettingsMenu/SettingsMenuTable.h"
 
 namespace SKYBSettingsMenu
@@ -48,6 +45,9 @@ namespace SKYBSettingsMenu
 		void                Set(const RowDef& a_row, float a_value);
 		void                Step(const RowDef& a_row, int a_dir);  // number: +-step (clamped); toggle/choice: wraps
 		void                ApplyPreset(std::string_view a_category, std::size_t a_preset);
+		// The category's save rows take the preset on the character now loaded (the new-game panel's
+		// choice, after OnGameReady), whatever menu is open.
+		void                ApplyPresetToCharacter(std::string_view a_category, std::size_t a_preset);
 
 		// Preset the category's rows match right now: 0..kPresetCount-1,
 		// kCustom when they match none, kNoPresets for categories without them.

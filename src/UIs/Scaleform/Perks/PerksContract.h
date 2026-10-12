@@ -12,10 +12,10 @@ namespace PerksView::PerksContract {
 		//strArg: "treeId^perkId^HEX|Plugin^currencyType[^globalEditorId]". numArg: the rank record's form ID.
 		//Papyrus adds the perk; C++ deducts its cost (PerkCurrency).
 		inline constexpr const char* Acquire = "SKYBUIPerkAcquire";
-		//strArg: a menu tab. The menu-switching event the new tab strip sends; Papyrus
-		//(SKYBUIUtility) opens the menu it names. It replaces SKYBUIOpenCustomMenu, which the
-		//dispatcher also still answers while the old menus send it.
+		//strArg: a menu tab. SKYBUIUtility.psc opens the menu it names.
 		inline constexpr const char* MenuSwitch = "SKYBMenuSwitch";
+		//strArg: "menu|function". Calls the right thumbstick into function(x, y) while that menu is open (PerkStick).
+		inline constexpr const char* WatchStick = "SKYBPerkWatchStick";
 	}
 
 	namespace Menu {

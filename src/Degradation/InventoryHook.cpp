@@ -1,5 +1,3 @@
-// Moved from SKYBDegradation.dll into Skyblivion.dll, 2026-10-05 (fold-in, UI integration workspace
-// ledger L-0058). Source of record until then: game\native\SKYBDegradation\src in that workspace.
 #include "Degradation/InventoryHook.h"
 
 #include "Degradation/Condition.h"

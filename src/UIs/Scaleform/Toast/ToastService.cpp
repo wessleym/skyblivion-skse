@@ -1,6 +1,7 @@
 #include "ToastService.h"
 #include "ToastContract.h"
 #include "Papyrus/ModEvents.h"
+#include "Platform/MainThread.h"
 #include "UIs/Scaleform/ScaleformUtility.h"
 
 #include <string_view>
@@ -68,7 +69,7 @@ namespace Toast {
 	}
 
 	void ToastService::EnsureInjected() {
-		SKSE::GetTaskInterface()->AddUITask([] {
+		MainThread::Post([] {
 			auto movie = HudMovie();
 			if (movie && !IsClipReady(*movie)) {
 				InjectClip(*movie);

@@ -2,6 +2,7 @@
 #include "SkillData.h"
 #include "SkillSheetContract.h"
 #include "Papyrus/ModEvents.h"
+#include "Platform/MainThread.h"
 #include "UIs/Scaleform/ScaleformUtility.h"
 
 #include <algorithm>
@@ -99,14 +100,13 @@ namespace Skills {
 		if (!a_event) {
 			return RE::BSEventNotifyControl::kContinue;
 		}
-		//UI tasks, not AddTask: the sheet is a custom menu, which pauses the game,
-		//and answers queued on the general task list crashed custom menus while they opened.
+		//Built on the main thread, next frame: SKSE's UI task queue can run on worker threads.
 		if (a_event->eventName == SkillSheetContract::ModEvent::RequestSheet) {
-			SKSE::GetTaskInterface()->AddUITask([request = ModEvents::StrArg(*a_event)] { PushSheet(request); });
+			MainThread::Post([request = ModEvents::StrArg(*a_event)] { PushSheet(request); });
 		}
 		else if (a_event->eventName == SkillSheetContract::ModEvent::RequestMastery) {
 			const int actorValue = static_cast<int>(a_event->numArg);
-			SKSE::GetTaskInterface()->AddUITask([request = ModEvents::StrArg(*a_event), actorValue] { PushMastery(request, actorValue); });
+			MainThread::Post([request = ModEvents::StrArg(*a_event), actorValue] { PushMastery(request, actorValue); });
 		}
 		return RE::BSEventNotifyControl::kContinue;
 	}

@@ -2,7 +2,9 @@
 #include "BribeEconomy.h"
 #include "PersuasionContract.h"
 #include "DialogueSession.h"
+#include "PersuasionBribery.h"
 #include "PersuasionPreferences.h"
+#include "PersuasionRules.h"
 #include "Disposition/DispositionSystem.h"
 #include "Actors/ActorExpression.h"
 
@@ -16,41 +18,10 @@ namespace Persuasion {
 	RE::FormID PersuasionView::s_currentTargetFormID = 0;
 
 	namespace {
-		struct BribeInputs {
-			float disposition;
-			float playerSpeech;
-			float npcSpeech;
-			int   playerLevel;
-			int   npcLevel;
-		};
+		//The rules of the conversation in progress: settings, the settings menu's overrides and the
+		//player's perk and skill modifiers, resolved when the wheel opens.
+		Effective s_effective{};
 
-		// Get the bribe inputs. Returns false and logs if the speech ActorValue owners can't be found.
-		bool GetBribeInputs(RE::Actor* actor, RE::PlayerCharacter* player, float disposition, BribeInputs& out) {
-			auto* avNpc = REBridge::AVOwner(actor);
-			auto* avPlayer = REBridge::AVOwner(player);
-			if (!avNpc || !avPlayer) {
-				Log::WARN("PersuasionView::OnBribe: ActorValueOwner was null.");
-				return false;
-			}
-			out.disposition = disposition;
-			out.playerSpeech = avPlayer->GetActorValue(RE::ActorValue::kSpeech);
-			out.npcSpeech = avNpc->GetActorValue(RE::ActorValue::kSpeech);
-			out.playerLevel = player->GetLevel();
-			out.npcLevel = actor->GetLevel();
-			return true;
-		}
-
-		// Removes gold from the player. Returns false and logs if the gold form is missing.
-		bool ChargeGold(RE::PlayerCharacter* player, int price) {
-			auto* goldForm = RE::TESForm::LookupByID(0x0000000F);//gold
-			auto* goldBoundObj = goldForm ? goldForm->As<RE::TESBoundObject>() : nullptr;
-			if (!goldBoundObj) {
-				Log::ERROR("PersuasionView::OnBribe: Gold001 (0x0000000F) Form Missing");
-				return false;
-			}
-			player->RemoveItem(goldBoundObj, price, RE::ITEM_REMOVE_REASON::kRemove, nullptr, nullptr);
-			return true;
-		}
 	}
 
 	void PersuasionView::Initialize(const PrismaUIService& service) {
@@ -95,10 +66,13 @@ namespace Persuasion {
 		for (const auto& [action, pref] : prefs) {
 			preferences[std::string(action)] = std::string(pref);
 		}
+		//Settings, menu overrides and this player's perk rules, as they stand right now.
+		s_effective = Rules::Resolve();
 		const nlohmann::json payload = {
 			{ "name", name },
 			{ "disposition", disposition },
-			{ "preferences", preferences }
+			{ "preferences", preferences },
+			{ "rules", Rules::ToJson(s_effective) }
 		};
 
 		DialogueSession::Start(target);
@@ -178,27 +152,24 @@ namespace Persuasion {
 			return;
 		}
 
-		BribeInputs inputs;
-		if (!GetBribeInputs(actor, player, std::strtof(disposition, nullptr), inputs)) {
+		//One bribe under the conversation's rules, shared with the Scaleform menu.
+		const float before = std::strtof(disposition, nullptr);
+		const BribeAttempt attempt = Bribery::Attempt(actor, before, s_effective);
+		if (attempt.success) {
+			SendBribeResult(true, attempt.price, attempt.gain, attempt.disposition, "");
 			return;
 		}
-
-		const BribeEconomy::Outcome outcome = BribeEconomy::Calculate(inputs.disposition, inputs.playerSpeech, inputs.npcSpeech, inputs.playerLevel, inputs.npcLevel);
-
-		if (player->GetGoldAmount() < outcome.price) {
-			SendBribeResult(false, outcome.price, 0, inputs.disposition, "Not Enough Gold");
-			return;
+		switch (attempt.reason) {
+		case BribeAttempt::Reason::kDisabled:
+			SendBribeResult(false, 0, 0, before, "No bribes");
+			break;
+		case BribeAttempt::Reason::kNoGold:
+			SendBribeResult(false, attempt.price, 0, before, "Not Enough Gold");
+			break;
+		default:
+			SendBribeResult(false, attempt.price, 0, before, "Bribe failed");
+			break;
 		}
-		if (!ChargeGold(player, outcome.price)) {
-			return;
-		}
-
-		const float newDisposition = std::min(BribeEconomy::kDispositionMax, inputs.disposition + static_cast<float>(outcome.gain));
-		SetDisposition(actor, newDisposition);
-		SendBribeResult(true, outcome.price, outcome.gain, newDisposition, "");
-
-		Log::INFO("PersuasionView::OnBribe: price={}, gain={}, disposition={} -> {} (playerLevel={}, npcLevel={}, playerSpeech={}, npcSpeech={})",
-			outcome.price, outcome.gain, inputs.disposition, newDisposition, inputs.playerLevel, inputs.npcLevel, inputs.playerSpeech, inputs.npcSpeech);
 	}
 
 	void PersuasionView::SendBribeResult(bool success, int price, int gain, float disposition, const char* reason) {

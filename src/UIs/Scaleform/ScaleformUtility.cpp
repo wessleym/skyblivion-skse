@@ -1,5 +1,6 @@
 #include "ScaleformUtility.h"
 #include "Papyrus/ModEvents.h"
+#include "Platform/MainThread.h"
 
 #include <thread>
 
@@ -12,13 +13,18 @@ RE::GPtr<RE::GFxMovieView> ScaleformUtility::OpenMenuMovie(std::string_view menu
 	return menu ? menu->uiMovie : nullptr;
 }
 
+bool ScaleformUtility::MovieExists(std::string_view a_name) {
+	RE::BSResourceNiBinaryStream swf{ std::format("Interface/{}.swf", a_name) };
+	return swf.good();
+}
+
 long long ScaleformUtility::MicrosecondsSince(std::chrono::steady_clock::time_point start) {
 	return std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now() - start).count();
 }
 
 void ScaleformUtility::RetryOnUIThread(int attempts, std::chrono::milliseconds interval,
 	std::function<bool()> attempt, std::function<void()> onGiveUp) {
-	SKSE::GetTaskInterface()->AddUITask([attempts, interval, attempt, onGiveUp] {
+	MainThread::Post([attempts, interval, attempt, onGiveUp] {
 		if (attempt()) {
 			return;
 		}
