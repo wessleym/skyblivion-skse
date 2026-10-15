@@ -30,5 +30,5 @@ private:
     static void LookUpRaces();
     static float CalcDisposition(RE::Actor* npc);
     static bool RaceAllowsPlayerDialogue(RE::Actor* actor);
-    static void PapyrusSetActorValue(RE::TESObjectREFR* a_ref, RE::BSFixedString valueName, float value, bool force);
+    static void PapyrusSetActorValue(RE::Actor* target, RE::ActorValue av, float value, bool force);
 };

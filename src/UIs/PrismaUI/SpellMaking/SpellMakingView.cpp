@@ -57,12 +57,10 @@ namespace SpellMaking {
 		Log::INFO("SpellMakingView::OnBuy: Created {} ({:08X}), {} Effect(s), Magicka Cost {}, Charged {} Gold.",
 			recipe.name, spell->GetFormID(), spell->effects.size(), recipe.magickaCost, goldPrice);
 
-		if (auto* vm = RE::BSScript::Internal::VirtualMachine::GetSingleton()) {
-			const std::string notification = std::format("Congratulations! You have created a new spell: {}", recipe.name);//matches Oblivion message
-			auto* args = RE::MakeFunctionArguments(RE::BSFixedString{ notification.c_str() });
-			RE::BSTSmartPointer<RE::BSScript::IStackCallbackFunctor> callback;
-			vm->DispatchStaticCall("Debug", "Notification", args, callback);
-		}
+		//<NEB>! This should be a game setting to make translations easier
+		std::string notification = std::format("Congratulations! You have created a new spell: {}", recipe.name);//matches Oblivion message
+
+		RE::SendHUDMessage::ShowHUDMessage(notification.c_str());
 
 		Close();
 	}

@@ -56,16 +56,6 @@ namespace Translation {
 			return std::nullopt;
 		}
 
-		//Papyrus Debug.Notification: this CommonLib has no native notification helper.
-		void Notify(const std::string& message) {
-			auto* vm = RE::BSScript::Internal::VirtualMachine::GetSingleton();
-			if (!vm) {
-				return;
-			}
-			auto* args = RE::MakeFunctionArguments(RE::BSFixedString(message));
-			RE::BSTSmartPointer<RE::BSScript::IStackCallbackFunctor> callback;
-			vm->DispatchStaticCall("Debug", "Notification", args, callback);
-		}
 
 		void StripUtf8Bom(std::string& line) {
 			if (line.size() >= 3 && static_cast<unsigned char>(line[0]) == 0xEF &&
@@ -212,11 +202,15 @@ namespace Translation {
 	RE::BSEventNotifyControl TranslationService::Sink::ProcessEvent(const SKSE::ModCallbackEvent* a_event,
 		RE::BSTEventSource<SKSE::ModCallbackEvent>*) {
 		if (a_event && a_event->eventName == TranslationContract::ModEvent::ReloadStrings) {
+			//<NEB>? Why does this need to be a task?
 			SKSE::GetTaskInterface()->AddTask([] {
 				const int applied = Reload();
-				Notify(applied >= 0
+				//<NEB>! This should be a game setting to make translations easier
+				std::string notification = applied >= 0
 					? std::format("Skyblivion: {} strings reloaded", applied)
-					: std::string("Skyblivion: String reload failed (see log)"));
+					: std::string("Skyblivion: String reload failed (see log)");
+
+				RE::SendHUDMessage::ShowHUDMessage(notification.c_str());
 			});
 		}
 		return RE::BSEventNotifyControl::kContinue;

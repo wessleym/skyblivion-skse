@@ -202,25 +202,27 @@ int DispositionSystem::GetDispositionActorValue(RE::Actor* actor) {
 }
 
 void DispositionSystem::SetDispositionActorValue(RE::Actor* actor, float value, bool force) {
-	PapyrusSetActorValue(actor, kDispositionAVName, value, force);
+	PapyrusSetActorValue(actor, kDispositionAV, value, force);
 }
 
 // Actor values set directly through SKSE are not saved, so they are lost when the game is
 // reloaded. The value is calculated in SKSE and set through a Papyrus call, which persists.
-void DispositionSystem::PapyrusSetActorValue(RE::TESObjectREFR* a_ref, RE::BSFixedString valueName, float value, bool force) {
-	auto actor = a_ref ? a_ref->As<RE::Actor>() : nullptr;
-	if (!actor || valueName.empty()) {
+void DispositionSystem::PapyrusSetActorValue(RE::Actor* target, RE::ActorValue av, float value, bool force) {
+	
+	if (!target || av == RE::ActorValue::kNone) {
 		return;
 	}
 
-	auto vm = RE::BSScript::Internal::VirtualMachine::GetSingleton();
-	auto policy = vm->GetObjectHandlePolicy();
-	auto handle = policy->GetHandleForObject(actor->FORMTYPE, actor);
+	if (force) {
+		float current = target->GetActorValue(av);
 
-	auto args = RE::MakeFunctionArguments(RE::BSFixedString{ valueName }, float{ value });
-	RE::BSTSmartPointer<RE::BSScript::IStackCallbackFunctor> callback;
+		target->ModActorValue(RE::ACTOR_VALUE_MODIFIER::kPermanent, av, value - current);
+	}
+	else {
+		target->SetActorValue(av, value);
+	}
+	
 	const auto functionName = force ? "ForceActorValue" : "SetActorValue";
-	vm->DispatchMethodCall(handle, "Actor", functionName, args, callback);
 	Log::DEBUG("Actor.{}({})", functionName, value);
 }
 

@@ -1,6 +1,8 @@
 #include "DialogueServices.h"
 #include "DialogueContract.h"
 
+#include "RE/UI.h"
+
 #include <cstdint>
 #include <fstream>
 #include <string_view>
@@ -426,16 +428,13 @@ namespace Dialogue {
 				Log::INFO("DialogueServices: 'barter' refused. {} has no vendor faction.", speaker->GetName());
 				return;
 			}
-			auto* policy = vm->GetObjectHandlePolicy();
-			const auto handle = policy ? policy->GetHandleForObject(RE::Actor::FORMTYPE, speaker) : RE::VMHandle{};
-			auto* args = RE::MakeFunctionArguments();
-			const bool dispatched = vm->DispatchMethodCall(handle, "Actor", "ShowBarterMenu", args, callback);
-			Log::INFO("DialogueServices: 'barter': Actor.ShowBarterMenu() on {} dispatched={}.", speaker->GetName(), dispatched);
+			RE::ShowBarterMenu(speaker);
+			Log::INFO("DialogueServices: 'barter': Actor.ShowBarterMenu() on {}.", speaker->GetName());
 		}
 		else if (service->id == "training") {
-			auto* args = RE::MakeFunctionArguments(static_cast<RE::Actor*>(speaker));
-			const bool dispatched = vm->DispatchStaticCall("Game", "ShowTrainingMenu", args, callback);
-			Log::INFO("DialogueServices: 'training': Game.ShowTrainingMenu({}) dispatched={}.", speaker->GetName(), dispatched);
+
+			RE::ShowTrainingMenu(speaker);
+			Log::INFO("DialogueServices: 'training': Game.ShowTrainingMenu({}).", speaker->GetName());
 		}
 	}
 
