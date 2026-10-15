@@ -8,6 +8,22 @@ namespace SpellMaking {
 
 	//Starts a frame countdown.
 	void MadeSpellEquipRefresh::Schedule() {
+		//<NEB> I've skipped the function Pump because while one may believe it to cycle for a certain amount of executions,
+		// it's actually functioning more like if you were to keep adding things to the end of a list while doing a for loop.
+		// Basically the only relevant thing is the task, though this is likely important because equip item is a task either
+		// way, but I'm not 100% sure that won't change anything so I'll leave it for now. Will test if it's needed later.
+		
+		auto* task = SKSE::GetTaskInterface();
+
+		assert(task);
+
+		if (!task) {
+			return;
+		}
+		task->AddTask([]() {Run(); });
+		
+		return;
+
 		++s_generation;//invalidate any refresh still pumping from an earlier load
 		s_delay = 150;//let the load fully settle before re-equipping
 		Pump(s_generation);
@@ -59,6 +75,9 @@ namespace SpellMaking {
 			if (!spell || !SpellMakingStore::IsPlaceholder(spell)) {
 				continue;
 			}
+
+			//Re-equip to rebuild the readied-hand effect.
+			equipManager->EquipSpell(player, spell, hand.slot);
 		}
 	}
 
