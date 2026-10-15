@@ -2,6 +2,7 @@
 #include "PerkDataStore.h"
 #include "PerksContract.h"
 #include "Papyrus/ModEvents.h"
+#include "Platform/MainThread.h"
 #include "UIs/Scaleform/ScaleformUtility.h"
 
 #include <algorithm>
@@ -267,10 +268,10 @@ namespace PerksView {
 			return RE::BSEventNotifyControl::kContinue;
 		}
 		if (a_event->eventName == PerksContract::ModEvent::RequestTrees) {
-			SKSE::GetTaskInterface()->AddTask([request = ModEvents::StrArg(*a_event)] { PushTrees(request); });
+			MainThread::Post([request = ModEvents::StrArg(*a_event)] { PushTrees(request); });
 		}
 		else if (a_event->eventName == PerksContract::ModEvent::RequestState) {
-			SKSE::GetTaskInterface()->AddTask([request = ModEvents::StrArg(*a_event)] { PushState(request); });
+			MainThread::Post([request = ModEvents::StrArg(*a_event)] { PushState(request); });
 		}
 		return RE::BSEventNotifyControl::kContinue;
 	}

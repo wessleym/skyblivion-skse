@@ -4,6 +4,7 @@
 #include "Papyrus/ModEvents.h"
 
 #include <algorithm>
+#include <charconv>
 
 namespace PerksView {
 
@@ -13,6 +14,22 @@ namespace PerksView {
 			return;
 		}
 		Log::INFO("PerkCurrency: Registered.");
+	}
+
+	//"HEX|Plugin" names a BGSPerk that is loaded.
+	bool PerkCurrency::RankExists(const std::string& rankRef) {
+		const auto bar = rankRef.find('|');
+		if (bar == std::string::npos || bar == 0 || bar + 1 >= rankRef.size()) {
+			return false;
+		}
+		RE::FormID localId = 0;
+		const auto* begin = rankRef.data();
+		const auto [end, error] = std::from_chars(begin, begin + bar, localId, 16);
+		if (error != std::errc{} || end != begin + bar) {
+			return false;
+		}
+		auto* dataHandler = RE::TESDataHandler::GetSingleton();
+		return dataHandler && dataHandler->LookupForm<RE::BGSPerk>(localId, rankRef.substr(bar + 1));
 	}
 
 	//Payload: "treeId^perkId^HEX|Plugin^currencyType[^globalEditorId]".
@@ -25,6 +42,12 @@ namespace PerksView {
 		const std::string& treeId = fields[0];
 		const std::string& perkId = fields[1];
 		const std::string& currencyType = fields[3];
+
+		//Nothing is paid for a rank whose perk record does not exist: Papyrus cannot add it either.
+		if (!RankExists(fields[2])) {
+			Log::WARN("PerkCurrency: Rank '{}' of '{}' (tree '{}') does not resolve to a perk. Nothing deducted.", fields[2], perkId, treeId);
+			return;
+		}
 
 		if (currencyType == "perkPoints") {
 			auto* player = RE::PlayerCharacter::GetSingleton();

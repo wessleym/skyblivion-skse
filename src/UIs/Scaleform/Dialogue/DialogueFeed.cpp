@@ -3,6 +3,7 @@
 #include "DialogueServices.h"
 #include "Disposition/DispositionSystem.h"
 #include "Papyrus/ModEvents.h"
+#include "Platform/MainThread.h"
 #include "UIs/Scaleform/ScaleformUtility.h"
 #include "UIs/UISystem.h"
 
@@ -170,7 +171,8 @@ namespace Dialogue {
 			return RE::BSEventNotifyControl::kContinue;
 		}
 		if (a_event->eventName == DialogueContract::ModEvent::RequestDialogueData) {
-			SKSE::GetTaskInterface()->AddTask([request = ModEvents::StrArg(*a_event)] { PushDialogueData(request); });
+			//Built on the main thread, next frame: SKSE's task queues can run on worker threads and race the menu.
+			MainThread::Post([request = ModEvents::StrArg(*a_event)] { PushDialogueData(request); });
 		}
 		else if (a_event->eventName == DialogueContract::ModEvent::OpenPersuasion) {
 			SKSE::GetTaskInterface()->AddTask([] { OpenPersuasion(); });

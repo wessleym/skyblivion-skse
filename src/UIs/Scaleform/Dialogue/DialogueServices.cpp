@@ -1,5 +1,6 @@
 #include "DialogueServices.h"
 #include "DialogueContract.h"
+#include "Degradation/RepairMenu.h"
 
 #include <cstdint>
 #include <fstream>
@@ -172,16 +173,17 @@ namespace Dialogue {
 			}
 			services.push_back(std::move(training));
 
-			//Reserved: the build has the factions but no menu, topic or launcher yet.
-			//They appear once the INI gives them an open= call and fallback=1.
+			//Repair and recharge have no topic: the button shows for any member of their factions.
 			ServiceDef repair;
 			repair.id = "repair";
+			repair.fallback = true;
 			repair.factions.push_back(MakeFaction("SKYBRepairFaction|0D8209:Skyblivion.esm"));
 			repair.factions.push_back(MakeFaction("SKYBRepairmanFaction|295CE7:Skyblivion.esm"));
 			services.push_back(std::move(repair));
 
 			ServiceDef recharge;
 			recharge.id = "recharge";
+			recharge.fallback = true;
 			recharge.factions.push_back(MakeFaction("SKYBRechargeFaction|0D820A:Skyblivion.esm"));
 			services.push_back(std::move(recharge));
 
@@ -331,7 +333,8 @@ namespace Dialogue {
 
 		//Whether the fallback path has anything to call: an open= from the table, or a built-in call.
 		bool CanOpen(const ServiceDef& service) {
-			return !service.openClass.empty() || service.id == "barter" || service.id == "training";
+			return !service.openClass.empty() || service.id == "barter" || service.id == "training" ||
+				   service.id == "repair" || service.id == "recharge";
 		}
 
 		//The first row of the dialogue list holding one of the service's topics, with that topic's icon.
@@ -388,8 +391,13 @@ namespace Dialogue {
 	//led to a list without the row. Both are gated by the speaker's factions, the topic's own condition.
 	void DialogueServices::Open(const std::string& serviceID, RE::Actor* speaker) {
 		ServiceDef* service = nullptr;
+		//Without case: the id can arrive as "Recharge" when the BSFixedString pool already holds that spelling.
+		const auto sameId = [&serviceID](const std::string& id) {
+			return id.size() == serviceID.size() && std::equal(id.begin(), id.end(), serviceID.begin(),
+				[](char a, char b) { return std::tolower(static_cast<unsigned char>(a)) == std::tolower(static_cast<unsigned char>(b)); });
+		};
 		for (auto& candidate : Services()) {
-			if (candidate.id == serviceID) {
+			if (sameId(candidate.id)) {
 				service = &candidate;
 			}
 		}
@@ -436,6 +444,12 @@ namespace Dialogue {
 			auto* args = RE::MakeFunctionArguments(static_cast<RE::Actor*>(speaker));
 			const bool dispatched = vm->DispatchStaticCall("Game", "ShowTrainingMenu", args, callback);
 			Log::INFO("DialogueServices: 'training': Game.ShowTrainingMenu({}) dispatched={}.", speaker->GetName(), dispatched);
+		}
+		else if (service->id == "repair") {
+			SKYBDeg::RepairMenu::OpenVendor(speaker);
+		}
+		else if (service->id == "recharge") {
+			SKYBDeg::RepairMenu::OpenRecharge(speaker);
 		}
 	}
 
