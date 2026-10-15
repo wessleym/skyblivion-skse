@@ -7,9 +7,6 @@
 #include <thread>
 
 namespace Persuasion {
-	//<NEB> I'm saving this for later, but I'd like to redo the functionality of this file as an Character::Update
-	// hook of some kind. But ideally I would use actor handles for these as well.
-
 
 	namespace {
 		std::atomic<bool>          s_keepAliveActive{ false };
@@ -35,20 +32,19 @@ namespace Persuasion {
 		}
 
 		// Attempts to log the intermittent frozen-mouth bug.
-		void WatchForFrozenMouth(RE::ActorHandle handle) {
+		void WatchForFrozenMouth(RE::FormID formID) {
 			auto heldSamples = std::make_shared<std::atomic<int>>(0);
 			auto lastValue = std::make_shared<std::atomic<float>>(-1.0f);
-			std::thread([handle, heldSamples, lastValue]() {
+			std::thread([formID, heldSamples, lastValue]() {
 				for (int i = 0; i < 12; ++i) {
 					std::this_thread::sleep_for(std::chrono::milliseconds(250));
 					auto* taskInterface = SKSE::GetTaskInterface();
-					
-					//<NEB> Assert is better than a null check for skse interfaces
-					assert(taskInterface);
-
-					taskInterface->AddTask([handle, heldSamples, lastValue]() {
-						RE::ActorPtr actor = handle.get();
-						RE::BSFaceGenAnimationData* faceGen = actor ? actor->GetFaceGenAnimationData() : nullptr;
+					if (!taskInterface) {
+						return;
+					}
+					taskInterface->AddTask([formID, heldSamples, lastValue]() {
+						auto* actor = RE::TESForm::LookupByID<RE::Actor>(formID);
+						auto* faceGen = actor ? actor->GetFaceGenAnimationData() : nullptr;
 						if (!faceGen) {
 							return;
 						}
@@ -59,33 +55,32 @@ namespace Persuasion {
 						}
 						if (heldSamples->fetch_add(1) + 1 == 6) {//6 x 250ms = 1.5s unchanged
 							Log::WARN("Frozen mouth: actor {:08X} phoneme3 held {:.2f} for 1.5s.",
-								actor->formID, value);
+								formID, value);
 						}
 						});
 				}
 				}).detach();
 		}
 
-		void StartConversationKeepAlive(RE::ActorHandle handle) {
+		void StartConversationKeepAlive(RE::FormID formID) {
 			s_keepAliveActive.store(true);
 			const std::uint32_t myGen = s_keepAliveGeneration.fetch_add(1) + 1;
-			std::thread([myGen, handle]() {
+			std::thread([myGen, formID]() {
 				while (s_keepAliveActive.load() && s_keepAliveGeneration.load() == myGen) {
 					std::this_thread::sleep_for(std::chrono::seconds(30));
 					if (!s_keepAliveActive.load() || s_keepAliveGeneration.load() != myGen) {
 						break;
 					}
 					auto* taskInterface = SKSE::GetTaskInterface();
-					
-					//<NEB> Assert is better than a null check for skse interfaces
-					assert(taskInterface);
-
-					taskInterface->AddTask([handle, myGen]() {
+					if (!taskInterface) {
+						continue;
+					}
+					taskInterface->AddTask([formID, myGen]() {
 						if (!s_keepAliveActive.load() || s_keepAliveGeneration.load() != myGen) {
 							return;
 						}
-						if (RE::ActorPtr actor = handle.get()) {
-							SetActorDialogueWithPlayer(actor.get(), true);
+						if (auto* actor = RE::TESForm::LookupByID<RE::Actor>(formID)) {
+							SetActorDialogueWithPlayer(actor, true);
 						}
 						});
 				}
@@ -98,21 +93,20 @@ namespace Persuasion {
 		}
 
 		// Reopens the dialogue menu. Allows refreshing of topics.
-		void ReopenDialogueWhenClosed(RE::ActorHandle handle, int attemptsLeft) {
+		void ReopenDialogueWhenClosed(RE::FormID formID, int attemptsLeft) {
 			auto* taskInterface = SKSE::GetTaskInterface();
-			
-			//<NEB> Assert is better than a null check for skse interfaces
-			assert(taskInterface);
-
-			taskInterface->AddTask([handle, attemptsLeft]() {
+			if (!taskInterface) {
+				return;
+			}
+			taskInterface->AddTask([formID, attemptsLeft]() {
 				auto* ui = RE::UI::GetSingleton();
-				RE::ActorPtr actor = handle.get();
+				auto* actor = RE::TESForm::LookupByID<RE::Actor>(formID);
 				const bool menuClosed = !(ui && ui->IsMenuOpen(RE::DialogueMenu::MENU_NAME));
 				// If the menu is not closed or the actor is not found, sleep and try again.
 				if ((!menuClosed || !actor) && attemptsLeft > 0) {
-					std::thread([handle, attemptsLeft]() {
+					std::thread([formID, attemptsLeft]() {
 						std::this_thread::sleep_for(std::chrono::milliseconds(50));
-						ReopenDialogueWhenClosed(handle, attemptsLeft - 1);
+						ReopenDialogueWhenClosed(formID, attemptsLeft - 1);
 						}).detach();
 					return;
 				}
@@ -132,18 +126,17 @@ namespace Persuasion {
 				});
 		}
 
-		void ExitToRefreshedDialogue(RE::ActorHandle handle) {
+		void ExitToRefreshedDialogue(RE::FormID formID) {
 			// Marshal onto the game thread.
 			// Otherwise, calls like forceGoodbye and shutMenu are ignored, and the conversation never closes.
 			auto* taskInterface = SKSE::GetTaskInterface();
-			
-			//<NEB> Assert is better than a null check for skse interfaces
-			assert(taskInterface);
-
-			taskInterface->AddTask([handle]() {
+			if (!taskInterface) {
+				return;
+			}
+			taskInterface->AddTask([formID]() {
 				// Make dialogue menu visible in case it was hidden earlier.
 				SetDialogueMenuVisible(true);
-				if (RE::ActorPtr actor = handle.get()) {
+				if (auto* actor = RE::TESForm::LookupByID<RE::Actor>(formID)) {
 					// Freeze the NPC before the close releases the NPC so the NPC can't start walking away.
 					// Re-enabled in ReopenDialogueWhenClosed.
 					actor->EnableAI(false);
@@ -153,7 +146,7 @@ namespace Persuasion {
 					mtm->forceGoodbye = true;
 					mtm->shutMenu = true;
 				}
-				ReopenDialogueWhenClosed(handle, 40);
+				ReopenDialogueWhenClosed(formID, 40);
 				});
 		}
 	}
@@ -162,13 +155,13 @@ namespace Persuasion {
 		// Start dialogue, hide menu, and keep it alive.
 		SetActorDialogueWithPlayer(target, true);
 		SetDialogueMenuVisible(false);
-		StartConversationKeepAlive(target->GetHandle());
-		WatchForFrozenMouth(target->GetHandle());
+		StartConversationKeepAlive(target->GetFormID());
+		WatchForFrozenMouth(target->GetFormID());
 	}
 
-	void DialogueSession::End(RE::ActorHandle handle) {
+	void DialogueSession::End(RE::FormID formID) {
 		StopConversationKeepAlive();
-		ExitToRefreshedDialogue(handle);
+		ExitToRefreshedDialogue(formID);
 	}
 
 }

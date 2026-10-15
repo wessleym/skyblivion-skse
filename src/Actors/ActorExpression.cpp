@@ -8,25 +8,21 @@ void ActorExpression::Set(RE::Actor* actor, Expression expression, float value) 
 		return;
 	}
 	auto* taskInterface = SKSE::GetTaskInterface();
-	
-	//<NEB> Assert is better than a null check for skse interfaces
-	assert(taskInterface);
-	
-	//<NEB> Handles over form ids for tasks
-	RE::ActorHandle handle = actor->GetHandle();
-	
+	if (!taskInterface) {
+		Log::WARN("Persuasion expression: SKSE TaskInterface unavailable");
+		return;
+	}
+	const RE::FormID formID = actor->GetFormID();
 	//Run on main game thread:
-	taskInterface->AddTask([handle, expression, value]() {
-		RE::ActorPtr actor = handle.get();
-		if (!actor) {
+	taskInterface->AddTask([formID, expression, value]() {
+		auto* a = RE::TESForm::LookupByID<RE::Actor>(formID);
+		if (!a) {
 			return;
 		}
-
-		//<NEB>(nitpick) auto makes stuff less readable
-		RE::BSFaceGenAnimationData* faceGen = actor->GetFaceGenAnimationData();
+		auto* faceGen = a->GetFaceGenAnimationData();
 		if (!faceGen) {
 			Log::WARN("Persuasion expression: face animation data unavailable for actor {:08X}",
-				actor->formID);
+				formID);
 			return;
 		}
 		//Calling both expression3.SetValue and SetExpressionOverride seemed necessary to get visible facial reactions.
