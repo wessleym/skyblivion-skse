@@ -30,10 +30,12 @@ void ObjectReferenceUtility::Register(RE::BSScript::Internal::VirtualMachine* vm
 RE::Script* ObjectReferenceUtility::initDummySayScript() {
 	static std::array<std::uint8_t, sizeof(RE::Script)> dummySCRISayAlloc{};
 	RE::Script* dummySayScript = reinterpret_cast<RE::Script*>(dummySCRISayAlloc.data());
+	//<NEB>! If someone hooks something that uses this script and uses a vfunc that will crash. Assign vtables to polymorphic objects
+	reinterpret_cast<std::uintptr_t*>(dummySayScript)[0] = RE::Script::VTABLE[0].address();
 	static char say[4] = "Say";
 	dummySayScript->formFlags = 0x000400a;
 	dummySayScript->formID = 0xff000e05;
-	dummySayScript->formType = static_cast<RE::FormType>(0x13);
+	dummySayScript->formType = RE::FormType::Script;
 	// dummySayScript->pad13 = 0x00;
 	dummySayScript->header.refObjectCount = 0x00000001;
 	dummySayScript->header.dataSize = 0x00000009;
@@ -73,10 +75,13 @@ float ObjectReferenceUtility::ObScriptSay(RE::StaticFunctionTag*, RE::TESObjectR
 RE::Script* ObjectReferenceUtility::initDummySayToScript() {
 	static std::array<std::uint8_t, sizeof(RE::Script)> dummySCRISayToAlloc{};
 	RE::Script* dummySayToScript = reinterpret_cast<RE::Script*>(dummySCRISayToAlloc.data());
+	//<NEB>! See prior
+	reinterpret_cast<std::uintptr_t*>(dummySayToScript)[0] = RE::Script::VTABLE[0].address();
+
 	static char sayTo[6] = "SayTo";
 	dummySayToScript->formFlags = 0x000400a;
 	dummySayToScript->formID = 0xff000a17;
-	dummySayToScript->formType = static_cast<RE::FormType>(0x13);
+	dummySayToScript->formType = RE::FormType::Script;
 	// dummySayToScript->pad13 = 0x0f;
 	dummySayToScript->header.refObjectCount = 0x00000002;
 	dummySayToScript->header.dataSize = 0x0000000c;
