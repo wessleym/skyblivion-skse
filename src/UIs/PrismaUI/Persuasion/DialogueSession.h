@@ -10,7 +10,7 @@ namespace Persuasion {
 		// Holds the NPC in conversation and keeps that hold alive
 		static void Start(RE::Actor* target);
 		// Closes and reopens the dialogue so topics refresh
-		static void End(RE::FormID formID);
+		static void End(RE::ActorHandle handle);
 	};
 
 }

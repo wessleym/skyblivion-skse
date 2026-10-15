@@ -13,7 +13,7 @@
 
 namespace Persuasion {
 
-	RE::FormID PersuasionView::s_currentTargetFormID = 0;
+	RE::ActorHandle PersuasionView::s_currentTargetFormID = {};
 
 	namespace {
 		struct BribeInputs {
@@ -65,15 +65,19 @@ namespace Persuasion {
 	}
 
 	RE::Actor* PersuasionView::GetCurrentActorOrWarn(const char* context) {
-		if (s_currentTargetFormID == 0) {
-			Log::WARN("{}: s_currentTargetFormID was 0.", context);
+		//<NEB>? Is this ever to be allowed to have no target when called? Maybe assert
+		if (!s_currentTargetFormID) {
+			Log::WARN("{}: s_currentTargetFormID was a null handle.", context);
 			return nullptr;
 		}
-		auto* actor = RE::TESForm::LookupByID<RE::Actor>(s_currentTargetFormID);
-		if (!actor) {
-			Log::WARN("{}: actor was null for {:08X}.", context, s_currentTargetFormID);
-		}
-		return actor;
+
+		RE::ActorPtr actor = s_currentTargetFormID.get();
+		
+		//<NEB> unsure if this can ever actually be represented with a reference handle
+		//if (!actor) {
+		//	Log::WARN("{}: actor was null for {:08X}.", context, s_currentTargetFormID);
+		//}
+		return actor.get();
 	}
 
 	void PersuasionView::Open(RE::Actor* target) {
@@ -84,7 +88,7 @@ namespace Persuasion {
 			Log::WARN("PersuasionView::Open: Argument target was null.");
 			return;
 		}
-		s_currentTargetFormID = target->GetFormID();
+		s_currentTargetFormID = target->GetHandle();
 
 		auto displayName = target->GetDisplayFullName();
 		std::string name = displayName ? displayName : "Name Not Found";
@@ -112,18 +116,18 @@ namespace Persuasion {
 	void PersuasionView::Close() {
 		s_handle.UnfocusAndHide();
 
-		if (s_currentTargetFormID == 0) {
+		if (!s_currentTargetFormID) {
 			Log::WARN("PersuasionView::Close: s_currentTargetFormID was 0.");
 			return;
 		}
 
-		if (auto* actor = RE::TESForm::LookupByID<RE::Actor>(s_currentTargetFormID)) {
-			ActorExpression::Reset(actor);
+		if (RE::ActorPtr actor = s_currentTargetFormID.get()) {
+			ActorExpression::Reset(actor.get());
 		}
 
 		DialogueSession::End(s_currentTargetFormID);
 
-		s_currentTargetFormID = 0;
+		s_currentTargetFormID = RE::ActorHandle{};
 	}
 
 	//When argument is an empty string, the user has moved away from the wedge.
