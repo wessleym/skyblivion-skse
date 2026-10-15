@@ -40,25 +40,24 @@ namespace SpellMaking {
 	void MadeSpellEquipRefresh::Run() {
 		auto* player = RE::PlayerCharacter::GetSingleton();
 		auto* equipManager = RE::ActorEquipManager::GetSingleton();
+
+		assert(!player || !equipManager);
+
 		if (!player || !equipManager) {
 			return;
 		}
 		const struct {
 			bool       leftHand;
-			RE::FormID slotID;
+			RE::BGSEquipSlot* slot;
 		} hands[] = {
-			{ false, 0x00013F42 },//right hand
-			{ true, 0x00013F43 }//left hand
+			{ false, Resources::rightHandSlot },//right hand
+			{ true, Resources::leftHandSlot }//left hand
 		};
 		for (const auto& hand : hands) {
 			auto* equipped = player->GetEquippedObject(hand.leftHand);
 			auto* spell = equipped ? equipped->As<RE::SpellItem>() : nullptr;
 			if (!spell || !SpellMakingStore::IsPlaceholder(spell)) {
 				continue;
-			}
-			if (auto* equipSlot = RE::TESForm::LookupByID<RE::BGSEquipSlot>(hand.slotID)) {
-				//Re-equip to rebuild the readied-hand effect.
-				equipManager->EquipSpell(player, spell, equipSlot);
 			}
 		}
 	}

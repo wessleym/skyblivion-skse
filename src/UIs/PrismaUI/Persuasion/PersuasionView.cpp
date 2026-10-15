@@ -42,13 +42,12 @@ namespace Persuasion {
 
 		// Removes gold from the player. Returns false and logs if the gold form is missing.
 		bool ChargeGold(RE::PlayerCharacter* player, int price) {
-			auto* goldForm = RE::TESForm::LookupByID(0x0000000F);//gold
-			auto* goldBoundObj = goldForm ? goldForm->As<RE::TESBoundObject>() : nullptr;
-			if (!goldBoundObj) {
+			//<NEB> The check to TESBoundObject is pointless
+			if (!Resources::gold) {
 				Log::ERROR("PersuasionView::OnBribe: Gold001 (0x0000000F) Form Missing");
 				return false;
 			}
-			player->RemoveItem(goldBoundObj, price, RE::ITEM_REMOVE_REASON::kRemove, nullptr, nullptr);
+			player->RemoveItem(Resources::gold, price, RE::ITEM_REMOVE_REASON::kRemove, nullptr, nullptr);
 			return true;
 		}
 	}

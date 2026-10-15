@@ -60,6 +60,7 @@ bool Plugin::OnLoad(const SKSE::LoadInterface* a_skse)
 			//Before UISystem: the title screen and the journal read the settings.
 			Settings::SettingsService::Register();
 			UISystem::OnDataLoaded();
+			Resources::Install();
 			Log::INFO("SKSE Data Loaded Complete");
 			break;
 		default:

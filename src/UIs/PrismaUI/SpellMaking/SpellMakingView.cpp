@@ -50,13 +50,7 @@ namespace SpellMaking {
 
 		//Deduct gold.
 		if (goldPrice > 0) {
-			if (auto* gold = RE::TESForm::LookupByID<RE::TESBoundObject>(0x0000000F)) {
-				player->RemoveItem(gold, goldPrice, RE::ITEM_REMOVE_REASON::kRemove, nullptr, nullptr);
-			}
-			else {
-				Log::ERROR("SpellMakingView::OnBuy: Gold001 (0x0000000F) form missing. {} not created (price {}).", recipe.name, goldPrice);
-				return;
-			}
+			player->RemoveItem(Resources::gold, goldPrice, RE::ITEM_REMOVE_REASON::kRemove, nullptr, nullptr);
 		}
 
 		player->AddSpell(spell);

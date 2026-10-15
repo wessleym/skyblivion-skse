@@ -171,10 +171,8 @@ namespace SpellMaking {
 		//Set fixed magicka cost. (I'm not sure if the engine could calculate a cost automatically.)
 		form->data.flags.set(RE::SpellItem::SpellFlag::kCostOverride);
 		form->data.costOverride = recipe.magickaCost;
-		//"Either Hand" equip slot (vanilla form 0x00013F44) so the spell is equippable.
-		if (auto* eitherHand = RE::TESForm::LookupByID<RE::BGSEquipSlot>(0x00013F44)) {
-			form->SetEquipSlot(eitherHand);
-		}
+	
+		form->SetEquipSlot(Resources::eitherHandSlot);
 	}
 
 	RE::SpellItem* SpellMakingStore::CreateSpell(const SpellRecipe& recipe) {
