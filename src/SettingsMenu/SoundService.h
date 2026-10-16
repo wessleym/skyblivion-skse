@@ -47,7 +47,7 @@ namespace SKYBSettingsMenu
 		void                                SetMaster(float a_value);
 
 		std::unordered_map<std::string, RE::BGSSoundCategory*> _byTarget;
-		std::unordered_map<std::string, RE::FormID>            _demo;  // a short sound of each row's category
+		std::unordered_map<std::string, RE::BGSSoundDescriptorForm*> _demo;  // a short sound of each row's category
 		// rows' categories under the one the game pauses in menus, moved from it while the settings menu is open
 		std::vector<RE::BGSSoundCategory*>                                  _unpause;
 		std::unordered_map<RE::BGSSoundCategory*, RE::BGSSoundCategory*>    _savedParent;

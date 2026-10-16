@@ -36,18 +36,18 @@ namespace Persuasion {
 		}
 
 		// Attempts to log the intermittent frozen-mouth bug.
-		void WatchForFrozenMouth(RE::FormID formID) {
+		void WatchForFrozenMouth(RE::ActorHandle handle) {
 			auto heldSamples = std::make_shared<std::atomic<int>>(0);
 			auto lastValue = std::make_shared<std::atomic<float>>(-1.0f);
-			std::thread([formID, heldSamples, lastValue]() {
+			std::thread([handle, heldSamples, lastValue]() {
 				for (int i = 0; i < 12; ++i) {
 					std::this_thread::sleep_for(std::chrono::milliseconds(250));
 					auto* taskInterface = SKSE::GetTaskInterface();
 					if (!taskInterface) {
 						return;
 					}
-					taskInterface->AddTask([formID, heldSamples, lastValue]() {
-						auto* actor = RE::TESForm::LookupByID<RE::Actor>(formID);
+					taskInterface->AddTask([handle, heldSamples, lastValue]() {
+						RE::ActorPtr actor = handle.get();
 						auto* faceGen = actor ? actor->GetFaceGenAnimationData() : nullptr;
 						if (!faceGen) {
 							return;
@@ -59,17 +59,17 @@ namespace Persuasion {
 						}
 						if (heldSamples->fetch_add(1) + 1 == 6) {//6 x 250ms = 1.5s unchanged
 							Log::WARN("Frozen mouth: actor {:08X} phoneme3 held {:.2f} for 1.5s.",
-								formID, value);
+								actor->GetFormID(), value);
 						}
 						});
 				}
 				}).detach();
 		}
 
-		void StartConversationKeepAlive(RE::FormID formID) {
+		void StartConversationKeepAlive(RE::ActorHandle handle) {
 			s_keepAliveActive.store(true);
 			const std::uint32_t myGen = s_keepAliveGeneration.fetch_add(1) + 1;
-			std::thread([myGen, formID]() {
+			std::thread([myGen, handle]() {
 				while (s_keepAliveActive.load() && s_keepAliveGeneration.load() == myGen) {
 					std::this_thread::sleep_for(std::chrono::seconds(30));
 					if (!s_keepAliveActive.load() || s_keepAliveGeneration.load() != myGen) {
@@ -79,12 +79,12 @@ namespace Persuasion {
 					if (!taskInterface) {
 						continue;
 					}
-					taskInterface->AddTask([formID, myGen]() {
+					taskInterface->AddTask([handle, myGen]() {
 						if (!s_keepAliveActive.load() || s_keepAliveGeneration.load() != myGen) {
 							return;
 						}
-						if (auto* actor = RE::TESForm::LookupByID<RE::Actor>(formID)) {
-							SetActorDialogueWithPlayer(actor, true);
+						if (RE::ActorPtr actor = handle.get()) {
+							SetActorDialogueWithPlayer(actor.get(), true);
 						}
 						});
 				}
@@ -97,20 +97,20 @@ namespace Persuasion {
 		}
 
 		// Reopens the dialogue menu. Allows refreshing of topics.
-		void ReopenDialogueWhenClosed(RE::FormID formID, int attemptsLeft) {
+		void ReopenDialogueWhenClosed(RE::ActorHandle handle, int attemptsLeft) {
 			auto* taskInterface = SKSE::GetTaskInterface();
 			if (!taskInterface) {
 				return;
 			}
-			taskInterface->AddTask([formID, attemptsLeft]() {
+			taskInterface->AddTask([handle, attemptsLeft]() {
 				auto* ui = RE::UI::GetSingleton();
-				auto* actor = RE::TESForm::LookupByID<RE::Actor>(formID);
+				RE::ActorPtr actor = handle.get();
 				const bool menuClosed = !(ui && ui->IsMenuOpen(RE::DialogueMenu::MENU_NAME));
 				// If the menu is not closed or the actor is not found, sleep and try again.
 				if ((!menuClosed || !actor) && attemptsLeft > 0) {
-					std::thread([formID, attemptsLeft]() {
+					std::thread([handle, attemptsLeft]() {
 						std::this_thread::sleep_for(std::chrono::milliseconds(50));
-						ReopenDialogueWhenClosed(formID, attemptsLeft - 1);
+						ReopenDialogueWhenClosed(handle, attemptsLeft - 1);
 						}).detach();
 					return;
 				}
@@ -130,17 +130,17 @@ namespace Persuasion {
 				});
 		}
 
-		void ExitToRefreshedDialogue(RE::FormID formID) {
+		void ExitToRefreshedDialogue(RE::ActorHandle handle) {
 			// Marshal onto the game thread.
 			// Otherwise, calls like forceGoodbye and shutMenu are ignored, and the conversation never closes.
 			auto* taskInterface = SKSE::GetTaskInterface();
 			if (!taskInterface) {
 				return;
 			}
-			taskInterface->AddTask([formID]() {
+			taskInterface->AddTask([handle]() {
 				// Make dialogue menu visible in case it was hidden earlier.
 				SetDialogueMenuVisible(true);
-				if (auto* actor = RE::TESForm::LookupByID<RE::Actor>(formID)) {
+				if (RE::ActorPtr actor = handle.get()) {
 					// Freeze the NPC before the close releases the NPC so the NPC can't start walking away.
 					// Re-enabled in ReopenDialogueWhenClosed.
 					actor->EnableAI(false);
@@ -150,7 +150,7 @@ namespace Persuasion {
 					mtm->forceGoodbye = true;
 					mtm->shutMenu = true;
 				}
-				ReopenDialogueWhenClosed(formID, 40);
+				ReopenDialogueWhenClosed(handle, 40);
 				});
 		}
 	}
@@ -159,13 +159,24 @@ namespace Persuasion {
 		// Start dialogue, hide menu, and keep it alive.
 		SetActorDialogueWithPlayer(target, true);
 		SetDialogueMenuVisible(false);
-		StartConversationKeepAlive(target->GetFormID());
-		WatchForFrozenMouth(target->GetFormID());
+		StartConversationKeepAlive(target->GetHandle());
+		WatchForFrozenMouth(target->GetHandle());
+	}
+
+	void DialogueSession::End(RE::ActorHandle handle) {
+		StopConversationKeepAlive();
+		ExitToRefreshedDialogue(handle);
 	}
 
 	void DialogueSession::End(RE::FormID formID) {
-		StopConversationKeepAlive();
-		ExitToRefreshedDialogue(formID);
+		auto* actor = RE::TESForm::LookupByID<RE::Actor>(formID);
+		if (!actor) {
+			Log::WARN("DialogueSession::End: actor {:08X} is gone; the dialogue is not reopened.", formID);
+			StopConversationKeepAlive();
+			SetDialogueMenuVisible(true);
+			return;
+		}
+		End(actor->GetHandle());
 	}
 
 }
