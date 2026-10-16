@@ -1,5 +1,7 @@
 #include "ObjectReferenceUtility.h"
 
+#include "RE/ObjectReference.h"
+
 void ObjectReferenceUtility::Register(RE::BSScript::Internal::VirtualMachine* vm) {
 	std::string_view className = "SKYBObjectReferenceUtility";
 
@@ -124,6 +126,9 @@ float ObjectReferenceUtility::ObScriptSayTo(RE::StaticFunctionTag*, RE::TESObjec
 }
 
 bool ObjectReferenceUtility::isAnimPlaying(RE::StaticFunctionTag*, RE::TESObjectREFR* animatedRefr) {
+	//<NEB> attempt to remake the function, need to confirm it's actually functional first
+	return RE::IsAnimPlaying(animatedRefr);
+	
 	if (isAnimPlayingFunction) {
 		RE::SCRIPT_FUNCTION::ScriptData isAnimPlayingFunctionData = { 0x1128, 0x0001, 0x0000 };
 		double result = 0.0;
