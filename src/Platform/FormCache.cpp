@@ -30,13 +30,19 @@ namespace FormCache
 		}
 
 		// The record of a_type behind a_key, or null: a_lookup is called once per key once the table is
-		// ready, and its miss or type mismatch is logged once, under a_source.
+		// ready, and its miss or type mismatch is logged once, under a_source. A kept record is checked
+		// against a_type on every call: two callers may ask for the same key as different types.
 		RE::TESForm* Cached(const std::string& a_key, RE::FormType a_type, std::string_view a_source,
 							const std::function<RE::TESForm*()>& a_lookup, std::string_view a_hint)
 		{
 			std::scoped_lock lock(s_lock);
 			auto& entry = s_table[a_key];
 			if (entry.attempted) {
+				if (entry.form && a_type != RE::FormType::None && !entry.form->Is(a_type)) {
+					Log::WARN("{}: {} is a {} record, not {} - treated as missing", a_source, a_key,
+							  RE::FormTypeToString(entry.form->GetFormType()), RE::FormTypeToString(a_type));
+					return nullptr;
+				}
 				return entry.form;
 			}
 			RE::TESForm* form = a_lookup();

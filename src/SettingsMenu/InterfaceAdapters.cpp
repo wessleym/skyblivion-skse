@@ -7,6 +7,7 @@
 #include <cmath>
 #include <thread>
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 namespace {
@@ -137,7 +138,11 @@ void InterfaceAdapters::SetGlobal(std::string_view a_editorID, float a_value) {
 		}
 	}
 	if (!global) {
-		Log::WARN("interface: GlobalVariable {} not found", a_editorID);
+		//once per name: every apply and every game load comes through here (expected without moreHUD)
+		static std::unordered_set<std::string> told;
+		if (told.insert(std::string(a_editorID)).second) {
+			Log::WARN("interface: GlobalVariable {} not found - its rows do nothing", a_editorID);
+		}
 		return;
 	}
 	if (global->value != a_value) {

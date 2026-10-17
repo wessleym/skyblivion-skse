@@ -1,5 +1,4 @@
 #include "PersuasionView.h"
-#include "BribeEconomy.h"
 #include "PersuasionContract.h"
 #include "DialogueSession.h"
 #include "PersuasionBribery.h"
@@ -7,7 +6,6 @@
 #include "PersuasionRules.h"
 #include "Disposition/DispositionSystem.h"
 #include "Actors/ActorExpression.h"
-#include "Resources.h"
 
 #include "../PrismaViewHandle.h"
 
@@ -150,13 +148,8 @@ namespace Persuasion {
 		if (!actor) {
 			return;
 		}
-		auto* player = RE::PlayerCharacter::GetSingleton();
-		if (!player) {
-			Log::WARN("PersuasionView::OnBribe: Player was null.");
-			return;
-		}
 
-		//One bribe under the conversation's rules, shared with the Scaleform menu.
+		//One bribe under the conversation's rules, shared with the Scaleform menu (it checks the player).
 		const float before = std::strtof(disposition, nullptr);
 		const BribeAttempt attempt = Bribery::Attempt(actor, before, s_effective);
 		if (attempt.success) {
