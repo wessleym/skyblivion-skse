@@ -14,8 +14,6 @@ namespace FormCache
 {
 	namespace
 	{
-		constexpr RE::FormID kGold001 = 0x0000000F;
-
 		struct Entry
 		{
 			RE::TESForm* form = nullptr;
@@ -29,11 +27,6 @@ namespace FormCache
 		std::string LocalKey(RE::FormID a_localID, std::string_view a_plugin)
 		{
 			return std::format("{}|{:06X}", a_plugin, a_localID & 0x00FFFFFF);
-		}
-
-		std::string FullKey(RE::FormID a_formID)
-		{
-			return std::format("@{:08X}", a_formID);
 		}
 
 		// The record of a_type behind a_key, or null: a_lookup is called once per key once the table is
@@ -105,11 +98,6 @@ namespace FormCache
 		return Cached(LocalKey(a_localID, a_plugin), a_type, a_source, lookup, " (plugin|local ID; is the plugin loaded?)");
 	}
 
-	RE::TESForm* ResolveFull(RE::FormID a_formID, RE::FormType a_type, std::string_view a_source)
-	{
-		return Cached(FullKey(a_formID), a_type, a_source, [&] { return RE::TESForm::LookupByID(a_formID); }, " (full form ID)");
-	}
-
 	void Keep(std::string_view a_editorID, RE::TESForm* a_form)
 	{
 		if (a_editorID.empty() || !a_form) {
@@ -117,12 +105,6 @@ namespace FormCache
 		}
 		std::scoped_lock lock(s_lock);
 		s_table[std::string(a_editorID)] = Entry{ a_form, true };
-	}
-
-	RE::TESBoundObject* Gold()
-	{
-		auto* form = ResolveFull(kGold001, RE::FormType::Misc, "FormCache (Gold001)");
-		return form ? static_cast<RE::TESObjectMISC*>(form) : nullptr;
 	}
 
 	void OnDataLoaded()
@@ -140,7 +122,6 @@ namespace FormCache
 				++resolved;
 			}
 		};
-		count(Gold());
 		count(Get<RE::BGSListForm>(Factions::FactionsContract::FactionListEditorID, "FactionData"));
 		count(Get<RE::BGSListForm>(Skills::SkillsContract::MasteryPerkListEditorID, "SkillData"));
 		count(Get<RE::BGSKeyword>("MagicDisallowEnchanting", "SigilMenuFeed"));
