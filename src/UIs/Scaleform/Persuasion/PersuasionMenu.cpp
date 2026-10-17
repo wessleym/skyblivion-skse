@@ -21,20 +21,22 @@ namespace Persuasion
 {
 	namespace
 	{
-		RE::FormID s_target = 0;      // the NPC being persuaded (0 = none)
-		Effective  s_effective{};     // the conversation's rules, resolved on Ready
+		//The NPC being persuaded, as a handle: null once the reference is gone, and it keeps the actor from
+		//being unloaded under the menu. Main thread only (the callbacks run as tasks).
+		RE::ActorHandle s_target;
+		Effective       s_effective{};  // the conversation's rules, resolved on Ready
 
 		RE::Actor* TargetOrWarn(const char* a_context)
 		{
-			if (s_target == 0) {
+			if (!s_target) {
 				Log::WARN("{}: no persuasion target", a_context);
 				return nullptr;
 			}
-			auto* actor = RE::TESForm::LookupByID<RE::Actor>(s_target);
+			RE::ActorPtr actor = s_target.get();
 			if (!actor) {
-				Log::WARN("{}: actor {:08X} is gone", a_context, s_target);
+				Log::WARN("{}: the persuasion target is gone", a_context);
 			}
-			return actor;
+			return actor.get();
 		}
 
 		// nlohmann::json -> GFxValue, strings owned by the movie.
@@ -149,11 +151,11 @@ namespace Persuasion
 			Log::ERROR("persuasion menu: Interface\\{}.swf not found - not opened", FILE_NAME);
 			return;
 		}
-		s_target = a_target->GetFormID();
+		s_target = a_target->GetHandle();
 		//Holds the NPC in conversation and hides the dialogue menu while the wheel is up.
 		DialogueSession::Start(a_target);
 		queue->AddMessage(MENU_NAME, RE::UI_MESSAGE_TYPE::kShow, nullptr);
-		Log::INFO("persuasion menu: opening for {:08X}", s_target);
+		Log::INFO("persuasion menu: opening for {:08X}", a_target->GetFormID());
 	}
 
 	void PersuasionMenu::Close()
@@ -177,18 +179,17 @@ namespace Persuasion
 	RE::UI_MESSAGE_RESULTS PersuasionMenu::ProcessMessage(RE::UIMessage& a_message)
 	{
 		if (a_message.type == RE::UI_MESSAGE_TYPE::kHide) {
-			const RE::FormID target = s_target;
-			s_target = 0;
-			SKSE::GetTaskInterface()->AddTask([target] {
-				if (target == 0) {
-					return;
-				}
-				if (auto* actor = RE::TESForm::LookupByID<RE::Actor>(target)) {
-					ActorExpression::Reset(actor);
-				}
-				//Reopens the dialogue so its topics refresh.
-				DialogueSession::End(target);
-			});
+			const RE::ActorHandle target = s_target;
+			s_target.reset();
+			if (target) {
+				SKSE::GetTaskInterface()->AddTask([target] {
+					if (RE::ActorPtr actor = target.get()) {
+						ActorExpression::Reset(actor.get());
+					}
+					//Reopens the dialogue so its topics refresh.
+					DialogueSession::End(target);
+				});
+			}
 		}
 		return RE::IMenu::ProcessMessage(a_message);
 	}

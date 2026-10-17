@@ -1,6 +1,7 @@
 #include "Plugin.h"
 
 #include "Achievements/AchievementService.h"
+#include "Platform/FormCache.h"
 #include "Degradation/Breakage.h"
 #include "Degradation/DecayService.h"
 #include "Degradation/InventoryHook.h"
@@ -110,6 +111,8 @@ bool Plugin::OnLoad(const SKSE::LoadInterface* a_skse)
 			Log::INFO("SKSE Data Loaded...");
 			//The systems below use Resources.
 			Resources::Install();
+			//First: the form table the services below read from (po3 Tweaks' editor-ID map is built by now).
+			FormCache::OnDataLoaded();
 			DispositionSystem::OnDataLoaded();
 			Sigil::SigilSystem::Register();
 			Achievements::AchievementService::Register();
