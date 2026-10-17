@@ -6,9 +6,6 @@
 namespace Storage::CoSave {
 
 	namespace {
-		//The plugin's co-save id, shared by every store.
-		constexpr std::uint32_t kUniqueID = 'SKYB';
-
 		std::vector<Store>& Stores() {
 			static std::vector<Store> stores;
 			return stores;
@@ -83,7 +80,7 @@ namespace Storage::CoSave {
 			Log::WARN("CoSave: No serialization interface. Nothing is kept in saves.");
 			return false;
 		}
-		intfc->SetUniqueID(kUniqueID);
+		intfc->SetUniqueID(UniqueID);
 		intfc->SetSaveCallback(OnSave);
 		intfc->SetLoadCallback(OnLoad);
 		intfc->SetRevertCallback(OnRevert);
@@ -91,7 +88,7 @@ namespace Storage::CoSave {
 		for (const auto& store : Stores()) {
 			names += (names.empty() ? "" : ", ") + std::string(store.name) + " (" + FourCC(store.recordType) + ")";
 		}
-		Log::INFO("CoSave: Installed as {} for {}.", FourCC(kUniqueID), names.empty() ? std::string("no store") : names);
+		Log::INFO("CoSave: Installed as {} for {}.", FourCC(UniqueID), names.empty() ? std::string("no store") : names);
 		return true;
 	}
 
