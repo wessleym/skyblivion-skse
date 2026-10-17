@@ -109,9 +109,8 @@ bool Plugin::OnLoad(const SKSE::LoadInterface* a_skse)
 			break;
 		case SKSE::MessagingInterface::kDataLoaded:
 			Log::INFO("SKSE Data Loaded...");
-			//The systems below use Resources.
+			//The systems below use Resources and the form table (po3 Tweaks' editor-ID map is built by now).
 			Resources::Install();
-			//First: the form table the services below read from (po3 Tweaks' editor-ID map is built by now).
 			FormCache::OnDataLoaded();
 			DispositionSystem::OnDataLoaded();
 			Sigil::SigilSystem::Register();
