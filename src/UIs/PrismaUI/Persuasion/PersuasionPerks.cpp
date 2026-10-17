@@ -1,5 +1,6 @@
 #include "PersuasionPerks.h"
 
+#include "Platform/FormCache.h"
 #include "UIs/Scaleform/Skills/SkillData.h"
 
 #include <algorithm>
@@ -229,22 +230,16 @@ namespace Persuasion
 	bool Perks::Holds(const Rule& a_rule, RE::PlayerCharacter* a_player)
 	{
 		switch (a_rule.kind) {
+		//The perk records resolve once, on the first conversation (the form table logs a miss once).
 		case Kind::kPerkEditorID: {
-			auto* perk = RE::TESForm::LookupByEditorID<RE::BGSPerk>(a_rule.name);
-			if (!perk) {
-				Log::WARN("persuasion perks: [{}]: no perk with editor ID {} (po3 Tweaks installed?)", a_rule.header, a_rule.name);
-				return false;
-			}
-			return a_player->HasPerk(perk);
+			const std::string source = "persuasion perks [" + a_rule.header + "]";
+			auto* perk = FormCache::Get<RE::BGSPerk>(a_rule.name, source);
+			return perk && a_player->HasPerk(perk);
 		}
 		case Kind::kPerkFormID: {
-			auto* dh = RE::TESDataHandler::GetSingleton();
-			auto* perk = dh ? dh->LookupForm<RE::BGSPerk>(a_rule.formID, a_rule.plugin) : nullptr;
-			if (!perk) {
-				Log::WARN("persuasion perks: [{}]: no perk {:06X} in {}", a_rule.header, a_rule.formID, a_rule.plugin);
-				return false;
-			}
-			return a_player->HasPerk(perk);
+			const std::string source = "persuasion perks [" + a_rule.header + "]";
+			auto* perk = FormCache::GetLocal<RE::BGSPerk>(a_rule.formID, a_rule.plugin, source);
+			return perk && a_player->HasPerk(perk);
 		}
 		case Kind::kMastery: {
 			const auto av = ActorValueNamed(a_rule.name);

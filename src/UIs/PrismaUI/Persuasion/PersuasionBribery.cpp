@@ -1,5 +1,6 @@
 #include "PersuasionBribery.h"
 
+#include "Platform/FormCache.h"
 #include "Disposition/DispositionSystem.h"
 
 #include <algorithm>
@@ -9,11 +10,10 @@ namespace Persuasion
 	namespace
 	{
 		// The player's gold by item count. Not Actor::GetGoldAmount(): that CommonLib helper reads a bad
-		// pointer on 1.6.1170, and the quote runs on every point of change.
+		// pointer on 1.6.1170, and the quote runs on every point of change (Gold001 is resolved once).
 		int PlayerGold(RE::PlayerCharacter* a_player)
 		{
-			auto* goldForm = RE::TESForm::LookupByID(0x0000000F);
-			auto* gold = goldForm ? goldForm->As<RE::TESBoundObject>() : nullptr;
+			auto* gold = FormCache::Gold();
 			return a_player && gold ? std::max(0, a_player->GetItemCount(gold)) : 0;
 		}
 
@@ -99,8 +99,7 @@ namespace Persuasion
 			out.reason = BribeAttempt::Reason::kNoGold;
 			return out;
 		}
-		auto* goldForm = RE::TESForm::LookupByID(0x0000000F);
-		auto* gold = goldForm ? goldForm->As<RE::TESBoundObject>() : nullptr;
+		auto* gold = FormCache::Gold();
 		if (!gold) {
 			Log::ERROR("Bribery::Attempt: Gold001 (0x0000000F) form missing");
 			out.reason = BribeAttempt::Reason::kError;

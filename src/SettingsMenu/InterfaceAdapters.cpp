@@ -1,5 +1,7 @@
 #include "SettingsMenu/InterfaceAdapters.h"
 
+#include "Platform/FormCache.h"
+
 #include <algorithm>
 #include <chrono>
 #include <cmath>
@@ -29,9 +31,10 @@ namespace {
 
 	RE::BSScript::Internal::VirtualMachine* VM() { return RE::BSScript::Internal::VirtualMachine::GetSingleton(); }
 
-	// the script object of a_script bound to the quest with editor ID a_quest
+	// the script object of a_script bound to the quest with editor ID a_quest (the quest resolves once; a
+	// miss is logged once, which is expected when that mod is not installed)
 	ObjectPtr BoundScript(const char* a_quest, const char* a_script) {
-		auto* quest = RE::TESForm::LookupByEditorID<RE::TESQuest>(a_quest);
+		auto* quest = FormCache::Get<RE::TESQuest>(a_quest, "interface (optional mod's quest)");
 		auto* vm = VM();
 		if (!quest || !vm) {
 			return nullptr;
@@ -119,9 +122,9 @@ void InterfaceAdapters::Register() {
 }
 
 void InterfaceAdapters::SetGlobal(std::string_view a_editorID, float a_value) {
-	auto* global = RE::TESForm::LookupByEditorID<RE::TESGlobal>(a_editorID);
+	auto* global = FormCache::Get<RE::TESGlobal>(a_editorID, "interface");
 	// AHZShowEnemyMagickaMeter is not found by editor ID in game (its stamina twin is); moreHUD itself reads
-	// its globals through ahzmainquest's properties of the same names, so take it from there
+	// its globals through ahzmainquest's properties of the same names, so take it from there, once
 	if (!global && a_editorID.starts_with("AHZ")) {
 		if (auto hud = BoundScript(kMoreHudQuest, kMoreHudQuest)) {
 			if (auto* var = hud->GetProperty(std::string(a_editorID).c_str()); var && var->IsObject()) {
@@ -129,6 +132,7 @@ void InterfaceAdapters::SetGlobal(std::string_view a_editorID, float a_value) {
 			}
 		}
 		if (global) {
+			FormCache::Keep(a_editorID, global);
 			Log::INFO("interface: {} taken from moreHUD's property ({:08X})", a_editorID, global->GetFormID());
 		}
 	}

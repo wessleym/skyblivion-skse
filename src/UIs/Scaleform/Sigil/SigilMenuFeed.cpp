@@ -1,5 +1,6 @@
 #include "SigilMenuFeed.h"
 #include "SigilMenuContract.h"
+#include "Platform/FormCache.h"
 #include "Papyrus/ModEvents.h"
 #include "Platform/MainThread.h"
 #include "Sigil/SoulGems.h"
@@ -111,10 +112,8 @@ namespace Sigil {
 			return;
 		}
 
-		auto* disallowEnchanting = RE::TESForm::LookupByEditorID<RE::BGSKeyword>("MagicDisallowEnchanting");
-		if (!disallowEnchanting) {
-			Log::WARN("SigilMenuFeed: MagicDisallowEnchanting keyword not resolved. Its filter is skipped.");
-		}
+		//Resolved once, at data load; null (logged once by the form table) skips its filter.
+		auto* disallowEnchanting = FormCache::Get<RE::BGSKeyword>("MagicDisallowEnchanting", "SigilMenuFeed");
 
 		std::string rows;
 		std::string formIDs;

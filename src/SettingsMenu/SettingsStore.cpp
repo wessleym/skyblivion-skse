@@ -1,5 +1,7 @@
 #include "SettingsMenu/SettingsStore.h"
 
+#include "Platform/FormCache.h"
+
 #include <charconv>
 #include <cstdlib>
 #include <cstring>
@@ -360,11 +362,12 @@ namespace SKYBSettingsMenu
 	}
 
 	// a global by editor ID (applier gameglobal): its value, nullopt when no loaded plugin has it
+	// (resolved once per row, through the form table)
 	namespace
 	{
 		std::optional<float> ReadGlobal(std::string_view a_editorID)
 		{
-			auto* g = RE::TESForm::LookupByEditorID<RE::TESGlobal>(std::string(a_editorID));
+			auto* g = FormCache::Get<RE::TESGlobal>(a_editorID, "settings menu (gameglobal row)");
 			return g ? std::optional<float>(g->value) : std::nullopt;
 		}
 	}
