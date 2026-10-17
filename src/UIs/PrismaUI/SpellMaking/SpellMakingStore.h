@@ -1,7 +1,10 @@
 #pragma once
 
+#include <cstddef>
 #include <cstdint>
+#include <span>
 #include <string>
+#include <string_view>
 #include <vector>
 
 namespace SKSE { class SerializationInterface; }
@@ -16,8 +19,9 @@ namespace SKSE { class SerializationInterface; }
 //FormID, the base game persists everything that references it automatically.
 //
 //The base save does not carry the placeholder's runtime *contents* (effects, name, and magicka cost),
-//so the SKSE co-save stores each used slot's recipe, and the placeholder is refilled on
-//load.
+//so the SKSE co-save stores each used slot's recipe under the placeholder's plugin and local
+//FormID. The placeholders are refilled before the base save loads, by reading the co-save
+//file directly, so the game links the save's active effects to the made spells' real effects.
 namespace SpellMaking {
 
 	class SpellMakingStore {
@@ -49,6 +53,10 @@ namespace SpellMaking {
 		//Registers the SKSE co-save serialization callbacks. Call once at plugin load.
 		static void RegisterSerialization();
 
+		//Refills the placeholders from the co-save file of the save about to load. Call on kPreLoadGame,
+		//whose data is the save's file name.
+		static void RestoreBeforeLoad(std::string_view saveName);
+
 		//Claims an unused placeholder, fills it from the recipe, and returns it ready to give to the player.
 		//Returns nullptr if the pool is exhausted or unavailable.
 		static RE::SpellItem* CreateSpell(const SpellRecipe& recipe);
@@ -66,8 +74,14 @@ namespace SpellMaking {
 		//Fills a placeholder form in place from a recipe (effects, name, cast data, magicka cost).
 		static void PopulateSpell(RE::SpellItem* form, const SpellRecipe& recipe);
 
+		//The pool slot holding this placeholder, or nullptr if the spell is not a placeholder.
+		static Slot* FindSlot(const RE::SpellItem* spell);
+
 		//Frees every pool slot. Used at the start of a co-save load and by OnRevert.
 		static void ResetSlots();
+
+		//Frees every slot, then claims and refills one per recipe in the record. Returns how many were restored.
+		static std::uint32_t RestoreRecipes(std::span<const std::byte> record);
 
 		static void OnGameSaved(SKSE::SerializationInterface* intfc);
 		static void OnGameLoaded(SKSE::SerializationInterface* intfc);

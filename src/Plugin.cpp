@@ -43,7 +43,7 @@ bool Plugin::OnLoad(const SKSE::LoadInterface* a_skse)
 			UISystem::OnInputLoaded();
 			break;
 		case SKSE::MessagingInterface::kPreLoadGame:
-			UISystem::OnGameStarting();
+			UISystem::OnPreLoadGame({ static_cast<const char*>(msg->data), msg->dataLen });
 			break;
 		case SKSE::MessagingInterface::kNewGame:
 			UISystem::OnGameStarting();

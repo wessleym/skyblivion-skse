@@ -8,6 +8,8 @@ public:
 	static void OnInputLoaded();
 	//kPreLoadGame or kNewGame.
 	static void OnGameStarting();
+	//kPreLoadGame, with the name of the save about to load.
+	static void OnPreLoadGame(std::string_view saveName);
 	static void OnDataLoaded();
 
 	static void OpenPersuasion(RE::Actor* target);
