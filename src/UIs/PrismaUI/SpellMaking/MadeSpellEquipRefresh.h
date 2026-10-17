@@ -3,7 +3,7 @@
 //Deferred re-equip of the player's in-hand made spells after a game load.
 //On a save's load the base game restores the equipped placeholder before the co-save refills its effects.
 //So the readied-hand cast art never attaches.
-//Scheduling a re-equip once the load has settled rebuilds that visual.
+//Re-equipping from an SKSE task, after the co-save load returns, rebuilds that visual.
 namespace SpellMaking {
 
 	class MadeSpellEquipRefresh {
@@ -12,11 +12,7 @@ namespace SpellMaking {
 		static void Schedule();
 
 	private:
-		static void Pump(int generation);
 		static void Run();
-
-		static int s_delay;//frames left before the refresh fires
-		static int s_generation;//bumped per Schedule() so a newer load supersedes an older
 	};
 
 }

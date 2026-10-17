@@ -1,5 +1,6 @@
 #include "SpellMakingStore.h"
 #include "MadeSpellEquipRefresh.h"
+#include "Resources.h"
 
 #include <algorithm>
 #include <string_view>
@@ -171,7 +172,7 @@ namespace SpellMaking {
 		//Set fixed magicka cost. (I'm not sure if the engine could calculate a cost automatically.)
 		form->data.flags.set(RE::SpellItem::SpellFlag::kCostOverride);
 		form->data.costOverride = recipe.magickaCost;
-	
+		//"Either Hand" equip slot so the spell is equippable.
 		form->SetEquipSlot(Resources::eitherHandSlot);
 	}
 

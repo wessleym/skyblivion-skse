@@ -16,7 +16,6 @@ private:
     static inline RE::SCRIPT_FUNCTION* sayToFunction = nullptr;
     static inline std::array<std::uint8_t, 12> sayToScriptData{
         static_cast<std::uint8_t>(RE::FUNCTION_DATA::FunctionID::kSayTo), 0x10, 0x8, 0x0, 0x2, 0x0, 0x72, 0x1, 0x0, 0x72, 0x2, 0x0};
-    static inline RE::SCRIPT_FUNCTION* isAnimPlayingFunction = nullptr;
     static inline RE::SCRIPT_FUNCTION* getDestroyedFunction = nullptr;
     static inline RE::SCRIPT_FUNCTION* startConversationFunction = nullptr;  // WTM:  Change:  Experimenting
     static inline std::array<std::uint8_t, 12> startConversationScriptData{

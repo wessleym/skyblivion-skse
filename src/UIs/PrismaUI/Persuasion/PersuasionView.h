@@ -19,8 +19,7 @@ namespace Persuasion {
 		static constexpr const char* kVerifyJsFunc = PersuasionContract::JsFunc::PersuasionVerifyBridges;
 		static void RegisterListeners(const PrismaViewHandle& view);
 
-		//<NEB> The game uses actor handles for menu targets
-		static RE::ActorHandle s_currentTargetFormID;//ActorHandle of NPC currently being persuaded
+		static RE::ActorHandle s_currentTarget;//ActorHandle of NPC currently being persuaded
 
 		// Resolves the current target actor, returning null and logging on failure
 		static RE::Actor* GetCurrentActorOrWarn(const char* context);

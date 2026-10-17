@@ -5,6 +5,7 @@
 #include "PersuasionPreferences.h"
 #include "Disposition/DispositionSystem.h"
 #include "Actors/ActorExpression.h"
+#include "Resources.h"
 
 #include "../PrismaViewHandle.h"
 
@@ -13,7 +14,7 @@
 
 namespace Persuasion {
 
-	RE::ActorHandle PersuasionView::s_currentTargetFormID = {};
+	RE::ActorHandle PersuasionView::s_currentTarget = {};
 
 	namespace {
 		struct BribeInputs {
@@ -39,17 +40,6 @@ namespace Persuasion {
 			out.npcLevel = actor->GetLevel();
 			return true;
 		}
-
-		// Removes gold from the player. Returns false and logs if the gold form is missing.
-		bool ChargeGold(RE::PlayerCharacter* player, int price) {
-			//<NEB> The check to TESBoundObject is pointless
-			if (!Resources::gold) {
-				Log::ERROR("PersuasionView::OnBribe: Gold001 (0x0000000F) Form Missing");
-				return false;
-			}
-			player->RemoveItem(Resources::gold, price, RE::ITEM_REMOVE_REASON::kRemove, nullptr, nullptr);
-			return true;
-		}
 	}
 
 	void PersuasionView::Initialize(const PrismaUIService& service) {
@@ -64,18 +54,17 @@ namespace Persuasion {
 	}
 
 	RE::Actor* PersuasionView::GetCurrentActorOrWarn(const char* context) {
-		//<NEB>? Is this ever to be allowed to have no target when called? Maybe assert
-		if (!s_currentTargetFormID) {
-			Log::WARN("{}: s_currentTargetFormID was a null handle.", context);
+		//This can be empty: A late JavaScript event may arrive after Close() cleared the target.
+		if (!s_currentTarget) {
+			Log::WARN("{}: s_currentTarget was a null handle.", context);
 			return nullptr;
 		}
 
-		RE::ActorPtr actor = s_currentTargetFormID.get();
-		
-		//<NEB> unsure if this can ever actually be represented with a reference handle
-		//if (!actor) {
-		//	Log::WARN("{}: actor was null for {:08X}.", context, s_currentTargetFormID);
-		//}
+		RE::ActorPtr actor = s_currentTarget.get();
+
+		if (!actor) {
+			Log::WARN("{}: actor was null for handle {:08X}.", context, s_currentTarget.native_handle());
+		}
 		return actor.get();
 	}
 
@@ -87,7 +76,7 @@ namespace Persuasion {
 			Log::WARN("PersuasionView::Open: Argument target was null.");
 			return;
 		}
-		s_currentTargetFormID = target->GetHandle();
+		s_currentTarget = target->GetHandle();
 
 		auto displayName = target->GetDisplayFullName();
 		std::string name = displayName ? displayName : "Name Not Found";
@@ -115,18 +104,18 @@ namespace Persuasion {
 	void PersuasionView::Close() {
 		s_handle.UnfocusAndHide();
 
-		if (!s_currentTargetFormID) {
-			Log::WARN("PersuasionView::Close: s_currentTargetFormID was 0.");
+		if (!s_currentTarget) {
+			Log::WARN("PersuasionView::Close: s_currentTarget was a null handle.");
 			return;
 		}
 
-		if (RE::ActorPtr actor = s_currentTargetFormID.get()) {
+		if (RE::ActorPtr actor = s_currentTarget.get()) {
 			ActorExpression::Reset(actor.get());
 		}
 
-		DialogueSession::End(s_currentTargetFormID);
+		DialogueSession::End(s_currentTarget);
 
-		s_currentTargetFormID = RE::ActorHandle{};
+		s_currentTarget = RE::ActorHandle{};
 	}
 
 	//When argument is an empty string, the user has moved away from the wedge.
@@ -192,9 +181,7 @@ namespace Persuasion {
 			SendBribeResult(false, outcome.price, 0, inputs.disposition, "Not Enough Gold");
 			return;
 		}
-		if (!ChargeGold(player, outcome.price)) {
-			return;
-		}
+		player->RemoveItem(Resources::gold, outcome.price, RE::ITEM_REMOVE_REASON::kRemove, nullptr, nullptr);
 
 		const float newDisposition = std::min(BribeEconomy::kDispositionMax, inputs.disposition + static_cast<float>(outcome.gain));
 		SetDisposition(actor, newDisposition);
@@ -215,8 +202,16 @@ namespace Persuasion {
 		s_handle.InvokeByFunctionName(PersuasionContract::JsFunc::PersuasionBribeResult, payload);
 	}
 
+	//PrismaUI calls back from its own thread, so change the actor value on the main thread.
 	void PersuasionView::SetDisposition(RE::Actor* actor, float value) {
-		DispositionSystem::SetDispositionActorValue(actor, value, true);
+		auto* taskInterface = SKSE::GetTaskInterface();
+		assert(taskInterface);
+		RE::ActorHandle handle = actor->GetHandle();
+		taskInterface->AddTask([handle, value]() {
+			if (RE::ActorPtr actor = handle.get()) {
+				DispositionSystem::SetDispositionActorValue(actor.get(), value, true);
+			}
+			});
 	}
 
 }

@@ -1,5 +1,6 @@
 #include "PerkListValidator.h"
 #include "PerkIndex.h"
+#include "Resources.h"
 
 #include <string>
 #include <unordered_map>
@@ -8,7 +9,6 @@
 #include <vector>
 
 namespace Stats {
-	//<NEB>? Why is this a namespace?
 	namespace {
 		using PerkSet = std::unordered_set<RE::FormID>;
 
@@ -22,10 +22,6 @@ namespace Stats {
 		std::vector<AttributeList> ReadLists() {
 			std::vector<AttributeList> lists;
 
-			auto* dataHandler = RE::TESDataHandler::GetSingleton();
-			if (!dataHandler) {
-				return lists;
-			}
 			RE::BGSListForm* master = Resources::perkTreeList;
 			if (!master) {
 				Log::INFO("PerkListValidator: {} does not supply SKYBPerkTrees. Skipping the check.", Resources::pluginName);

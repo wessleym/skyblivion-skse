@@ -5,6 +5,3 @@
 
 #include "Platform/Log.h"
 #include "Platform/REBridge.h"
-
-
-#include "Resources.h"

@@ -1,7 +1,5 @@
 #include "ObjectReferenceUtility.h"
 
-#include "RE/ObjectReference.h"
-
 void ObjectReferenceUtility::Register(RE::BSScript::Internal::VirtualMachine* vm) {
 	std::string_view className = "SKYBObjectReferenceUtility";
 
@@ -11,7 +9,6 @@ void ObjectReferenceUtility::Register(RE::BSScript::Internal::VirtualMachine* vm
 	sayToFunction = SKSEScriptRegistrar::LocateFunction("SayTo");
 	SKSEScriptRegistrar::Register(vm, className, "LegacySayTo", ObScriptSayTo);
 
-	isAnimPlayingFunction = SKSEScriptRegistrar::LocateFunction("IsAnimPlaying");
 	SKSEScriptRegistrar::Register(vm, className, "IsAnimPlaying", isAnimPlaying);
 
 	getDestroyedFunction = SKSEScriptRegistrar::LocateFunction("GetDestroyed");
@@ -125,18 +122,31 @@ float ObjectReferenceUtility::ObScriptSayTo(RE::StaticFunctionTag*, RE::TESObjec
 	return static_cast<float>(result + 0.5);
 }
 
+//Mirrors the ObScript IsAnimPlaying with no animation group: is any Gamebryo controller sequence
+//on the reference's root active? Behavior-graph (Havok) animation is not detected, as in the original.
 bool ObjectReferenceUtility::isAnimPlaying(RE::StaticFunctionTag*, RE::TESObjectREFR* animatedRefr) {
-	//<NEB> attempt to remake the function, need to confirm it's actually functional first
-	return RE::IsAnimPlaying(animatedRefr);
-	
-	if (isAnimPlayingFunction) {
-		RE::SCRIPT_FUNCTION::ScriptData isAnimPlayingFunctionData = { 0x1128, 0x0001, 0x0000 };
-		double result = 0.0;
-		std::uint32_t opcodeOffset = 0x4;
-
-		isAnimPlayingFunction->executeFunction(isAnimPlayingFunction->params, &isAnimPlayingFunctionData,
-			animatedRefr, nullptr, nullptr, nullptr, result, opcodeOffset);
-		return (result != 0.0);
+	if (!animatedRefr) {
+		return false;
+	}
+	//Hold a reference so the 3D can't be released during the check.
+	RE::NiPointer<RE::NiAVObject> root{ animatedRefr->Get3D2() };
+	RE::NiNode* node = root ? root->AsNode() : nullptr;
+	if (!node || !node->controllers) {
+		return false;
+	}
+	RE::NiControllerManager* manager = node->controllers->AsNiControllerManager();
+	if (!manager) {
+		return false;
+	}
+	//Bound by free_idx() (slots in use), as the engine does: NiTArray's range-for runs to capacity,
+	//into slots that were never written.
+	auto& sequences = manager->sequenceArray;
+	const auto count = sequences.free_idx();
+	for (std::remove_const_t<decltype(count)> i = 0; i < count; ++i) {
+		RE::NiControllerSequence* sequence = sequences[i].get();
+		if (sequence && !sequence->Inactive()) {
+			return true;
+		}
 	}
 	return false;
 }

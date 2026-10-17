@@ -2,6 +2,7 @@
 #include "SpellMakingStore.h"
 #include "SpellRecipeParser.h"
 #include "SpellMakingContract.h"
+#include "Resources.h"
 
 #include "../PrismaViewHandle.h"
 

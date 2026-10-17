@@ -9,7 +9,7 @@
 namespace Persuasion {
 	//<NEB> I'm saving this for later, but I'd like to redo the functionality of this file as an Character::Update
 	// hook of some kind. But ideally I would use actor handles for these as well.
-
+	// (Actor handles are complete.)
 
 	namespace {
 		std::atomic<bool>          s_keepAliveActive{ false };
@@ -42,8 +42,7 @@ namespace Persuasion {
 				for (int i = 0; i < 12; ++i) {
 					std::this_thread::sleep_for(std::chrono::milliseconds(250));
 					auto* taskInterface = SKSE::GetTaskInterface();
-					
-					//<NEB> Assert is better than a null check for skse interfaces
+
 					assert(taskInterface);
 
 					taskInterface->AddTask([handle, heldSamples, lastValue]() {
@@ -76,8 +75,7 @@ namespace Persuasion {
 						break;
 					}
 					auto* taskInterface = SKSE::GetTaskInterface();
-					
-					//<NEB> Assert is better than a null check for skse interfaces
+
 					assert(taskInterface);
 
 					taskInterface->AddTask([handle, myGen]() {
@@ -100,8 +98,7 @@ namespace Persuasion {
 		// Reopens the dialogue menu. Allows refreshing of topics.
 		void ReopenDialogueWhenClosed(RE::ActorHandle handle, int attemptsLeft) {
 			auto* taskInterface = SKSE::GetTaskInterface();
-			
-			//<NEB> Assert is better than a null check for skse interfaces
+
 			assert(taskInterface);
 
 			taskInterface->AddTask([handle, attemptsLeft]() {
@@ -136,8 +133,7 @@ namespace Persuasion {
 			// Marshal onto the game thread.
 			// Otherwise, calls like forceGoodbye and shutMenu are ignored, and the conversation never closes.
 			auto* taskInterface = SKSE::GetTaskInterface();
-			
-			//<NEB> Assert is better than a null check for skse interfaces
+
 			assert(taskInterface);
 
 			taskInterface->AddTask([handle]() {

@@ -1,54 +1,13 @@
 #include "MadeSpellEquipRefresh.h"
 #include "SpellMakingStore.h"
+#include "Resources.h"
 
 namespace SpellMaking {
 
-	int MadeSpellEquipRefresh::s_delay = 0;
-	int MadeSpellEquipRefresh::s_generation = 0;
-
-	//Starts a frame countdown.
 	void MadeSpellEquipRefresh::Schedule() {
-		//<NEB> I've skipped the function Pump because while one may believe it to cycle for a certain amount of executions,
-		// it's actually functioning more like if you were to keep adding things to the end of a list while doing a for loop.
-		// Basically the only relevant thing is the task, though this is likely important because equip item is a task either
-		// way, but I'm not 100% sure that won't change anything so I'll leave it for now. Will test if it's needed later.
-		
 		auto* task = SKSE::GetTaskInterface();
-
 		assert(task);
-
-		if (!task) {
-			return;
-		}
-		task->AddTask([]() {Run(); });
-		
-		return;
-
-		++s_generation;//invalidate any refresh still pumping from an earlier load
-		s_delay = 150;//let the load fully settle before re-equipping
-		Pump(s_generation);
-	}
-
-	//One tick of the countdown
-	//Re-posts itself to the SKSE task interface (one run per frame) until s_delay reaches zero,
-	//then calls Run().
-	//generation pins the generation this chain belongs to, so a newer Schedule() silently cancels it.
-	void MadeSpellEquipRefresh::Pump(int generation) {
-		auto* task = SKSE::GetTaskInterface();
-		if (!task) {
-			return;
-		}
-		task->AddTask([generation]() {
-			if (generation != s_generation) {
-				return;//A newer load superseded this refresh.
-			}
-			if (s_delay > 0) {
-				--s_delay;
-				Pump(generation);
-				return;
-			}
-			Run();
-		});
+		task->AddTask([]() { Run(); });
 	}
 
 	//Re-equips any made (placeholder-pool) spell currently in the player's hands,
@@ -57,7 +16,7 @@ namespace SpellMaking {
 		auto* player = RE::PlayerCharacter::GetSingleton();
 		auto* equipManager = RE::ActorEquipManager::GetSingleton();
 
-		assert(!player || !equipManager);
+		assert(player && equipManager);
 
 		if (!player || !equipManager) {
 			return;

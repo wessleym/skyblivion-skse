@@ -201,27 +201,24 @@ int DispositionSystem::GetDispositionActorValue(RE::Actor* actor) {
 	return disposition;
 }
 
+// Mirrors the Papyrus natives Actor.SetActorValue and Actor.ForceActorValue, which make these same
+// ActorValueOwner calls. Go through REBridge::AVOwner: the owner's offset within Actor differs by runtime.
+// Must run on the main thread.
 void DispositionSystem::SetDispositionActorValue(RE::Actor* actor, float value, bool force) {
-	PapyrusSetActorValue(actor, kDispositionAV, value, force);
-}
-
-// Actor values set directly through SKSE are not saved, so they are lost when the game is
-// reloaded. The value is calculated in SKSE and set through a Papyrus call, which persists.
-void DispositionSystem::PapyrusSetActorValue(RE::Actor* target, RE::ActorValue av, float value, bool force) {
-	
-	if (!target || av == RE::ActorValue::kNone) {
+	if (!actor) {
 		return;
 	}
 
+	auto* avOwner = REBridge::AVOwner(actor);
 	if (force) {
-		float current = target->GetActorValue(av);
+		float current = avOwner->GetActorValue(kDispositionAV);
 
-		target->ModActorValue(RE::ACTOR_VALUE_MODIFIER::kPermanent, av, value - current);
+		avOwner->ModActorValue(RE::ACTOR_VALUE_MODIFIER::kPermanent, kDispositionAV, value - current);
 	}
 	else {
-		target->SetActorValue(av, value);
+		avOwner->SetActorValue(kDispositionAV, value);
 	}
-	
+
 	const auto functionName = force ? "ForceActorValue" : "SetActorValue";
 	Log::DEBUG("Actor.{}({})", functionName, value);
 }

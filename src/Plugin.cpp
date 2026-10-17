@@ -3,6 +3,7 @@
 #include "Achievements/AchievementStore.h"
 #include "Disposition/DispositionSystem.h"
 #include "Papyrus/SKSEScriptRegistrar.h"
+#include "Resources.h"
 #include "Settings/SettingsService.h"
 #include "Sigil/SigilSystem.h"
 #include "UIs/UISystem.h"
@@ -54,13 +55,14 @@ bool Plugin::OnLoad(const SKSE::LoadInterface* a_skse)
 			break;
 		case SKSE::MessagingInterface::kDataLoaded:
 			Log::INFO("SKSE Data Loaded...");
+			//The systems below use Resources.
+			Resources::Install();
 			DispositionSystem::OnDataLoaded();
 			Sigil::SigilSystem::Register();
 			Achievements::AchievementStore::Register();
 			//Before UISystem: the title screen and the journal read the settings.
 			Settings::SettingsService::Register();
 			UISystem::OnDataLoaded();
-			Resources::Install();
 			Log::INFO("SKSE Data Loaded Complete");
 			break;
 		default:
