@@ -9,8 +9,10 @@
 
 #include "Platform/Backend.h"
 
+#include <cmath>
 #include <cstddef>
 #include <cstdint>
+#include <limits>
 
 namespace REBridge
 {
@@ -108,6 +110,20 @@ namespace REBridge
 		return a_form->GetSlotMask().underlying();
 #else
 		return static_cast<std::uint32_t>(a_form->GetSlotMask());
+#endif
+	}
+
+	//Whether the effect has this base, magnitude, area, duration, and cost. libxse lacks NG's Effect::IsMatch, so it is mirrored here.
+	[[nodiscard]] inline bool EffectMatches(RE::Effect* a_effect, RE::EffectSetting* a_base, float a_magnitude, std::uint32_t a_area, std::uint32_t a_duration, float a_cost)
+	{
+#if SKY_COMMONLIB == SKY_COMMONLIB_NG
+		return a_effect->IsMatch(a_base, a_magnitude, a_area, a_duration, a_cost);
+#else
+		const auto essentiallyEqual = [](float a, float b) {
+			return std::fabs(a - b) <= std::fmin(std::fabs(a), std::fabs(b)) * std::numeric_limits<float>::epsilon();
+		};
+		return a_effect->baseEffect == a_base &&
+		       essentiallyEqual(a_effect->effectItem.magnitude, a_magnitude) && a_effect->effectItem.area == a_area && a_effect->effectItem.duration == a_duration && essentiallyEqual(a_effect->cost, a_cost);
 #endif
 	}
 }

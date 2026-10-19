@@ -286,7 +286,7 @@ namespace SpellMaking {
 			const auto duration = static_cast<std::uint32_t>(spec.duration);
 			const float cost = static_cast<float>(spec.magickaCost);
 			auto match = std::ranges::find_if(previous, [&](RE::Effect* effect) {
-				return effect && effect->IsMatch(mgef, magnitude, spec.area, duration, cost);
+				return effect && REBridge::EffectMatches(effect, mgef,magnitude, spec.area, duration, cost);
 			});
 			RE::Effect* effect = nullptr;
 			if (match != previous.end()) {
