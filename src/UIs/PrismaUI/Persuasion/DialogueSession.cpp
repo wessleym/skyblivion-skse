@@ -1,4 +1,5 @@
 #include "DialogueSession.h"
+#include "Platform/MainThread.h"
 
 #include <atomic>
 #include <chrono>
@@ -15,17 +16,20 @@ namespace Persuasion {
 		std::atomic<bool>          s_keepAliveActive{ false };
 		std::atomic<std::uint32_t> s_keepAliveGeneration{ 0 };
 
+		//Into the movie: on the main thread, next frame.
 		void SetDialogueMenuVisible(bool visible) {
-			auto* ui = RE::UI::GetSingleton();
-			if (!ui) {
-				return;
-			}
-			auto menu = ui->GetMenu(RE::DialogueMenu::MENU_NAME);
-			if (!menu || !menu->uiMovie) {
-				return;
-			}
-			RE::GFxValue value{ visible };
-			menu->uiMovie->SetVariable("_root._visible", value);
+			MainThread::Post([visible] {
+				auto* ui = RE::UI::GetSingleton();
+				if (!ui) {
+					return;
+				}
+				auto menu = ui->GetMenu(RE::DialogueMenu::MENU_NAME);
+				if (!menu || !menu->uiMovie) {
+					return;
+				}
+				RE::GFxValue value{ visible };
+				menu->uiMovie->SetVariable("_root._visible", value);
+			});
 		}
 
 		// Puts the NPC into the engine's native "in conversation with the player" state.

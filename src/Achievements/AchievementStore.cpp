@@ -1,6 +1,5 @@
 #include "AchievementStore.h"
 #include "AchievementContract.h"
-#include "Papyrus/ModEvents.h"
 #include "Storage/SafeFileWrite.h"
 
 #include <nlohmann/json.hpp>
@@ -8,12 +7,15 @@
 #include <chrono>
 #include <filesystem>
 #include <fstream>
+#include <mutex>
 #include <optional>
 #include <string_view>
 
 namespace Achievements {
 
 	namespace {
+		//Guards everything below: unlocks arrive from the Papyrus VM, the menu reads from UI tasks.
+		std::mutex g_lock;
 		nlohmann::json g_store;
 		bool g_loaded = false;
 		//False when the file on disk could be neither read nor moved aside: a save would destroy it.
@@ -24,7 +26,7 @@ namespace Achievements {
 			if (!folder) {
 				return std::nullopt;
 			}
-			return *folder / AchievementContract::FileName;
+			return *folder / AchievementContract::RecordFileName;
 		}
 
 		//Null when the file cannot be opened, does not parse, or lacks the achievements object.
@@ -148,83 +150,40 @@ namespace Achievements {
 		}
 	}
 
-	void AchievementStore::Register() {
-		if (!ModEvents::AddSink(&s_sink)) {
-			Log::WARN("AchievementStore: No mod-event source. Achievement syncs will not be heard.");
-			return;
-		}
-		Log::INFO("AchievementStore: Registered.");
-	}
-
-	void AchievementStore::Sync(const std::string& csv) {
+	void AchievementStore::Record(const std::string& id, const std::string& character) {
+		std::scoped_lock lock(g_lock);
 		EnsureLoaded();
 		auto& achievements = g_store["achievements"];
-
-		std::string characterName;
-		if (auto* player = RE::PlayerCharacter::GetSingleton()) {
-			if (const char* name = player->GetName()) {
-				characterName = name;
-			}
+		if (achievements.contains(id)) {
+			return;
 		}
-
-		int added = 0;
-		for (const auto& row : ModEvents::Split(csv, ';')) {
-			const auto separatorIndex = row.find('|');
-			if (separatorIndex == std::string::npos || separatorIndex == 0) {
-				continue;
-			}
-			//Only rows flagged "1" are unlocked.
-			if (std::string_view(row).substr(separatorIndex + 1, 1) != "1") {
-				continue;
-			}
-			const std::string key = row.substr(0, separatorIndex);
-			if (!achievements.contains(key)) {
-				achievements[key] = { { "first", NowStamp() }, { "character", characterName } };
-				++added;
-				Log::INFO("AchievementStore: New cross-save unlock '{}' (character '{}').", key, characterName);
-			}
-		}
-
-		if (added > 0) {
-			SaveStore();
-		}
+		achievements[id] = { { "first", NowStamp() }, { "character", character } };
+		Log::INFO("AchievementStore: New cross-save unlock '{}' (character '{}').", id, character);
+		SaveStore();
 	}
 
-	std::unordered_set<std::string> AchievementStore::UnlockedKeys() {
+	std::unordered_map<std::string, AchievementStore::Entry> AchievementStore::All() {
+		std::scoped_lock lock(g_lock);
 		EnsureLoaded();
-		std::unordered_set<std::string> keys;
+		std::unordered_map<std::string, Entry> entries;
 		for (const auto& [key, value] : g_store["achievements"].items()) {
-			keys.insert(key);
-		}
-		return keys;
-	}
-
-	void AchievementStore::AnswerFileRequest() {
-		EnsureLoaded();
-		std::string keys;
-		for (const auto& [key, value] : g_store["achievements"].items()) {
-			if (!keys.empty()) {
-				keys += ',';
+			Entry entry;
+			if (value.is_object()) {
+				// a hand-edited file may hold any type here: anything but a string reads as blank
+				const auto text = [&value](const char* a_key) {
+					const auto it = value.find(a_key);
+					return it != value.end() && it->is_string() ? it->get<std::string>() : std::string{};
+				};
+				entry.first = text("first");
+				entry.character = text("character");
 			}
-			keys += key;
+			entries.emplace(key, std::move(entry));
 		}
-		const auto count = g_store["achievements"].size();
-		ModEvents::Send(AchievementContract::Answer::FileData, keys, static_cast<float>(count));
-		Log::INFO("AchievementStore: Answered a file data request ({} key(s)).", count);
+		return entries;
 	}
 
-	RE::BSEventNotifyControl AchievementStore::Sink::ProcessEvent(const SKSE::ModCallbackEvent* a_event,
-		RE::BSTEventSource<SKSE::ModCallbackEvent>*) {
-		if (!a_event) {
-			return RE::BSEventNotifyControl::kContinue;
-		}
-		if (a_event->eventName == AchievementContract::ModEvent::Sync) {
-			SKSE::GetTaskInterface()->AddTask([csv = ModEvents::StrArg(*a_event)] { Sync(csv); });
-		}
-		else if (a_event->eventName == AchievementContract::ModEvent::RequestFileData) {
-			SKSE::GetTaskInterface()->AddTask([] { AnswerFileRequest(); });
-		}
-		return RE::BSEventNotifyControl::kContinue;
+	std::string AchievementStore::Now() {
+		return NowStamp();
 	}
 
 }

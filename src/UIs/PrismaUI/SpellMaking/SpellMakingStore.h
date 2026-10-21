@@ -50,7 +50,7 @@ namespace SpellMaking {
 		//Resolves the placeholder pool. Call once after data load.
 		static void Initialize();
 
-		//Registers the SKSE co-save serialization callbacks. Call once at plugin load.
+		//Adds the recipe record to the plugin's co-save (Storage/CoSave). Call once at plugin load.
 		static void RegisterSerialization();
 
 		//Refills the placeholders from the co-save file of the save about to load. Call on kPreLoadGame,
@@ -84,8 +84,14 @@ namespace SpellMaking {
 		static std::uint32_t RestoreRecipes(std::span<const std::byte> record);
 
 		static void OnGameSaved(SKSE::SerializationInterface* intfc);
-		static void OnGameLoaded(SKSE::SerializationInterface* intfc);
+		//One recipe record of a save being loaded.
+		static void OnRecipeRecord(SKSE::SerializationInterface* intfc, std::uint32_t version, std::uint32_t length);
+		//After the whole save was read.
+		static void OnGameLoaded();
 		static void OnRevert(SKSE::SerializationInterface* intfc);
+
+		//Placeholders refilled by the save being loaded.
+		static inline std::uint32_t s_restored = 0;
 
 		static std::vector<Slot> s_slots;
 	};

@@ -1,8 +1,10 @@
 #include "DialogueFeed.h"
 #include "DialogueContract.h"
 #include "DialogueServices.h"
+#include "Platform/FormCache.h"
 #include "Disposition/DispositionSystem.h"
 #include "Papyrus/ModEvents.h"
+#include "Platform/MainThread.h"
 #include "UIs/Scaleform/ScaleformUtility.h"
 #include "UIs/UISystem.h"
 
@@ -12,38 +14,16 @@
 namespace Dialogue {
 
 	namespace {
-		//Editor ID first, since it survives a form renumber; the form key covers a load order without po3 Tweaks.
-		//Cached after the first attempt: the form cannot change mid-session.
-		template <class T>
-		T* LookupCached(T*& cache, bool& attempted, const char* editorID, RE::FormID formID) {
-			if (attempted) {
-				return cache;
-			}
-			attempted = true;
-			cache = RE::TESForm::LookupByEditorID<T>(editorID);
-			if (!cache) {
-				if (auto* dataHandler = RE::TESDataHandler::GetSingleton()) {
-					cache = dataHandler->LookupForm<T>(formID, DialogueContract::Forms::Plugin);
-				}
-			}
-			if (!cache) {
-				Log::WARN("DialogueFeed: {} not resolved.", editorID);
-			}
-			return cache;
-		}
-
+		//Both resolve once, at data load, through the form table (editor ID first, since it survives a form
+		//renumber; the form key covers a load order without po3 Tweaks).
 		RE::TESTopic* PersuasionTopic() {
-			static RE::TESTopic* cache = nullptr;
-			static bool attempted = false;
-			return LookupCached(cache, attempted,
-				DialogueContract::Forms::PersuasionTopicEditorID, DialogueContract::Forms::PersuasionTopicFormID);
+			return FormCache::Get<RE::TESTopic>(DialogueContract::Forms::PersuasionTopicEditorID,
+				DialogueContract::Forms::PersuasionTopicFormID, DialogueContract::Forms::Plugin, "DialogueFeed");
 		}
 
 		RE::TESFaction* NoPersuadeFaction() {
-			static RE::TESFaction* cache = nullptr;
-			static bool attempted = false;
-			return LookupCached(cache, attempted,
-				DialogueContract::Forms::NoPersuadeFactionEditorID, DialogueContract::Forms::NoPersuadeFactionFormID);
+			return FormCache::Get<RE::TESFaction>(DialogueContract::Forms::NoPersuadeFactionEditorID,
+				DialogueContract::Forms::NoPersuadeFactionFormID, DialogueContract::Forms::Plugin, "DialogueFeed");
 		}
 
 		//The current speaker, or the last one, which the menu still shows while a response plays.
@@ -170,7 +150,8 @@ namespace Dialogue {
 			return RE::BSEventNotifyControl::kContinue;
 		}
 		if (a_event->eventName == DialogueContract::ModEvent::RequestDialogueData) {
-			SKSE::GetTaskInterface()->AddTask([request = ModEvents::StrArg(*a_event)] { PushDialogueData(request); });
+			//Built on the main thread, next frame: SKSE's task queues can run on worker threads and race the menu.
+			MainThread::Post([request = ModEvents::StrArg(*a_event)] { PushDialogueData(request); });
 		}
 		else if (a_event->eventName == DialogueContract::ModEvent::OpenPersuasion) {
 			SKSE::GetTaskInterface()->AddTask([] { OpenPersuasion(); });

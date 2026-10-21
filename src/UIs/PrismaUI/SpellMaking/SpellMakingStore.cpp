@@ -1,6 +1,7 @@
 #include "SpellMakingStore.h"
 #include "MadeSpellEquipRefresh.h"
 #include "Resources.h"
+#include "Storage/CoSave.h"
 
 #include <algorithm>
 #include <cstring>
@@ -22,7 +23,8 @@ namespace SpellMaking {
 		constexpr std::string_view kPoolMarkerName = "SKYBSpellMakingSpell";//Spell Making Required Plugin Data (1/2)
 
 		//Co-Save Record:
-		constexpr std::uint32_t kSerializationID = 'SKYB';
+		//The plugin's co-save id (Storage/CoSave owns the SKSE callbacks; this file reads the file directly too).
+		constexpr std::uint32_t kSerializationID = Storage::CoSave::UniqueID;
 		constexpr std::uint32_t kRecipeRecord = 'SPRC';
 		constexpr std::uint32_t kRecipeVersion = 1;//OpenRecord requires a version.
 
@@ -419,17 +421,18 @@ namespace SpellMaking {
 		Log::INFO("SpellMakingStore::RestoreBeforeLoad: Refilled {} Made-Spell Placeholder(s) from {}", restored, path->filename().generic_string());
 	}
 
+	//The plugin's co-save (Storage/CoSave) owns the SKSE callbacks: the settings menu's store keeps
+	//its record there too, and SKSE allows a plugin only one set.
 	void SpellMakingStore::RegisterSerialization() {
-		auto* serializationInterface = SKSE::GetSerializationInterface();
-		if (!serializationInterface) {
-			Log::WARN("SpellMakingStore::RegisterSerialization: Serialization Interface Unavailable");
-			return;
-		}
-		serializationInterface->SetUniqueID(kSerializationID);
-		serializationInterface->SetSaveCallback(OnGameSaved);
-		serializationInterface->SetLoadCallback(OnGameLoaded);
-		serializationInterface->SetRevertCallback(OnRevert);
-		Log::INFO("SpellMakingStore::RegisterSerialization: Serialization Callbacks Registered");
+		Storage::CoSave::Store store;
+		store.name = "SpellMakingStore";
+		store.recordType = kRecipeRecord;
+		store.save = OnGameSaved;
+		store.load = OnRecipeRecord;
+		store.revert = OnRevert;
+		store.loaded = OnGameLoaded;
+		Storage::CoSave::Add(store);
+		Log::INFO("SpellMakingStore::RegisterSerialization: Recipe Record Added to the Co-Save");
 	}
 
 	void SpellMakingStore::OnGameSaved(SKSE::SerializationInterface* intfc) {
@@ -458,39 +461,36 @@ namespace SpellMaking {
 		Log::INFO("SpellMakingStore::OnGameSaved: Wrote {} Made-Spell Recipe(s) to Co-Save", usedCount);
 	}
 
-	void SpellMakingStore::OnGameLoaded(SKSE::SerializationInterface* intfc) {
-		//RestoreBeforeLoad has normally refilled the placeholders already. This refills them again from SKSE's
-		//own copy, covering a load whose co-save file could not be read early. Refilling with the same
-		//recipes reuses the same Effect objects, so it changes nothing.
-		ResetSlots();
-
-		std::uint32_t restored = 0;
-		std::uint32_t type = 0;
-		std::uint32_t version = 0;
-		std::uint32_t length = 0;
-		while (intfc->GetNextRecordInfo(type, version, length)) {
-			if (type != kRecipeRecord) {
-				continue;
-			}
-			if (version != kRecipeVersion) {
-				Log::WARN("SpellMakingStore::OnGameLoaded: Skipped Co-Save Recipe Record Version {} (Expected {})", version, kRecipeVersion);
-				continue;
-			}
-			std::vector<std::byte> record(length);
-			if (intfc->ReadRecordData(record.data(), length) != length) {
-				Log::ERROR("SpellMakingStore::OnGameLoaded: Co-Save Recipe Record Truncated");
-				continue;
-			}
-			restored = RestoreRecipes(record);
+	//One recipe record of the save being loaded (the co-save hands this store only those).
+	//RestoreBeforeLoad has normally refilled the placeholders already. This refills them again from SKSE's
+	//own copy, covering a load whose co-save file could not be read early. Refilling with the same
+	//recipes reuses the same Effect objects, so it changes nothing. The co-save reverts every store
+	//before it reads a save, and RestoreRecipes frees the slots itself.
+	void SpellMakingStore::OnRecipeRecord(SKSE::SerializationInterface* intfc, std::uint32_t version, std::uint32_t length) {
+		if (version != kRecipeVersion) {
+			Log::WARN("SpellMakingStore::OnGameLoaded: Skipped Co-Save Recipe Record Version {} (Expected {})", version, kRecipeVersion);
+			return;
 		}
-		Log::INFO("SpellMakingStore::OnGameLoaded: Refilled {} Made-Spell Placeholder(s) from Co-Save", restored);
-		if (restored > 0) {
+		std::vector<std::byte> record(length);
+		if (intfc->ReadRecordData(record.data(), length) != length) {
+			Log::ERROR("SpellMakingStore::OnGameLoaded: Co-Save Recipe Record Truncated");
+			return;
+		}
+		s_restored = RestoreRecipes(record);
+	}
+
+	//After the whole save was read.
+	void SpellMakingStore::OnGameLoaded() {
+		Log::INFO("SpellMakingStore::OnGameLoaded: Refilled {} Made-Spell Placeholder(s) from Co-Save", s_restored);
+		if (s_restored > 0) {
 			MadeSpellEquipRefresh::Schedule();
 		}
+		s_restored = 0;
 	}
 
 	void SpellMakingStore::OnRevert(SKSE::SerializationInterface*) {
 		ResetSlots();
+		s_restored = 0;
 	}
 
 }

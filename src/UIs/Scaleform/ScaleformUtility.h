@@ -12,13 +12,15 @@ public:
 	//Every feed pushes through this: a menu can close between a request and the task that answers it.
 	[[nodiscard]] static RE::GPtr<RE::GFxMovieView> OpenMenuMovie(std::string_view menuName);
 
+	//Whether Interface/<a_name>.swf exists, loose or in an archive.
+	[[nodiscard]] static bool MovieExists(std::string_view a_name);
+
 	//For the feeds' timing log lines.
 	[[nodiscard]] static long long MicrosecondsSince(std::chrono::steady_clock::time_point start);
 
-	//Runs attempt as a UI task until it returns true, at most attempts times, waiting interval between tries.
-	//onGiveUp then runs as a UI task if every attempt returned false.
-	//The wait is a sleeping thread, not a task that queues itself again:
-	//SKSE drains its queues in a loop, so a re-queued task runs in the same pass, not a later frame.
+	//Runs attempt on the main thread (MainThread::Post) until it returns true, at most attempts times,
+	//waiting interval between tries. onGiveUp then runs there too if every attempt returned false.
+	//The wait is a sleeping thread, so that the interval is real time, not a count of frames.
 	static void RetryOnUIThread(int attempts, std::chrono::milliseconds interval,
 		std::function<bool()> attempt, std::function<void()> onGiveUp);
 };
@@ -47,4 +49,16 @@ struct FeedRequest {
 
 	//Pushes the value to the target as the mode says. False, having pushed nothing, for an unknown mode.
 	bool Push(const RE::GFxValue& value) const;
+};
+
+//A menu's data request, "menu|target": the open menu, and the absolute path of the function the answer is passed to as its one argument.
+struct MenuCallback {
+	RE::GPtr<RE::GFxMovieView> movie;
+	std::string target;
+
+	//Null when the request is malformed, which is logged under source,
+	//or when its menu is closed, which is silent (see ScaleformUtility::OpenMenuMovie).
+	[[nodiscard]] static std::optional<MenuCallback> Open(const std::string& request, std::string_view source);
+
+	void Invoke(const RE::GFxValue& value) const;
 };
