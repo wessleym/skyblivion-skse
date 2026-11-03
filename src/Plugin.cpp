@@ -1,6 +1,7 @@
 #include "Plugin.h"
 
 #include "Achievements/AchievementService.h"
+#include "Platform/FormCache.h"
 #include "Degradation/Breakage.h"
 #include "Degradation/DecayService.h"
 #include "Degradation/InventoryHook.h"
@@ -10,6 +11,7 @@
 #include "Disposition/DispositionSystem.h"
 #include "Hotkeys/HotkeyService.h"
 #include "Papyrus/SKSEScriptRegistrar.h"
+#include "Resources.h"
 #include "Platform/MainThread.h"
 #include "Settings/SettingsService.h"
 #include "SettingsMenu/CombatService.h"
@@ -84,7 +86,7 @@ bool Plugin::OnLoad(const SKSE::LoadInterface* a_skse)
 			UISystem::OnInputLoaded();
 			break;
 		case SKSE::MessagingInterface::kPreLoadGame:
-			UISystem::OnGameStarting();
+			UISystem::OnPreLoadGame({ static_cast<const char*>(msg->data), msg->dataLen });
 			break;
 		case SKSE::MessagingInterface::kNewGame:
 			UISystem::OnGameStarting();
@@ -107,6 +109,9 @@ bool Plugin::OnLoad(const SKSE::LoadInterface* a_skse)
 			break;
 		case SKSE::MessagingInterface::kDataLoaded:
 			Log::INFO("SKSE Data Loaded...");
+			//The systems below use Resources and the form table (po3 Tweaks' editor-ID map is built by now).
+			Resources::Install();
+			FormCache::OnDataLoaded();
 			DispositionSystem::OnDataLoaded();
 			Sigil::SigilSystem::Register();
 			Achievements::AchievementService::Register();

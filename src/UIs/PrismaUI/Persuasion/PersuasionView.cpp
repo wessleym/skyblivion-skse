@@ -1,5 +1,4 @@
 #include "PersuasionView.h"
-#include "BribeEconomy.h"
 #include "PersuasionContract.h"
 #include "DialogueSession.h"
 #include "PersuasionBribery.h"
@@ -15,7 +14,7 @@
 
 namespace Persuasion {
 
-	RE::FormID PersuasionView::s_currentTargetFormID = 0;
+	RE::ActorHandle PersuasionView::s_currentTarget = {};
 
 	namespace {
 		//The rules of the conversation in progress: settings, the settings menu's overrides and the
@@ -36,15 +35,18 @@ namespace Persuasion {
 	}
 
 	RE::Actor* PersuasionView::GetCurrentActorOrWarn(const char* context) {
-		if (s_currentTargetFormID == 0) {
-			Log::WARN("{}: s_currentTargetFormID was 0.", context);
+		//This can be empty: A late JavaScript event may arrive after Close() cleared the target.
+		if (!s_currentTarget) {
+			Log::WARN("{}: s_currentTarget was a null handle.", context);
 			return nullptr;
 		}
-		auto* actor = RE::TESForm::LookupByID<RE::Actor>(s_currentTargetFormID);
+
+		RE::ActorPtr actor = s_currentTarget.get();
+
 		if (!actor) {
-			Log::WARN("{}: actor was null for {:08X}.", context, s_currentTargetFormID);
+			Log::WARN("{}: actor was null for handle {:08X}.", context, s_currentTarget.native_handle());
 		}
-		return actor;
+		return actor.get();
 	}
 
 	void PersuasionView::Open(RE::Actor* target) {
@@ -55,7 +57,7 @@ namespace Persuasion {
 			Log::WARN("PersuasionView::Open: Argument target was null.");
 			return;
 		}
-		s_currentTargetFormID = target->GetFormID();
+		s_currentTarget = target->GetHandle();
 
 		auto displayName = target->GetDisplayFullName();
 		std::string name = displayName ? displayName : "Name Not Found";
@@ -86,18 +88,18 @@ namespace Persuasion {
 	void PersuasionView::Close() {
 		s_handle.UnfocusAndHide();
 
-		if (s_currentTargetFormID == 0) {
-			Log::WARN("PersuasionView::Close: s_currentTargetFormID was 0.");
+		if (!s_currentTarget) {
+			Log::WARN("PersuasionView::Close: s_currentTarget was a null handle.");
 			return;
 		}
 
-		if (auto* actor = RE::TESForm::LookupByID<RE::Actor>(s_currentTargetFormID)) {
-			ActorExpression::Reset(actor);
+		if (RE::ActorPtr actor = s_currentTarget.get()) {
+			ActorExpression::Reset(actor.get());
 		}
 
-		DialogueSession::End(s_currentTargetFormID);
+		DialogueSession::End(s_currentTarget);
 
-		s_currentTargetFormID = 0;
+		s_currentTarget = RE::ActorHandle{};
 	}
 
 	//When argument is an empty string, the user has moved away from the wedge.
@@ -146,13 +148,8 @@ namespace Persuasion {
 		if (!actor) {
 			return;
 		}
-		auto* player = RE::PlayerCharacter::GetSingleton();
-		if (!player) {
-			Log::WARN("PersuasionView::OnBribe: Player was null.");
-			return;
-		}
 
-		//One bribe under the conversation's rules, shared with the Scaleform menu.
+		//One bribe under the conversation's rules, shared with the Scaleform menu (it checks the player).
 		const float before = std::strtof(disposition, nullptr);
 		const BribeAttempt attempt = Bribery::Attempt(actor, before, s_effective);
 		if (attempt.success) {
@@ -183,8 +180,16 @@ namespace Persuasion {
 		s_handle.InvokeByFunctionName(PersuasionContract::JsFunc::PersuasionBribeResult, payload);
 	}
 
+	//PrismaUI calls back from its own thread, so change the actor value on the main thread.
 	void PersuasionView::SetDisposition(RE::Actor* actor, float value) {
-		DispositionSystem::SetDispositionActorValue(actor, value, true);
+		auto* taskInterface = SKSE::GetTaskInterface();
+		assert(taskInterface);
+		RE::ActorHandle handle = actor->GetHandle();
+		taskInterface->AddTask([handle, value]() {
+			if (RE::ActorPtr actor = handle.get()) {
+				DispositionSystem::SetDispositionActorValue(actor.get(), value, true);
+			}
+			});
 	}
 
 }

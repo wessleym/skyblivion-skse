@@ -1,6 +1,7 @@
 #include "PersuasionBribery.h"
 
 #include "Disposition/DispositionSystem.h"
+#include "Resources.h"
 
 #include <algorithm>
 
@@ -12,8 +13,7 @@ namespace Persuasion
 		// pointer on 1.6.1170, and the quote runs on every point of change.
 		int PlayerGold(RE::PlayerCharacter* a_player)
 		{
-			auto* goldForm = RE::TESForm::LookupByID(0x0000000F);
-			auto* gold = goldForm ? goldForm->As<RE::TESBoundObject>() : nullptr;
+			auto* gold = Resources::gold;
 			return a_player && gold ? std::max(0, a_player->GetItemCount(gold)) : 0;
 		}
 
@@ -99,10 +99,9 @@ namespace Persuasion
 			out.reason = BribeAttempt::Reason::kNoGold;
 			return out;
 		}
-		auto* goldForm = RE::TESForm::LookupByID(0x0000000F);
-		auto* gold = goldForm ? goldForm->As<RE::TESBoundObject>() : nullptr;
+		auto* gold = Resources::gold;
 		if (!gold) {
-			Log::ERROR("Bribery::Attempt: Gold001 (0x0000000F) form missing");
+			Log::ERROR("Bribery::Attempt: Resources::gold is null");
 			out.reason = BribeAttempt::Reason::kError;
 			return out;
 		}
@@ -111,7 +110,17 @@ namespace Persuasion
 		out.gain = outcome.gain;
 		out.disposition = std::min(params.maxDisposition, a_disposition + static_cast<float>(outcome.gain));
 		out.success = true;
-		DispositionSystem::SetDispositionActorValue(a_actor, out.disposition, true);
+		//The PrismaUI view calls from its own thread, so the actor value changes on the main thread
+		//(the Scaleform menu is there already). Both hosts show the returned value, not a read-back.
+		auto* taskInterface = SKSE::GetTaskInterface();
+		assert(taskInterface);
+		const RE::ActorHandle handle = a_actor->GetHandle();
+		const float newDisposition = out.disposition;
+		taskInterface->AddTask([handle, newDisposition]() {
+			if (RE::ActorPtr actor = handle.get()) {
+				DispositionSystem::SetDispositionActorValue(actor.get(), newDisposition, true);
+			}
+		});
 
 		Log::INFO("bribe: price={}, gain={}, disposition={} -> {} (playerLevel={}, npcLevel={}, playerSpeech={}, npcSpeech={}, costMult={}, gainMult={}, penalty={})",
 			out.price, out.gain, a_disposition, out.disposition, playerLevel, npcLevel, playerSpeech, npcSpeech,

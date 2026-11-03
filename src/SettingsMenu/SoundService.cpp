@@ -1,5 +1,6 @@
 #include "SettingsMenu/SoundService.h"
 
+#include "Platform/FormCache.h"
 #include "SettingsMenu/SettingsMenuTable.h"
 #include "SettingsMenu/SettingsMenu.h"
 
@@ -17,7 +18,7 @@ namespace SKYBSettingsMenu
 	{
 		constexpr const char* kSection = "AudioMenu";
 
-		// "Plugin.esm:XXXXXX" -> the form; an editor ID otherwise
+		// "Plugin.esm:XXXXXX" -> the form; an editor ID otherwise (through the form table: once each)
 		RE::BGSSoundCategory* Resolve(std::string_view a_target)
 		{
 			const auto colon = a_target.rfind(':');
@@ -26,13 +27,12 @@ namespace SKYBSettingsMenu
 				const auto hex = a_target.substr(colon + 1);
 				RE::FormID local = 0;
 				const auto r = std::from_chars(hex.data(), hex.data() + hex.size(), local, 16);
-				auto*      dh = RE::TESDataHandler::GetSingleton();
-				if (r.ec != std::errc{} || !dh) {
+				if (r.ec != std::errc{}) {
 					return nullptr;
 				}
-				return dh->LookupForm<RE::BGSSoundCategory>(local, plugin);
+				return FormCache::GetLocal<RE::BGSSoundCategory>(local, plugin, "settings menu (sound row)");
 			}
-			return RE::TESForm::LookupByEditorID<RE::BGSSoundCategory>(std::string(a_target));
+			return FormCache::Get<RE::BGSSoundCategory>(a_target, "settings menu (sound row)");
 		}
 
 		// SkyrimPrefs.ini, where the game keeps the menu volumes ([AudioMenu] uIDN = a category's form ID, fValN its
@@ -199,8 +199,8 @@ namespace SKYBSettingsMenu
 			// Ambience); else a plain sound of the category: a standard sound with no
 			// conditions (a conditioned one may not play from the menu) that does not loop
 			RE::BGSSoundDescriptorForm* pick = nullptr;
-			if (const auto named = kNamedSamples.find(r.key); named != kNamedSamples.end() && dh) {
-				pick = dh->LookupForm<RE::BGSSoundDescriptorForm>(named->second.id, named->second.plugin);
+			if (const auto named = kNamedSamples.find(r.key); named != kNamedSamples.end()) {
+				pick = FormCache::GetLocal<RE::BGSSoundDescriptorForm>(named->second.id, named->second.plugin, "settings menu (sample)");
 			}
 			if (!pick && dh) {
 				for (auto* d : dh->GetFormArray<RE::BGSSoundDescriptorForm>()) {
@@ -235,7 +235,7 @@ namespace SKYBSettingsMenu
 				_unpause.push_back(cat);
 			}
 			if (pick) {
-				_demo[r.key] = pick->GetFormID();
+				_demo[r.key] = pick;  // the record itself: a form cannot change mid-session
 				std::string chain;
 				for (auto* c = pick->soundDescriptor->category; c && chain.size() < 400; c = c->parentCategory) {
 					chain += std::format(" {:08X}", c->GetFormID());
@@ -384,8 +384,7 @@ namespace SKYBSettingsMenu
 		if (last != std::chrono::steady_clock::time_point{} && now - last < std::chrono::seconds(8)) {
 			return;
 		}
-		auto* dh = RE::TESDataHandler::GetSingleton();
-		auto* music = dh ? dh->LookupForm<RE::BGSMusicType>(kRevealSting, kRevealPlugin) : nullptr;
+		auto* music = FormCache::GetLocal<RE::BGSMusicType>(kRevealSting, kRevealPlugin, "settings menu (music test)");
 		auto* vm = RE::BSScript::Internal::VirtualMachine::GetSingleton();
 		if (!music || !vm) {
 			return;
@@ -405,8 +404,7 @@ namespace SKYBSettingsMenu
 	// music follows.
 	void SoundService::Nudge()
 	{
-		auto* dh = RE::TESDataHandler::GetSingleton();
-		auto* ui = dh ? dh->LookupForm<RE::BGSSoundCategory>(0x064451, "Skyrim.esm") : nullptr;
+		auto* ui = FormCache::GetLocal<RE::BGSSoundCategory>(0x064451, "Skyrim.esm", "settings menu (nudge)");
 		auto* vm = RE::BSScript::Internal::VirtualMachine::GetSingleton();
 		if (!ui || !vm) {
 			return;
@@ -437,13 +435,13 @@ namespace SKYBSettingsMenu
 		// started at the player and following them (most samples are placed sounds; played with no place they
 		// sound at the world's origin and are not heard - only the interface and footstep ones are)
 		auto* audio = RE::BSAudioManager::GetSingleton();
-		auto* form = RE::TESForm::LookupByID<RE::BGSSoundDescriptorForm>(it->second);
+		RE::BGSSoundDescriptorForm* form = it->second;
 		if (!audio || !form) {
 			return;
 		}
 		RE::BSSoundHandle handle;
 		if (!audio->GetSoundHandle(handle, static_cast<RE::BSISoundDescriptor*>(form)) || !handle.IsValid()) {
-			Log::INFO("settings menu: sample {:08X} could not be started", it->second);
+			Log::INFO("settings menu: sample {:08X} could not be started", form->GetFormID());
 			return;
 		}
 		if (auto* player = RE::PlayerCharacter::GetSingleton()) {

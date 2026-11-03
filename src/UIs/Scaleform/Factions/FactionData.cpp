@@ -1,5 +1,6 @@
 #include "FactionData.h"
 #include "FactionsContract.h"
+#include "Platform/FormCache.h"
 
 #include <algorithm>
 #include <cstring>
@@ -49,9 +50,9 @@ namespace Factions::FactionData {
 	}
 
 	std::optional<std::vector<Standing>> ReadAll(RE::PlayerCharacter* player, std::string_view source) {
-		auto* list = RE::TESForm::LookupByEditorID<RE::BGSListForm>(FactionsContract::FactionListEditorID);
+		//Resolved once, at data load (the form table logs a miss once).
+		auto* list = FormCache::Get<RE::BGSListForm>(FactionsContract::FactionListEditorID, source);
 		if (!list) {
-			Log::WARN("{}: {} not resolved. Is po3 Tweaks installed?", source, FactionsContract::FactionListEditorID);
 			return std::nullopt;
 		}
 

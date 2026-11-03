@@ -79,6 +79,7 @@ namespace SKYBSettingsMenu
 		std::unordered_map<std::string, float> _save;  // this character's save-scope values
 		mutable std::mutex                     _lock;
 		bool                                   _gameLoaded = false;
+		bool                                   _applied = false;  // OnGameReady ran for the game now loaded
 		std::size_t                            _read = 0;  // values read from the save being loaded
 	};
 }

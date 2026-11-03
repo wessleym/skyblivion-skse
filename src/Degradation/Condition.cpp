@@ -1,4 +1,5 @@
 #include "Degradation/Condition.h"
+#include "Resources.h"
 #include "Degradation/Breakage.h"
 
 #include "Degradation/Settings.h"
@@ -372,7 +373,7 @@ namespace SKYBDeg::Condition
 	std::int32_t PlayerGold()
 	{
 		auto player = RE::PlayerCharacter::GetSingleton();
-		auto gold = RE::TESForm::LookupByID<RE::TESBoundObject>(0xF);
+		auto* gold = Resources::gold;
 		return player && gold ? std::max(0, player->GetItemCount(gold)) : 0;
 	}
 
