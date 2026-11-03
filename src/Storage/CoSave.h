@@ -12,6 +12,9 @@ namespace SKSE { class SerializationInterface; }
 //that wrote it. A record type nobody added is skipped with a log line.
 namespace Storage::CoSave {
 
+	//The plugin's co-save id, shared by every store (SpellMakingStore also reads the file by it).
+	inline constexpr std::uint32_t UniqueID = 'SKYB';
+
 	struct Store {
 		//For the log.
 		const char* name = "";

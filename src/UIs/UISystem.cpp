@@ -97,6 +97,11 @@ void UISystem::OnGameStarting() {
     LoadingScreen::LoadingScreenService::EndBootPhase();
 }
 
+void UISystem::OnPreLoadGame(std::string_view saveName) {
+    OnGameStarting();
+    SpellMaking::SpellMakingStore::RestoreBeforeLoad(saveName);
+}
+
 void UISystem::OnDataLoaded() {
     Log::INFO("UISystem: OnDataLoaded...");
     RegisterScaleformServices();
