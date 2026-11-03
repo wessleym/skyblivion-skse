@@ -1,7 +1,5 @@
 #include "SettingsMenu/SettingsStore.h"
 
-#include "Platform/FormCache.h"
-
 #include <charconv>
 #include <cstdlib>
 #include <cstring>
@@ -108,7 +106,6 @@ namespace SKYBSettingsMenu
 		if (a_event->opening && a_event->menuName == RE::MainMenu::MENU_NAME) {
 			std::scoped_lock lock(_lock);
 			_gameLoaded = false;
-			_applied = false;
 			_save.clear();
 			return RE::BSEventNotifyControl::kContinue;
 		}
@@ -363,12 +360,11 @@ namespace SKYBSettingsMenu
 	}
 
 	// a global by editor ID (applier gameglobal): its value, nullopt when no loaded plugin has it
-	// (resolved once per row, through the form table)
 	namespace
 	{
 		std::optional<float> ReadGlobal(std::string_view a_editorID)
 		{
-			auto* g = FormCache::Get<RE::TESGlobal>(a_editorID, "settings menu (gameglobal row)");
+			auto* g = RE::TESForm::LookupByEditorID<RE::TESGlobal>(std::string(a_editorID));
 			return g ? std::optional<float>(g->value) : std::nullopt;
 		}
 	}
@@ -597,8 +593,6 @@ namespace SKYBSettingsMenu
 		}
 	}
 
-	// Once per game: a new game reaches this from the kNewGame task and from the loading screen's
-	// close (whichever comes first); the co-save revert, and the title screen, arm it again.
 	void Store::OnGameReady()
 	{
 		std::size_t                     filled = 0;
@@ -606,10 +600,6 @@ namespace SKYBSettingsMenu
 		{
 			std::scoped_lock lock(_lock);
 			_gameLoaded = true;
-			if (_applied) {
-				return;
-			}
-			_applied = true;
 		}
 		for (const auto& r : kRows) {
 			if (r.scope != Scope::kSave) {
@@ -716,6 +706,5 @@ namespace SKYBSettingsMenu
 		std::scoped_lock lock(self->_lock);
 		self->_save.clear();
 		self->_read = 0;
-		self->_applied = false;
 	}
 }

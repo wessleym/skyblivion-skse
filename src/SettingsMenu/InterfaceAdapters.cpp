@@ -1,13 +1,10 @@
 #include "SettingsMenu/InterfaceAdapters.h"
 
-#include "Platform/FormCache.h"
-
 #include <algorithm>
 #include <chrono>
 #include <cmath>
 #include <thread>
 #include <unordered_map>
-#include <unordered_set>
 #include <vector>
 
 namespace {
@@ -32,10 +29,9 @@ namespace {
 
 	RE::BSScript::Internal::VirtualMachine* VM() { return RE::BSScript::Internal::VirtualMachine::GetSingleton(); }
 
-	// the script object of a_script bound to the quest with editor ID a_quest (the quest resolves once; a
-	// miss is logged once, which is expected when that mod is not installed)
+	// the script object of a_script bound to the quest with editor ID a_quest
 	ObjectPtr BoundScript(const char* a_quest, const char* a_script) {
-		auto* quest = FormCache::Get<RE::TESQuest>(a_quest, "interface (optional mod's quest)");
+		auto* quest = RE::TESForm::LookupByEditorID<RE::TESQuest>(a_quest);
 		auto* vm = VM();
 		if (!quest || !vm) {
 			return nullptr;
@@ -123,9 +119,9 @@ void InterfaceAdapters::Register() {
 }
 
 void InterfaceAdapters::SetGlobal(std::string_view a_editorID, float a_value) {
-	auto* global = FormCache::Get<RE::TESGlobal>(a_editorID, "interface");
+	auto* global = RE::TESForm::LookupByEditorID<RE::TESGlobal>(a_editorID);
 	// AHZShowEnemyMagickaMeter is not found by editor ID in game (its stamina twin is); moreHUD itself reads
-	// its globals through ahzmainquest's properties of the same names, so take it from there, once
+	// its globals through ahzmainquest's properties of the same names, so take it from there
 	if (!global && a_editorID.starts_with("AHZ")) {
 		if (auto hud = BoundScript(kMoreHudQuest, kMoreHudQuest)) {
 			if (auto* var = hud->GetProperty(std::string(a_editorID).c_str()); var && var->IsObject()) {
@@ -133,16 +129,11 @@ void InterfaceAdapters::SetGlobal(std::string_view a_editorID, float a_value) {
 			}
 		}
 		if (global) {
-			FormCache::Keep(a_editorID, global);
 			Log::INFO("interface: {} taken from moreHUD's property ({:08X})", a_editorID, global->GetFormID());
 		}
 	}
 	if (!global) {
-		//once per name: every apply and every game load comes through here (expected without moreHUD)
-		static std::unordered_set<std::string> told;
-		if (told.insert(std::string(a_editorID)).second) {
-			Log::WARN("interface: GlobalVariable {} not found - its rows do nothing", a_editorID);
-		}
+		Log::WARN("interface: GlobalVariable {} not found", a_editorID);
 		return;
 	}
 	if (global->value != a_value) {

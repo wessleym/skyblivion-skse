@@ -1,7 +1,6 @@
 #include "PerkCurrency.h"
 #include "PerkDataStore.h"
 #include "PerksContract.h"
-#include "Platform/FormCache.h"
 #include "Papyrus/ModEvents.h"
 
 #include <algorithm>
@@ -29,7 +28,8 @@ namespace PerksView {
 		if (error != std::errc{} || end != begin + bar) {
 			return false;
 		}
-		return FormCache::GetLocal<RE::BGSPerk>(localId, rankRef.substr(bar + 1), "PerkCurrency (rank)") != nullptr;
+		auto* dataHandler = RE::TESDataHandler::GetSingleton();
+		return dataHandler && dataHandler->LookupForm<RE::BGSPerk>(localId, rankRef.substr(bar + 1));
 	}
 
 	//Payload: "treeId^perkId^HEX|Plugin^currencyType[^globalEditorId]".
@@ -82,9 +82,9 @@ namespace PerksView {
 			Log::WARN("PerkCurrency: No currency global for '{}' (tree '{}'). Nothing deducted.", perkId, treeId);
 			return;
 		}
-		auto* global = FormCache::Get<RE::TESGlobal>(editorID, "PerkCurrency (currency)");
+		auto* global = RE::TESForm::LookupByEditorID<RE::TESGlobal>(editorID);
 		if (!global) {
-			Log::WARN("PerkCurrency: Currency global '{}' not resolved. Nothing deducted.", editorID);
+			Log::WARN("PerkCurrency: Currency global '{}' not resolved. Nothing deducted. Is po3 Tweaks installed?", editorID);
 			return;
 		}
 		const float before = global->value;

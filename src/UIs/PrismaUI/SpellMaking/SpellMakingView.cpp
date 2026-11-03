@@ -2,7 +2,6 @@
 #include "SpellMakingStore.h"
 #include "SpellRecipeParser.h"
 #include "SpellMakingContract.h"
-#include "Resources.h"
 
 #include "../PrismaViewHandle.h"
 
@@ -51,17 +50,25 @@ namespace SpellMaking {
 
 		//Deduct gold.
 		if (goldPrice > 0) {
-			player->RemoveItem(Resources::gold, goldPrice, RE::ITEM_REMOVE_REASON::kRemove, nullptr, nullptr);
+			if (auto* gold = RE::TESForm::LookupByID<RE::TESBoundObject>(0x0000000F)) {
+				player->RemoveItem(gold, goldPrice, RE::ITEM_REMOVE_REASON::kRemove, nullptr, nullptr);
+			}
+			else {
+				Log::ERROR("SpellMakingView::OnBuy: Gold001 (0x0000000F) form missing. {} not created (price {}).", recipe.name, goldPrice);
+				return;
+			}
 		}
 
 		player->AddSpell(spell);
 		Log::INFO("SpellMakingView::OnBuy: Created {} ({:08X}), {} Effect(s), Magicka Cost {}, Charged {} Gold.",
 			recipe.name, spell->GetFormID(), spell->effects.size(), recipe.magickaCost, goldPrice);
 
-		//<NEB>! This should be a game setting to make translations easier
-		std::string notification = std::format("Congratulations! You have created a new spell: {}", recipe.name);//matches Oblivion message
-
-		RE::SendHUDMessage::ShowHUDMessage(notification.c_str());
+		if (auto* vm = RE::BSScript::Internal::VirtualMachine::GetSingleton()) {
+			const std::string notification = std::format("Congratulations! You have created a new spell: {}", recipe.name);//matches Oblivion message
+			auto* args = RE::MakeFunctionArguments(RE::BSFixedString{ notification.c_str() });
+			RE::BSTSmartPointer<RE::BSScript::IStackCallbackFunctor> callback;
+			vm->DispatchStaticCall("Debug", "Notification", args, callback);
+		}
 
 		Close();
 	}

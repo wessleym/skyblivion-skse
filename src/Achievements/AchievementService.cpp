@@ -2,7 +2,6 @@
 #include "AchievementContract.h"
 #include "AchievementData.h"
 #include "AchievementStore.h"
-#include "Platform/FormCache.h"
 #include "Papyrus/ModEvents.h"
 #include "Papyrus/SKSEScriptRegistrar.h"
 #include "Platform/MainThread.h"
@@ -17,6 +16,7 @@
 #include <map>
 #include <mutex>
 #include <optional>
+#include <unordered_set>
 
 namespace Achievements {
 
@@ -55,11 +55,19 @@ namespace Achievements {
 			return buffer;
 		}
 
-		//A global's value by editor ID, or nullopt when it does not resolve. The form table resolves each
-		//name once (it is thread safe: this runs on the VM thread) and logs a miss once.
+		//A global's value by editor ID, or nullopt when it does not resolve (logged once per name).
 		std::optional<double> GlobalValue(const std::string& editorID) {
-			auto* global = FormCache::Get<RE::TESGlobal>(editorID, "AchievementService (progress)");
+			static std::mutex reportedLock;
+			static std::unordered_set<std::string> reported;
+			if (editorID.empty()) {
+				return std::nullopt;
+			}
+			auto* global = RE::TESForm::LookupByEditorID<RE::TESGlobal>(editorID);
 			if (!global) {
+				std::scoped_lock lock(reportedLock);
+				if (reported.insert(editorID).second) {
+					Log::WARN("AchievementService: Progress global '{}' not found. Is po3 Tweaks installed?", editorID);
+				}
 				return std::nullopt;
 			}
 			return static_cast<double>(global->value);

@@ -1,6 +1,5 @@
 #include "PerkListValidator.h"
 #include "PerkIndex.h"
-#include "Resources.h"
 
 #include <string>
 #include <unordered_map>
@@ -9,7 +8,12 @@
 #include <vector>
 
 namespace Stats {
+
 	namespace {
+		//SKYBPerkTrees, the master FormID list naming the eight SKYBPerks<Attribute> lists.
+		constexpr RE::FormID  kPerkTreesList = 0x1254F2;
+		constexpr const char* kPlugin = "Skyblivion.esm";
+
 		using PerkSet = std::unordered_set<RE::FormID>;
 
 		//One attribute's list. Matched to a tree by content overlap, not by position or editor id:
@@ -22,9 +26,13 @@ namespace Stats {
 		std::vector<AttributeList> ReadLists() {
 			std::vector<AttributeList> lists;
 
-			RE::BGSListForm* master = Resources::perkTreeList;
+			auto* dataHandler = RE::TESDataHandler::GetSingleton();
+			if (!dataHandler) {
+				return lists;
+			}
+			auto* master = dataHandler->LookupForm<RE::BGSListForm>(kPerkTreesList, kPlugin);
 			if (!master) {
-				Log::INFO("PerkListValidator: {} does not supply SKYBPerkTrees. Skipping the check.", Resources::pluginName);
+				Log::INFO("PerkListValidator: {} does not supply SKYBPerkTrees. Skipping the check.", kPlugin);
 				return lists;
 			}
 

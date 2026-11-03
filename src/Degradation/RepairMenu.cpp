@@ -1,6 +1,5 @@
 #include "Degradation/RepairMenu.h"
 
-#include "Resources.h"
 #include "Degradation/Condition.h"
 #include "Degradation/Settings.h"
 #include "Platform/MainThread.h"
@@ -568,7 +567,7 @@ namespace SKYBDeg
 		{
 			auto vendor = Vendor();
 			auto player = RE::PlayerCharacter::GetSingleton();
-			auto* goldForm = Resources::gold;
+			auto goldForm = RE::TESForm::LookupByID<RE::TESBoundObject>(0xF);
 			if (!vendor || !player || !goldForm) {
 				Refresh({ { "$SKYB_repair_status_failed", {} } }, a_row.obj, a_row.q, a_row.worn, a_index);
 				return;
@@ -640,7 +639,7 @@ namespace SKYBDeg
 		{
 			auto vendor = Vendor();
 			auto player = RE::PlayerCharacter::GetSingleton();
-			auto* goldForm = Resources::gold;
+			auto goldForm = RE::TESForm::LookupByID<RE::TESBoundObject>(0xF);
 			if (!vendor || !player || !goldForm) {
 				Refresh({ { "$SKYB_repair_status_failed", {} } }, a_row.obj, a_row.q, a_row.worn, a_index);
 				return;

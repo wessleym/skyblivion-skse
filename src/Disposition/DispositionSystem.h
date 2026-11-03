@@ -10,6 +10,7 @@ public:
 
 private:
     static constexpr RE::ActorValue kDispositionAV = RE::ActorValue::kVariable01;
+    static constexpr const char* kDispositionAVName = "Variable01";
 
     template <class T>
     static void LookUpForm(const char* editorID, T*& out, const char* typeName) {
@@ -29,4 +30,5 @@ private:
     static void LookUpRaces();
     static float CalcDisposition(RE::Actor* npc);
     static bool RaceAllowsPlayerDialogue(RE::Actor* actor);
+    static void PapyrusSetActorValue(RE::TESObjectREFR* a_ref, RE::BSFixedString valueName, float value, bool force);
 };

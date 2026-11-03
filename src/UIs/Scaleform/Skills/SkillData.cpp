@@ -1,6 +1,5 @@
 #include "SkillData.h"
 #include "SkillsContract.h"
-#include "Platform/FormCache.h"
 
 #include <algorithm>
 
@@ -44,9 +43,9 @@ namespace Skills::SkillData {
 	}
 
 	std::optional<std::vector<MasteryPerk>> MasteryPerks(std::size_t index, std::string_view source) {
-		//Resolved once, at data load (the form table logs a miss once).
-		auto* skillPerkLists = FormCache::Get<RE::BGSListForm>(SkillsContract::MasteryPerkListEditorID, source);
+		auto* skillPerkLists = RE::TESForm::LookupByEditorID<RE::BGSListForm>(SkillsContract::MasteryPerkListEditorID);
 		if (!skillPerkLists) {
+			Log::WARN("{}: {} not resolved. Is po3 Tweaks installed?", source, SkillsContract::MasteryPerkListEditorID);
 			return std::nullopt;
 		}
 		if (index >= skillPerkLists->forms.size()) {

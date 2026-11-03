@@ -9,6 +9,7 @@ void ObjectReferenceUtility::Register(RE::BSScript::Internal::VirtualMachine* vm
 	sayToFunction = SKSEScriptRegistrar::LocateFunction("SayTo");
 	SKSEScriptRegistrar::Register(vm, className, "LegacySayTo", ObScriptSayTo);
 
+	isAnimPlayingFunction = SKSEScriptRegistrar::LocateFunction("IsAnimPlaying");
 	SKSEScriptRegistrar::Register(vm, className, "IsAnimPlaying", isAnimPlaying);
 
 	getDestroyedFunction = SKSEScriptRegistrar::LocateFunction("GetDestroyed");
@@ -29,12 +30,10 @@ void ObjectReferenceUtility::Register(RE::BSScript::Internal::VirtualMachine* vm
 RE::Script* ObjectReferenceUtility::initDummySayScript() {
 	static std::array<std::uint8_t, sizeof(RE::Script)> dummySCRISayAlloc{};
 	RE::Script* dummySayScript = reinterpret_cast<RE::Script*>(dummySCRISayAlloc.data());
-	//<NEB>! If someone hooks something that uses this script and uses a vfunc that will crash. Assign vtables to polymorphic objects
-	reinterpret_cast<std::uintptr_t*>(dummySayScript)[0] = RE::Script::VTABLE[0].address();
 	static char say[4] = "Say";
 	dummySayScript->formFlags = 0x000400a;
 	dummySayScript->formID = 0xff000e05;
-	dummySayScript->formType = RE::FormType::Script;
+	dummySayScript->formType = static_cast<RE::FormType>(0x13);
 	// dummySayScript->pad13 = 0x00;
 	dummySayScript->header.refObjectCount = 0x00000001;
 	dummySayScript->header.dataSize = 0x00000009;
@@ -74,13 +73,10 @@ float ObjectReferenceUtility::ObScriptSay(RE::StaticFunctionTag*, RE::TESObjectR
 RE::Script* ObjectReferenceUtility::initDummySayToScript() {
 	static std::array<std::uint8_t, sizeof(RE::Script)> dummySCRISayToAlloc{};
 	RE::Script* dummySayToScript = reinterpret_cast<RE::Script*>(dummySCRISayToAlloc.data());
-	//<NEB>! See prior
-	reinterpret_cast<std::uintptr_t*>(dummySayToScript)[0] = RE::Script::VTABLE[0].address();
-
 	static char sayTo[6] = "SayTo";
 	dummySayToScript->formFlags = 0x000400a;
 	dummySayToScript->formID = 0xff000a17;
-	dummySayToScript->formType = RE::FormType::Script;
+	dummySayToScript->formType = static_cast<RE::FormType>(0x13);
 	// dummySayToScript->pad13 = 0x0f;
 	dummySayToScript->header.refObjectCount = 0x00000002;
 	dummySayToScript->header.dataSize = 0x0000000c;
@@ -122,31 +118,15 @@ float ObjectReferenceUtility::ObScriptSayTo(RE::StaticFunctionTag*, RE::TESObjec
 	return static_cast<float>(result + 0.5);
 }
 
-//Mirrors the ObScript IsAnimPlaying with no animation group: is any Gamebryo controller sequence
-//on the reference's root active? Behavior-graph (Havok) animation is not detected, as in the original.
 bool ObjectReferenceUtility::isAnimPlaying(RE::StaticFunctionTag*, RE::TESObjectREFR* animatedRefr) {
-	if (!animatedRefr) {
-		return false;
-	}
-	//Hold a reference so the 3D can't be released during the check.
-	RE::NiPointer<RE::NiAVObject> root{ animatedRefr->Get3D2() };
-	RE::NiNode* node = root ? root->AsNode() : nullptr;
-	if (!node || !node->controllers) {
-		return false;
-	}
-	RE::NiControllerManager* manager = node->controllers->AsNiControllerManager();
-	if (!manager) {
-		return false;
-	}
-	//Bound by free_idx() (slots in use), as the engine does: NiTArray's range-for runs to capacity,
-	//into slots that were never written.
-	auto& sequences = manager->sequenceArray;
-	const auto count = sequences.free_idx();
-	for (std::remove_const_t<decltype(count)> i = 0; i < count; ++i) {
-		RE::NiControllerSequence* sequence = sequences[i].get();
-		if (sequence && !sequence->Inactive()) {
-			return true;
-		}
+	if (isAnimPlayingFunction) {
+		RE::SCRIPT_FUNCTION::ScriptData isAnimPlayingFunctionData = { 0x1128, 0x0001, 0x0000 };
+		double result = 0.0;
+		std::uint32_t opcodeOffset = 0x4;
+
+		isAnimPlayingFunction->executeFunction(isAnimPlayingFunction->params, &isAnimPlayingFunctionData,
+			animatedRefr, nullptr, nullptr, nullptr, result, opcodeOffset);
+		return (result != 0.0);
 	}
 	return false;
 }

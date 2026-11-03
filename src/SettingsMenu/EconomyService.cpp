@@ -1,6 +1,5 @@
 #include "SettingsMenu/EconomyService.h"
 
-#include "Platform/FormCache.h"
 #include "SettingsMenu/SettingsMenuTable.h"
 
 namespace {
@@ -113,16 +112,17 @@ void EconomyService::Register() {
 			continue;
 		}
 		ForEachWord(r.key, [this](std::string_view a_edid) {
-			//into the form table here; SetChanceNone reads the same entries (a miss is logged there)
-			if (auto* g = FormCache::Get<RE::TESGlobal>(a_edid, "economy")) {
+			if (auto* g = RE::TESForm::LookupByEditorID<RE::TESGlobal>(a_edid)) {
 				_chanceBase.emplace(std::string(a_edid), g->value);
 				Log::INFO("economy: {} = {} at data load", a_edid, g->value);
+			} else {
+				Log::WARN("economy: GlobalVariable {} not found", a_edid);
 			}
 		});
 	}
 
 	// ---- the player's price perk
-	_perk = FormCache::Get<RE::BGSPerk>(kPerk, "economy");
+	_perk = RE::TESForm::LookupByEditorID<RE::BGSPerk>(kPerk);
 	if (!_perk) {
 		Log::WARN("economy: perk {} not found in any loaded plugin - Buying / Selling Prices do nothing", kPerk);
 		return;
@@ -190,7 +190,7 @@ void EconomyService::Set(std::string_view a_section, std::string_view a_key, flo
 void EconomyService::SetChanceNone(std::string_view a_globals, float a_mult) {
 	ForEachWord(a_globals, [this, a_mult](std::string_view a_edid) {
 		const auto it = _chanceBase.find(std::string(a_edid));
-		auto*      g = FormCache::Get<RE::TESGlobal>(a_edid, "economy");
+		auto*      g = RE::TESForm::LookupByEditorID<RE::TESGlobal>(a_edid);
 		if (it == _chanceBase.end() || !g) {
 			return;
 		}
