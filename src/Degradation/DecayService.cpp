@@ -150,7 +150,7 @@ namespace SKYBDeg
 			return q;
 		}
 		const float loss = a_rate * Settings::Get(G::RateMult) * Condition::MaterialMult(a_obj) * Condition::CurveMult(q) *
-						   Condition::WearSkillMult();
+						   Condition::WearSkillMult() * Condition::MasteryWearMult(a_obj);
 		if (loss <= 0.0f) {
 			return q;
 		}

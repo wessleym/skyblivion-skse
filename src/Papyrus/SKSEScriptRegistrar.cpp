@@ -10,6 +10,7 @@
 #include "UILauncher.h"
 #include "Degradation/RepairMenu.h"
 #include "Achievements/AchievementService.h"
+#include "UIs/Scaleform/ScrollCraft/ScrollRecipeStore.h"
 
 static bool RegisterFuncs(RE::BSScript::Internal::VirtualMachine* vm) {
     Log::INFO("SKSEScriptRegistrar: Registering Custom Functions...");
@@ -27,6 +28,8 @@ static bool RegisterFuncs(RE::BSScript::Internal::VirtualMachine* vm) {
     SKYBDeg::RepairMenu::RegisterPapyrus(vm);
     //SKYBAchievements.Unlock and the rest (Source\Scripts\SKYBAchievements.psc).
     Achievements::AchievementService::RegisterPapyrus(vm);
+    //SKYBScrollCraftData.GetTable and the rest: the scroll recipes from recipes.json (Source\Scripts\SKYBScrollCraftData.psc).
+    ScrollCraft::ScrollRecipeStore::RegisterPapyrus(vm);
     Log::INFO("SKSEScriptRegistrar: Registering Custom Functions Complete");
     return true;
 }

@@ -1,5 +1,6 @@
 #include "DialogueFeed.h"
 #include "DialogueContract.h"
+#include "DialogueLipTrace.h"
 #include "DialogueServices.h"
 #include "Platform/FormCache.h"
 #include "Disposition/DispositionSystem.h"
@@ -160,6 +161,9 @@ namespace Dialogue {
 			SKSE::GetTaskInterface()->AddTask([serviceID = ModEvents::StrArg(*a_event)] {
 				DialogueServices::Open(serviceID, DialogueSpeaker());
 			});
+		}
+		else if (a_event->eventName == DialogueContract::ModEvent::DialoguePick) {
+			DialogueLipTrace::Start(ModEvents::StrArg(*a_event), static_cast<int>(a_event->numArg));
 		}
 		return RE::BSEventNotifyControl::kContinue;
 	}

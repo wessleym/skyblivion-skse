@@ -10,8 +10,6 @@
 #include <algorithm>
 #include <format>
 
-#include <Windows.h>
-
 namespace SKYBSettingsMenu
 {
 	namespace
@@ -35,70 +33,34 @@ namespace SKYBSettingsMenu
 			return FormCache::Get<RE::BGSSoundCategory>(a_target, "settings menu (sound row)");
 		}
 
-		// SkyrimPrefs.ini, where the game keeps the menu volumes ([AudioMenu] uIDN = a category's form ID, fValN its
-		// volume). They are not settings the game registers (the prefs collection has no uIDN / fValN), so
-		// the file itself is read and written.
-		const char* PrefsPath()
+		// SkyrimPrefs.ini [AudioMenu] is the game's own: fAudioMasterVolume and eight uIDN / fValN pairs (a menu
+		// category's form ID and its volume), all registered settings of the prefs collection. A menu category's
+		// SetCategoryVolume writes its pair itself (SkyrimSE 1.7.104: BGSSoundCategory's SetCategoryVolume, 0x1403298D0,
+		// finds or takes the pair by form ID and stores the value there), and the category takes the pair's value
+		// back when the data loads (0x140329640). So nothing here touches the file: the journal's SaveSettings writes the
+		// collection (OpenHandle, WriteAllSettings, CloseHandle), and so does SavePrefs when the settings menu closes.
+		void SavePrefs()
 		{
 			auto* prefs = RE::INIPrefSettingCollection::GetSingleton();
-			return prefs && prefs->subKey[0] ? prefs->subKey : nullptr;
+			if (!prefs) {
+				return;
+			}
+			if (prefs->OpenHandle(true)) {
+				prefs->WriteAllSettings();
+				prefs->CloseHandle();
+				Log::INFO("settings menu: volumes saved (SkyrimPrefs.ini, the game's own write)");
+			} else {
+				Log::WARN("settings menu: SkyrimPrefs.ini could not be opened; the volumes last until the game closes");
+			}
 		}
 
-		// the N of the uIDN holding this form ID; -1 when none, and a_free the first unused N
-		int FileIndex(RE::FormID a_id, int* a_free = nullptr)
+		// What the journal's audio sliders do after a change (OptionChange, AE id 53310): the audio manager is told
+		// that volumes changed, and every sound playing takes its new volume at once (music included).
+		void VolumesChanged()
 		{
-			const char* path = PrefsPath();
-			if (!path) {
-				return -1;
+			if (auto* audio = RE::BSAudioManager::GetSingleton()) {
+				audio->ComposeMessage(RE::SOUND_MSG::VolumeChanged);
 			}
-			char buf[64];
-			for (int i = 0; i < 64; ++i) {
-				GetPrivateProfileStringA(kSection, std::format("uID{}", i).c_str(), "", buf, sizeof(buf), path);
-				if (!buf[0]) {
-					if (a_free) {
-						*a_free = i;
-					}
-					return -1;
-				}
-				if (static_cast<RE::FormID>(std::strtoul(buf, nullptr, 10)) == a_id) {
-					return i;
-				}
-			}
-			return -1;
-		}
-
-		std::optional<float> FileVolume(RE::FormID a_id)
-		{
-			const int i = FileIndex(a_id);
-			const char* path = PrefsPath();
-			if (i < 0 || !path) {
-				return std::nullopt;
-			}
-			char buf[64];
-			GetPrivateProfileStringA(kSection, std::format("fVal{}", i).c_str(), "", buf, sizeof(buf), path);
-			if (!buf[0]) {
-				return std::nullopt;
-			}
-			return static_cast<float>(std::atof(buf));
-		}
-
-		bool WriteFileVolume(RE::FormID a_id, float a_value)
-		{
-			const char* path = PrefsPath();
-			if (!path) {
-				return false;
-			}
-			int free = -1;
-			int i = FileIndex(a_id, &free);
-			if (i < 0) {
-				if (free < 0) {
-					return false;
-				}
-				i = free;
-				WritePrivateProfileStringA(kSection, std::format("uID{}", i).c_str(), std::to_string(a_id).c_str(), path);
-			}
-			return WritePrivateProfileStringA(kSection, std::format("fVal{}", i).c_str(), std::format("{:.4f}", a_value).c_str(),
-											  path) != 0;
 		}
 
 		const char* NameOf(const RE::BGSSoundCategory* a_cat)
@@ -124,14 +86,6 @@ namespace SKYBSettingsMenu
 			return false;
 		}
 
-		// the record's static volume multiplier (VNAM, 0..65535; CommonLib's getter divides as integers). The
-		// category's volume reads back as menu volume x this (music: 0.7), so a row divides it out.
-		float StaticMult(const RE::BGSSoundCategory* a_cat)
-		{
-			const float m = static_cast<float>(a_cat->staticMult) / 65535.0f;
-			return m > 0.001f ? m : 1.0f;
-		}
-
 		// samples chosen by hand (Skyblivion's own short sounds), by row target, as plugin and form ID (the
 		// game keeps no editor IDs for sound descriptors, so they cannot be found by name)
 		struct NamedSample
@@ -148,10 +102,7 @@ namespace SKYBSettingsMenu
 		// heard only once the menu closed). While the settings menu is open those two hang from its parent instead.
 		constexpr RE::FormID  kPausedCategory = 0x09F254;
 		constexpr const char* kMasterTarget = "master";
-		// the music row's test: Skyblivion's reveal sting (one track, ducks the music, then ends by itself)
-		constexpr const char*  kMusicTarget = "Skyrim.esm:071E64";
-		constexpr RE::FormID   kRevealSting = 0x00249D;
-		constexpr const char*  kRevealPlugin = "Skyblivion.esm";
+		constexpr const char* kMasterSetting = "fAudioMasterVolume:AudioMenu";
 
 		// a looping sound by Bethesda's naming (...LP, ...LPM, ...Loop): no use as a short sample
 		bool LooksLooping(std::string_view a_edid)
@@ -173,10 +124,8 @@ namespace SKYBSettingsMenu
 		if (dh) {
 			for (auto* cat : dh->GetFormArray<RE::BGSSoundCategory>()) {
 				if (cat && cat->flags.all(RE::BGSSoundCategory::Flag::kShouldAppearOnMenu)) {
-					const auto f = FileVolume(cat->GetFormID());
-					Log::INFO("settings menu: the game's audio list has {:08X} '{}' (category {}, SkyrimPrefs.ini {})",
-							  cat->GetFormID(), NameOf(cat) ? NameOf(cat) : "", cat->GetCategoryVolume(),
-							  f ? std::format("{}", *f) : std::string("none"));
+					Log::INFO("settings menu: the game's audio list has {:08X} '{}' (menu volume {})",
+							  cat->GetFormID(), NameOf(cat) ? NameOf(cat) : "", cat->volumeMult);
 				}
 			}
 		}
@@ -275,6 +224,10 @@ namespace SKYBSettingsMenu
 					c->parentCategory = parent;
 				}
 				_savedParent.clear();
+				if (_dirty) {
+					_dirty = false;
+					SavePrefs();
+				}
 			}
 		});
 		return RE::BSEventNotifyControl::kContinue;
@@ -294,26 +247,18 @@ namespace SKYBSettingsMenu
 			}
 			return std::nullopt;
 		}
+		// the menu volume itself: what the journal's slider shows and the pair holds (GetCategoryVolume is the volume
+		// heard: times the record's static multiplier and every parent's volume)
 		auto* cat = Find(a_target);
-		if (!cat) {
-			return std::nullopt;
-		}
-		// in a game: what the row was last set to, else the category's volume (what is heard); on the title
-		// screen the file is what the next game takes
-		if (InGame()) {
-			if (const auto it = _set.find(std::string(a_target)); it != _set.end()) {
-				return it->second;
-			}
-			return cat->GetCategoryVolume() / StaticMult(cat);
-		}
-		if (const auto f = FileVolume(cat->GetFormID())) {
-			return *f;
-		}
-		return cat->GetCategoryVolume();
+		return cat ? std::optional<float>(cat->volumeMult) : std::nullopt;
 	}
 
+	// As the journal's slider (OptionChange): the category's menu volume, which also stores it in the game's own
+	// [AudioMenu] pair, then the audio manager's volume-changed message so what is playing follows. Saved to
+	// SkyrimPrefs.ini by the game's writer when the menu closes.
 	void SoundService::Set(std::string_view a_target, float a_value)
 	{
+		a_value = std::clamp(a_value, 0.0f, 1.0f);
 		if (a_target == kMasterTarget) {
 			SetMaster(a_value);
 			return;
@@ -322,35 +267,17 @@ namespace SKYBSettingsMenu
 		if (!cat) {
 			return;
 		}
-		const float before = cat->GetCategoryVolume();
-		_set[std::string(a_target)] = a_value;
+		const float before = cat->volumeMult;
 		cat->SetCategoryVolume(a_value);
-		// and through the game's own SoundCategory.SetVolume, which mods use to change a volume while it plays
-		if (auto* vm = RE::BSScript::Internal::VirtualMachine::GetSingleton()) {
-			auto*      policy = vm->GetObjectHandlePolicy();
-			const auto handle = policy ? policy->GetHandleForObject(RE::BGSSoundCategory::FORMTYPE, cat) : 0;
-			if (handle) {
-				RE::BSTSmartPointer<RE::BSScript::IStackCallbackFunctor> none;
-				vm->DispatchMethodCall(handle, "SoundCategory", "SetVolume", RE::MakeFunctionArguments(static_cast<float>(a_value)),
-									   none);
-			}
-		}
-		const bool saved = WriteFileVolume(cat->GetFormID(), a_value);
-		Log::INFO("settings menu: volume {:08X} {} -> {} (reads back {}, record 48h {}; {})", cat->GetFormID(), before,
-				  a_value, cat->GetCategoryVolume(), cat->unk48, saved ? "saved to SkyrimPrefs.ini" : "not saved: no SkyrimPrefs.ini path");
-		if (_demo.contains(std::string(a_target))) {
-			PlaySample(a_target);
-		} else {
-			if (a_target == kMusicTarget) {
-				PlayMusicTest();
-			}
-			Nudge();
-		}
+		VolumesChanged();
+		_dirty = true;
+		Log::INFO("settings menu: volume {:08X} {} -> {} (heard at {})", cat->GetFormID(), before, cat->volumeMult,
+				  cat->GetCategoryVolume());
+		PlaySample(a_target);
 	}
 
-	// The master volume: the audio manager's own field, which the game multiplies into every sound, set and
-	// then taken in the way the music is (Nudge); kept as SkyrimPrefs.ini [AudioMenu] fAudioMasterVolume, which the
-	// game reads at start. The mastering voice's level is logged too, to see which of the two the game uses.
+	// The master volume, as the journal's Master slider: the audio manager's own field, the volume-changed message,
+	// and the game's fAudioMasterVolume setting (saved with the rest when the menu closes).
 	void SoundService::SetMaster(float a_value)
 	{
 		auto* audio = RE::BSAudioManager::GetSingleton();
@@ -359,63 +286,19 @@ namespace SKYBSettingsMenu
 		}
 		const float before = audio->masterVolume;
 		audio->masterVolume = a_value;
-		bool saved = false;
-		if (const char* path = PrefsPath()) {
-			saved = WritePrivateProfileStringA(kSection, "fAudioMasterVolume", std::format("{:.4f}", a_value).c_str(), path) != 0;
+		VolumesChanged();
+		auto* prefs = RE::INIPrefSettingCollection::GetSingleton();
+		auto* setting = prefs ? prefs->GetSetting(kMasterSetting) : nullptr;
+		if (setting && setting->GetType() == RE::Setting::Type::kFloat) {
+			setting->data.f = a_value;
+			_dirty = true;
+		} else {
+			Log::WARN("settings menu: no {} setting; the master volume lasts until the game closes", kMasterSetting);
 		}
-		float voice = -1.0f;
-		if (auto* xa = static_cast<RE::BSXAudio2Audio*>(RE::BSAudioManager::QPlatformInstance()); xa && xa->masteringVoice) {
-			xa->masteringVoice->GetVolume(&voice);
-		}
-		Log::INFO("settings menu: master volume {} -> {} (mastering voice {}; {})", before, a_value, voice,
-				  saved ? "saved to SkyrimPrefs.ini" : "not saved");
-		Nudge();
+		Log::INFO("settings menu: master volume {} -> {}", before, a_value);
 		const auto it = _demo.find("Skyrim.esm:064451");
 		if (it != _demo.end()) {
 			PlaySample("Skyrim.esm:064451");
-		}
-	}
-
-	// the reveal sting as the music row's test, at most once in eight seconds (it is several seconds long)
-	void SoundService::PlayMusicTest()
-	{
-		static auto last = std::chrono::steady_clock::time_point{};
-		const auto  now = std::chrono::steady_clock::now();
-		if (last != std::chrono::steady_clock::time_point{} && now - last < std::chrono::seconds(8)) {
-			return;
-		}
-		auto* music = FormCache::GetLocal<RE::BGSMusicType>(kRevealSting, kRevealPlugin, "settings menu (music test)");
-		auto* vm = RE::BSScript::Internal::VirtualMachine::GetSingleton();
-		if (!music || !vm) {
-			return;
-		}
-		last = now;
-		auto*      policy = vm->GetObjectHandlePolicy();
-		const auto handle = policy ? policy->GetHandleForObject(RE::BGSMusicType::FORMTYPE, music) : 0;
-		if (handle) {
-			RE::BSTSmartPointer<RE::BSScript::IStackCallbackFunctor> none;
-			vm->DispatchMethodCall(handle, "MusicType", "Add", RE::MakeFunctionArguments(), none);
-		}
-	}
-
-	// The music takes a new volume only when the interface volume is changed after it (a silent sound start
-	// does not do it). A row without a sample of its own (music) sets the interface
-	// category to the volume it already has, through the game's SoundCategory.SetVolume: nothing changes but the
-	// music follows.
-	void SoundService::Nudge()
-	{
-		auto* ui = FormCache::GetLocal<RE::BGSSoundCategory>(0x064451, "Skyrim.esm", "settings menu (nudge)");
-		auto* vm = RE::BSScript::Internal::VirtualMachine::GetSingleton();
-		if (!ui || !vm) {
-			return;
-		}
-		const float v = ui->GetCategoryVolume();
-		ui->SetCategoryVolume(v);
-		auto*      policy = vm->GetObjectHandlePolicy();
-		const auto handle = policy ? policy->GetHandleForObject(RE::BGSSoundCategory::FORMTYPE, ui) : 0;
-		if (handle) {
-			RE::BSTSmartPointer<RE::BSScript::IStackCallbackFunctor> none;
-			vm->DispatchMethodCall(handle, "SoundCategory", "SetVolume", RE::MakeFunctionArguments(static_cast<float>(v)), none);
 		}
 	}
 

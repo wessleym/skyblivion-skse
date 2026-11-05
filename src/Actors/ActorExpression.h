@@ -17,4 +17,10 @@ public:
 
     static void Set(RE::Actor* actor, Expression expression, float value);
     static void Reset(RE::Actor* actor);
+
+    //The same two, applied at once on the calling thread (a game task that already runs on it).
+    static void SetNow(RE::Actor* actor, Expression expression, float value);
+    static void ResetNow(RE::Actor* actor) { SetNow(actor, Expression::Anger, 0.0f); }
+    //Zeroes the dialogue phonemes (closes the mouth) and leaves the expression alone.
+    static void CloseMouthNow(RE::Actor* actor);
 };

@@ -337,6 +337,30 @@ namespace Dialogue {
 				   service.id == "repair" || service.id == "recharge";
 		}
 
+		bool HasBuiltIn(const ServiceDef& service) {
+			return service.id == "barter" || service.id == "training" || service.id == "repair" || service.id == "recharge";
+		}
+
+		bool SameText(std::string_view a, std::string_view b) {
+			return a.size() == b.size() && std::equal(a.begin(), a.end(), b.begin(),
+				[](char x, char y) { return std::tolower(static_cast<unsigned char>(x)) == std::tolower(static_cast<unsigned char>(y)); });
+		}
+
+		//The natives SKYBDeg::RepairMenu registers on SKYBDegradation, for the service that has the same built-in call.
+		bool OwnNative(const ServiceDef& service) {
+			if (!SameText(service.openClass, "SKYBDegradation")) {
+				return false;
+			}
+			return (service.id == "repair" && SameText(service.openFunction, "OpenVendorRepair")) ||
+				   (service.id == "recharge" && SameText(service.openFunction, "OpenVendorRecharge"));
+		}
+
+		//Whether Scripts\<class>.pex is in the data (loose or in an archive).
+		bool ScriptInstalled(const std::string& className) {
+			RE::BSResourceNiBinaryStream pex{ std::format("Scripts/{}.pex", className) };
+			return pex.good();
+		}
+
 		//The first row of the dialogue list holding one of the service's topics, with that topic's icon.
 		int FindRow(ServiceDef& service, std::string& icon) {
 			auto* topicManager = RE::MenuTopicManager::GetSingleton();
@@ -423,7 +447,23 @@ namespace Dialogue {
 			return;
 		}
 		RE::BSTSmartPointer<RE::BSScript::IStackCallbackFunctor> callback;
-		if (!service->openClass.empty()) {
+		//open= naming this plugin's own natives (SKYBDegradation.OpenVendorRepair / OpenVendorRecharge) opens the same
+		//menu as the built-in call, so the built-in call is used and Papyrus is not involved. And an open= whose script
+		//is not in the data is not dispatched: the plugin registers SKYBDegradation's natives whether or not the
+		//script that declares them is installed, and calling one with the script missing crashes the VM in the engine
+		//(2026-11-05: the build ships the INI naming SKYBDegradation but not Scripts\SKYBDegradation.pex).
+		bool builtIn = service->openClass.empty() || OwnNative(*service);
+		if (!builtIn && !ScriptInstalled(service->openClass)) {
+			if (!HasBuiltIn(*service)) {
+				Log::WARN("DialogueServices: '{}' refused. open={}.{} but Scripts\\{}.pex is not installed.", serviceID,
+					service->openClass, service->openFunction, service->openClass);
+				return;
+			}
+			Log::WARN("DialogueServices: '{}': open={}.{} but Scripts\\{}.pex is not installed; using the built-in call.",
+				serviceID, service->openClass, service->openFunction, service->openClass);
+			builtIn = true;
+		}
+		if (!builtIn) {
 			auto* args = RE::MakeFunctionArguments(static_cast<RE::Actor*>(speaker));
 			const bool dispatched = vm->DispatchStaticCall(service->openClass, service->openFunction, args, callback);
 			Log::INFO("DialogueServices: '{}': {}.{}({}) dispatched={}.", serviceID, service->openClass, service->openFunction,
@@ -445,11 +485,21 @@ namespace Dialogue {
 			const bool dispatched = vm->DispatchStaticCall("Game", "ShowTrainingMenu", args, callback);
 			Log::INFO("DialogueServices: 'training': Game.ShowTrainingMenu({}) dispatched={}.", speaker->GetName(), dispatched);
 		}
-		else if (service->id == "repair") {
-			SKYBDeg::RepairMenu::OpenVendor(speaker);
-		}
-		else if (service->id == "recharge") {
-			SKYBDeg::RepairMenu::OpenRecharge(speaker);
+		else if (service->id == "repair" || service->id == "recharge") {
+			//On the main thread, as the Papyrus natives do: this runs on the thread that delivered the menu's call.
+			const bool recharge = service->id == "recharge";
+			const auto handle = speaker->GetHandle();
+			SKSE::GetTaskInterface()->AddTask([handle, recharge] {
+				if (auto vendor = handle.get()) {
+					if (recharge) {
+						SKYBDeg::RepairMenu::OpenRecharge(vendor.get());
+					}
+					else {
+						SKYBDeg::RepairMenu::OpenVendor(vendor.get());
+					}
+				}
+			});
+			Log::INFO("DialogueServices: '{}': built-in menu for {} queued.", serviceID, speaker->GetName());
 		}
 	}
 

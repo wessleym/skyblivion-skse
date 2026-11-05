@@ -10,12 +10,12 @@
 // own audio settings list. A row's target names the category: "Plugin.esm:XXXXXX" (its form ID in that
 // plugin) or its editor ID.
 //
-// The value is the category's menu volume, as the journal's audio settings set it: changed at once
-// (SetCategoryVolume and the game's own SoundCategory.SetVolume) and kept where the game keeps it,
-// SkyrimPrefs.ini [AudioMenu] (the fValN beside the uIDN that holds the category's form ID; the file is
-// written directly, the game registers no setting for those), so the game restores it on the next start.
-// Each change plays a short sound of the category (not for music).
-// The master volume is not one of these (the game applies it its own way); it stays in the journal.
+// The value is the category's menu volume, set the way the journal's audio sliders set it: SetCategoryVolume, which
+// also stores it in the game's own SkyrimPrefs.ini [AudioMenu] pair for that category, then the audio manager's
+// volume-changed message, so sounds already playing (music included) change at once. The master row sets the audio
+// manager's master volume and the game's fAudioMasterVolume setting. When the menu closes after a change, the game's
+// prefs writer saves the file (as the journal's SaveSettings does); the game reads it back at the next start.
+// Each change plays a short sound of the category (not for music, which is heard anyway).
 namespace SKYBSettingsMenu
 {
 	class SoundService : public RE::BSTEventSink<RE::MenuOpenCloseEvent>
@@ -42,8 +42,6 @@ namespace SKYBSettingsMenu
 
 		[[nodiscard]] RE::BGSSoundCategory* Find(std::string_view a_target) const;
 		void                                PlaySample(std::string_view a_target);
-		void                                Nudge();          // re-applies the interface volume, so the music follows
-		void                                PlayMusicTest();  // the reveal sting, the music row's sample
 		void                                SetMaster(float a_value);
 
 		std::unordered_map<std::string, RE::BGSSoundCategory*> _byTarget;
@@ -51,8 +49,7 @@ namespace SKYBSettingsMenu
 		// rows' categories under the one the game pauses in menus, moved from it while the settings menu is open
 		std::vector<RE::BGSSoundCategory*>                                  _unpause;
 		std::unordered_map<RE::BGSSoundCategory*, RE::BGSSoundCategory*>    _savedParent;
-		// the value each row was last set to since the game started: what the row shows in a game (the music
-		// category's own volume reads back 5% whatever is set, which would keep the slider from moving)
-		std::unordered_map<std::string, float>                 _set;
+		// a volume changed since the menu opened: the prefs are written when it closes
+		bool                                                   _dirty = false;
 	};
 }

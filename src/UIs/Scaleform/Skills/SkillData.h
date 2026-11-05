@@ -6,8 +6,8 @@
 #include <string_view>
 #include <vector>
 
-//The player's skill data, read once for every menu that shows skills:
-//the skills menu's feed (SkillsFeed) and the skill sheet's (SkillSheetFeed).
+//The player's skill data, read once for everything that shows skills:
+//the skill sheet's feed (SkillSheetFeed) and the persuasion perks (MasteryPerks).
 namespace Skills::SkillData {
 	//Oblivion's skill categories, alphabetical within each.
 	//Matches the order of SKYBMasteryPerkList's inner lists.

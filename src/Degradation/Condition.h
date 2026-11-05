@@ -65,6 +65,11 @@ namespace SKYBDeg::Condition
 	// Smithing slows wear: 1 - SkillWearReduction (INI) x (skill / skill max).
 	[[nodiscard]] float WearSkillMult();
 
+	// Armor mastery slows wear on its own class: 1 - MasteryWearReduction (INI) x the
+	// Heavy / Light Armor mastery ranks (Apprentice..Master, 0-4) the player holds.
+	// 1.0 for weapons and anything that is neither heavy nor light armor.
+	[[nodiscard]] float MasteryWearMult(const RE::TESBoundObject* a_obj);
+
 	// Repair math (all read the player's current Smithing, fortify included).
 	[[nodiscard]] float Smithing();
 	[[nodiscard]] float RepairCap(const RE::TESBoundObject* a_obj);                  // player's Smithing
@@ -91,7 +96,7 @@ namespace SKYBDeg::Condition
 	[[nodiscard]] std::vector<WornPiece> WornArmor();
 
 	// Enchanted gear (record enchantment or one added to this instance). The
-	// player needs EnchantRepairSkill (INI) Smithing to repair it; vendors never do.
+	// player needs EnchantRepairSkill (INI) Smithing or the Arcane Blacksmith perk to repair it; vendors never do.
 	[[nodiscard]] bool IsEnchanted(const RE::TESBoundObject* a_obj, const RE::ExtraDataList* a_list);
 	[[nodiscard]] bool PlayerMayRepair(const RE::TESBoundObject* a_obj, const RE::ExtraDataList* a_list);
 

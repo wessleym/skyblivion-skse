@@ -333,7 +333,7 @@ namespace SKYBDeg
 			}
 			const float catMult = a_row.kind == Kind::kWeapon ? Settings::Get(G::WeapRateMult) : Settings::Get(G::ArmorRateMult);
 			p.decay = Condition::MaterialMult(a_row.obj) * Condition::CurveMult(a_row.q) * Settings::Get(G::RateMult) * catMult *
-					  Condition::WearSkillMult();
+					  Condition::WearSkillMult() * Condition::MasteryWearMult(a_row.obj);
 			p.breakPct = g_hammer >= 0 ? Condition::BreakChance(g_hammer, a_row.obj) * 100.0f : -1.0f;
 			return p;
 		}
@@ -367,7 +367,7 @@ namespace SKYBDeg
 			}
 			const float catMult = a_row.kind == Kind::kWeapon ? Settings::Get(G::WeapRateMult) : Settings::Get(G::ArmorRateMult);
 			p.decay = Condition::MaterialMult(a_row.obj) * Condition::CurveMult(a_row.q) * Settings::Get(G::RateMult) * catMult *
-					  Condition::WearSkillMult();
+					  Condition::WearSkillMult() * Condition::MasteryWearMult(a_row.obj);
 			return p;
 		}
 

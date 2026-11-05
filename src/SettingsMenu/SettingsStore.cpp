@@ -1,6 +1,7 @@
 #include "SettingsMenu/SettingsStore.h"
 
 #include "Platform/FormCache.h"
+#include "Platform/MainThread.h"
 
 #include <charconv>
 #include <cstdlib>
@@ -9,6 +10,7 @@
 
 #include <Windows.h>
 #include <array>
+#include <atomic>
 #include <cmath>
 #include <optional>
 #include <unordered_set>
@@ -250,6 +252,97 @@ namespace SKYBSettingsMenu
 			}
 		}
 
+		// The fade multipliers (fLODFadeOutMultActors / Items / Objects): the engine works from its own copy of them,
+		// so after one is written the game's own update runs, as its settings page does when a fade slider moves
+		// (AE id 13418: the multipliers into the engine's fade table, then the grass manager's range). The update is
+		// used only if its first two loads are the Item and Actor multipliers, so another build's code never runs.
+		// It needs the grass manager; a change made before there is one is applied once there is.
+		bool IsFade(std::string_view a_name)
+		{
+			return _strnicmp(a_name.data(), "fLODFadeOutMult", 15) == 0;
+		}
+
+		using FadeUpdate = void();
+
+		FadeUpdate* ResolveFadeUpdate()
+		{
+			if (!REL::Module::IsAE()) {
+				Log::INFO("settings menu: fade changes take effect at the next start on this runtime");
+				return nullptr;
+			}
+			const auto  addr = REL::ID(13418).address();
+			const auto* code = reinterpret_cast<const std::uint8_t*>(addr);
+			// movss xmm, dword ptr [rip+disp32] at a_at, for the register byte a_reg: the address it loads
+			const auto loadAt = [&](std::size_t a_at, std::uint8_t a_reg) -> std::uintptr_t {
+				if (code[a_at] != 0xF3 || code[a_at + 1] != 0x0F || code[a_at + 2] != 0x10 || code[a_at + 3] != a_reg) {
+					return 0;
+				}
+				std::int32_t disp = 0;
+				std::memcpy(&disp, code + a_at + 4, sizeof(disp));
+				return addr + a_at + 8 + disp;
+			};
+			auto* items = GameSetting("fLODFadeOutMultItems:LOD");
+			auto* actors = GameSetting("fLODFadeOutMultActors:LOD");
+			if (!items || !actors || loadAt(0, 0x05) != reinterpret_cast<std::uintptr_t>(&items->data.f) ||
+				loadAt(8, 0x0D) != reinterpret_cast<std::uintptr_t>(&actors->data.f)) {
+				Log::WARN("settings menu: the game's fade update is not the expected code - fade changes take effect at the next start");
+				return nullptr;
+			}
+			return reinterpret_cast<FadeUpdate*>(addr);
+		}
+
+		std::atomic<bool> g_fadePending{ false };
+
+		// runs the update on the main thread if a fade changed since it last ran
+		void RefreshFades()
+		{
+			if (!g_fadePending) {
+				return;
+			}
+			MainThread::Post([] {
+				static FadeUpdate* const update = ResolveFadeUpdate();
+				if (!update) {
+					g_fadePending = false;
+					return;
+				}
+				if (!g_fadePending || !RE::BGSGrassManager::GetSingleton()) {
+					return;
+				}
+				g_fadePending = false;
+				update();
+				Log::INFO("settings menu: the game's fade distances updated");
+			});
+		}
+
+		// Brightness (fGamma:Display): the game's own slider stores min + x (max - min) into this setting and calls
+		// nothing (the journal's OptionChange handler, AE id 53310, case 13); the renderer divides by the setting when
+		// it fills the image-space shader constants each frame (AE id 77258), so the write itself is the live change.
+		// Checked once: the setting the collection returned is the game's own object (AE id 388987), else a WARN.
+		bool IsGamma(std::string_view a_name)
+		{
+			return _strnicmp(a_name.data(), "fGamma:", 7) == 0;
+		}
+
+		void CheckGamma(const RE::Setting* a_setting)
+		{
+			static bool told = false;
+			if (told) {
+				return;
+			}
+			told = true;
+			if (!REL::Module::IsAE()) {
+				Log::INFO("settings menu: brightness - the renderer reads fGamma each frame (the object not checked on this runtime)");
+				return;
+			}
+			const auto own = REL::ID(388987).address();
+			if (own == reinterpret_cast<std::uintptr_t>(a_setting)) {
+				Log::INFO("settings menu: brightness writes the game's own fGamma setting (the renderer reads it each frame)");
+			} else {
+				Log::WARN("settings menu: brightness - the setting found at {:X} is not the game's fGamma object at {:X}; the picture may not change until the next start",
+						  reinterpret_cast<std::uintptr_t>(a_setting), own);
+			}
+		}
+
 		// the autosave row's intervals (minutes), after "Off"; the game's own list
 		constexpr std::array<float, 6> kAutosaveMinutes{ 5.0f, 10.0f, 15.0f, 30.0f, 45.0f, 60.0f };
 
@@ -359,6 +452,13 @@ namespace SKYBSettingsMenu
 				RE::INIPrefSettingCollection::GetSingleton()->WriteSetting(s);
 			}
 			Log::INFO("settings menu: game setting {} = {}", a_name, a_value);
+			if (IsFade(a_name)) {
+				g_fadePending = true;
+				RefreshFades();
+			}
+			if (IsGamma(a_name)) {
+				CheckGamma(s);
+			}
 		}
 	}
 
@@ -581,8 +681,12 @@ namespace SKYBSettingsMenu
 			}
 			break;
 		case Applier::kGameIni:
-			// the game's setting is the value itself (Set wrote it); the HUD's two are put on the HUD again
+			// the game's setting is the value itself (Set wrote it); the HUD's two are put on the HUD again,
+			// and a fade change still waiting for the game's update gets it
 			ApplyToHud(a_row.key, a_value);
+			if (IsFade(a_row.key)) {
+				RefreshFades();
+			}
 			break;
 		case Applier::kSound:
 			// the game's setting is the value itself (Set wrote it; the game restores volumes at start)

@@ -84,7 +84,8 @@ namespace Persuasion
 				{ "curve", std::max(0.01f, a_eff.Get(P::PenaltyCurve)) },
 				{ "relief", std::clamp(relief, 0.0f, 1.0f) },
 				{ "floor", std::clamp(a_eff.Get(P::PenaltyFloor), 0.0f, 1.0f) } } },
-			{ "bribeEnabled", a_eff.On(P::BribeEnabled) }
+			{ "bribeEnabled", a_eff.On(P::BribeEnabled) },
+			{ "freeRotations", static_cast<int>(std::max(0.0f, a_eff.Get(P::FreeRotations))) }
 		};
 	}
 

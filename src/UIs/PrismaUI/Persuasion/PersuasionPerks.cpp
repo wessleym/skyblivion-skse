@@ -14,13 +14,19 @@ namespace Persuasion
 	namespace
 	{
 		// Used when the INI is missing, the same rules the shipped file holds: Speechcraft 100 halves the
-		// bribe cost, and the first Speechcraft mastery stops decay while the wheel is open.
+		// bribe cost, the first Speechcraft mastery stops decay while the wheel is open, and the
+		// Journeyman and Master masteries give one and two free turns of the wheel per conversation.
 		// Person of Interest raises the bonus of positive responses in the disposition mini game:
-		// each of its four ranks makes loved and liked answers worth 10% more (+40% at rank 4)
+		// each of its four ranks makes loved and liked answers worth 10% more (+40% at rank 4), and
+		// bribes 10 / 20 / 30 / 40% cheaper in total (each rank's factor is the step from the one before)
 		constexpr std::string_view kDefaultRules =
 			"[Skill:Speechcraft>=100]\nBribe.CostMult*=0.5\n"
 			"[Mastery:Speechcraft:1]\nDecay.WhileOpen=0\n"
-			"[Perk:0x09D03C~Skyblivion.esm]\nResponse.LoveMult+=0.1\nResponse.LikeMult+=0.1\n[Perk:0x09D03B~Skyblivion.esm]\nResponse.LoveMult+=0.1\nResponse.LikeMult+=0.1\n[Perk:0x1A8CDA~Skyblivion.esm]\nResponse.LoveMult+=0.1\nResponse.LikeMult+=0.1\n[Perk:0x28F5CB~Skyblivion.esm]\nResponse.LoveMult+=0.1\nResponse.LikeMult+=0.1\n";
+			"[Mastery:Speechcraft:2]\nGeneral.FreeRotations=1\n[Mastery:Speechcraft:4]\nGeneral.FreeRotations=2\n"
+			"[Perk:0x09D03C~Skyblivion.esm]\nResponse.LoveMult+=0.1\nResponse.LikeMult+=0.1\nBribe.CostMult*=0.9\n"
+			"[Perk:0x09D03B~Skyblivion.esm]\nResponse.LoveMult+=0.1\nResponse.LikeMult+=0.1\nBribe.CostMult*=0.888889\n"
+			"[Perk:0x1A8CDA~Skyblivion.esm]\nResponse.LoveMult+=0.1\nResponse.LikeMult+=0.1\nBribe.CostMult*=0.875\n"
+			"[Perk:0x28F5CB~Skyblivion.esm]\nResponse.LoveMult+=0.1\nResponse.LikeMult+=0.1\nBribe.CostMult*=0.857143\n";
 
 		std::string_view Trim(std::string_view a_s)
 		{

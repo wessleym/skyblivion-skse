@@ -185,6 +185,29 @@ namespace SKYBDeg::Condition
 		return std::clamp(1.0f - Settings::Get(G::SkillWearReduction) * share, 0.0f, 1.0f);
 	}
 
+	float MasteryWearMult(const RE::TESBoundObject* a_obj)
+	{
+		// The Heavy / Light Armor mastery perks, resolved once in Resources (Apprentice..Master).
+		const auto* armo = a_obj ? a_obj->As<RE::TESObjectARMO>() : nullptr;
+		auto*       player = RE::PlayerCharacter::GetSingleton();
+		if (!armo || !player) {
+			return 1.0f;
+		}
+		const auto* perks = armo->IsHeavyArmor() ? &Resources::heavyArmorMastery :
+							armo->IsLightArmor() ? &Resources::lightArmorMastery :
+												   nullptr;
+		if (!perks) {
+			return 1.0f;
+		}
+		int ranks = 0;
+		for (auto* perk : *perks) {
+			if (perk && player->HasPerk(perk)) {
+				++ranks;
+			}
+		}
+		return std::clamp(1.0f - Settings::Get(G::MasteryWearReduction) * static_cast<float>(ranks), 0.0f, 1.0f);
+	}
+
 	float CurveMult(float a_q)
 	{
 		// Above the knee: accelerating. Knee .. band low: the working band,
@@ -361,7 +384,12 @@ namespace SKYBDeg::Condition
 
 	bool PlayerMayRepair(const RE::TESBoundObject* a_obj, const RE::ExtraDataList* a_list)
 	{
-		return !IsEnchanted(a_obj, a_list) || Smithing() >= Settings::Get(G::EnchantRepairSkill);
+		if (!IsEnchanted(a_obj, a_list) || Smithing() >= Settings::Get(G::EnchantRepairSkill)) {
+			return true;
+		}
+		// Arcane Blacksmith ("You can improve magical weapons and armor") also unlocks repairing them.
+		auto player = RE::PlayerCharacter::GetSingleton();
+		return player && Resources::arcaneBlacksmith && player->HasPerk(Resources::arcaneBlacksmith);
 	}
 
 	float VendorSkill(RE::Actor* a_vendor)

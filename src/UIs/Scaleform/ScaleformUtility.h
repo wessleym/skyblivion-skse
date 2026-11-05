@@ -25,16 +25,15 @@ public:
 		std::function<bool()> attempt, std::function<void()> onGiveUp);
 };
 
-//A menu's data request in the retired SkyblivionUI.dll's shape, "menu,target[,mode]",
-//with the menu's movie looked up.
+//A menu's data request, "menu,target[,mode]": the open menu's movie, the path the answer goes to,
+//and how it goes there.
 struct FeedRequest {
 	//Whether a feed reads the request's third field.
 	enum class Mode {
 		//"menu,target". Any further field is ignored and the target is always invoked.
 		Ignored,
-		//"menu,target,mode". "function" invokes the target, "variable" assigns it, anything else pushes nothing.
-		Required,
-		//As Required, but the mode may be left out, meaning "function".
+		//"menu,target[,mode]". "function" (also when left out) invokes the target, "variable" assigns it,
+		//anything else pushes nothing.
 		Optional
 	};
 

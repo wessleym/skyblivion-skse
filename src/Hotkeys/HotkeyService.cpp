@@ -433,9 +433,11 @@ RE::BSEventNotifyControl HotkeyService::ProcessEvent(RE::InputEvent* const* a_ev
 		}
 		const bool pad = device == RE::INPUT_DEVICE::kGamepad;
 		const auto id = button->GetIDCode();
-		if (!pad && id == 0x01) {  // Esc
+		// Esc, and the pad's B (the menu's Back, a fixed key there and the game's sneak in the world), cancel the
+		// capture; the status tells the menu, which counts the cancel as the first of its two Backs
+		if ((!pad && id == 0x01) || (pad && id == RE::BSWin32GamepadDevice::Keys::kB)) {
 			Log::INFO("hotkeys: capture for {} cancelled", def->id);
-			EndCapture({});
+			EndCapture({"$SKYB_settings_key_cancelled", ""});
 			break;
 		}
 		const int own = OwnDevices(*def);

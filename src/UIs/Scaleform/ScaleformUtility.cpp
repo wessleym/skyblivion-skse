@@ -43,8 +43,7 @@ void ScaleformUtility::RetryOnUIThread(int attempts, std::chrono::milliseconds i
 
 std::optional<FeedRequest> FeedRequest::Open(const std::string& request, Mode modeField, std::string_view source) {
 	const auto pieces = ModEvents::Split(request, ',');
-	const std::size_t needed = modeField == Mode::Required ? 3 : 2;
-	if (pieces.size() < needed) {
+	if (pieces.size() < 2) {
 		Log::WARN("{}: Malformed request '{}'.", source, request);
 		return std::nullopt;
 	}
@@ -52,7 +51,7 @@ std::optional<FeedRequest> FeedRequest::Open(const std::string& request, Mode mo
 	if (!movie) {
 		return std::nullopt;
 	}
-	const bool readsMode = modeField == Mode::Required || (modeField == Mode::Optional && pieces.size() >= 3);
+	const bool readsMode = modeField == Mode::Optional && pieces.size() >= 3;
 	return FeedRequest{ std::move(movie), pieces[1], readsMode ? pieces[2] : "function" };
 }
 

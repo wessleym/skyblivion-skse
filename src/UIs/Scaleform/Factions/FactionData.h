@@ -4,8 +4,7 @@
 #include <string_view>
 #include <vector>
 
-//The player's standing in the factions the UI lists, read once for every menu that shows them:
-//the character menu's faction page (FactionFeed) and the character sheet's (CharFactionsFeed).
+//The player's standing in the factions the UI lists, for the character sheet's feed (CharFactionsFeed).
 namespace Factions::FactionData {
 	struct Standing {
 		RE::TESFaction* faction;
