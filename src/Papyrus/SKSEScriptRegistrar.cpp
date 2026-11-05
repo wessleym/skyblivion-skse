@@ -8,7 +8,6 @@
 #include "QuestUtility.h"
 #include "SkillUtility.h"
 #include "UILauncher.h"
-#include "Degradation/RepairMenu.h"
 #include "Achievements/AchievementService.h"
 #include "UIs/Scaleform/ScrollCraft/ScrollRecipeStore.h"
 
@@ -24,11 +23,9 @@ static bool RegisterFuncs(RE::BSScript::Internal::VirtualMachine* vm) {
     QuestUtility::Register(vm);
     SkillUtility::Register(vm);
     UILauncher::Register(vm);
-    //SKYBDegradation.OpenVendorRepair / OpenVendorRecharge, for an INI open= or a script.
-    SKYBDeg::RepairMenu::RegisterPapyrus(vm);
     //SKYBAchievements.Unlock and the rest (Source\Scripts\SKYBAchievements.psc).
     Achievements::AchievementService::RegisterPapyrus(vm);
-    //SKYBScrollCraftData.GetTable and the rest: the scroll recipes from recipes.json (Source\Scripts\SKYBScrollCraftData.psc).
+    //SKYBScrollCraftData.GetStatus and the rest: the scroll recipes from recipes.json (Source\Scripts\SKYBScrollCraftData.psc).
     ScrollCraft::ScrollRecipeStore::RegisterPapyrus(vm);
     Log::INFO("SKSEScriptRegistrar: Registering Custom Functions Complete");
     return true;

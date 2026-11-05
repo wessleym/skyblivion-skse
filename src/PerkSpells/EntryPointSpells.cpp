@@ -245,6 +245,10 @@ namespace PerkSpells::EntryPointSpells {
         }
 
         void Deliver(RE::Actor* a_caster, RE::Actor* a_target, RE::SpellItem* a_spell, RE::Actor* a_blame, Kind a_kind) {
+            // Abilities, diseases and addictions are not cast: the engine puts them on the target's spell list
+            // (a disease is contracted until cured), so an extra of that type goes on the same way and stays, as
+            // the engine's own pick would. In Skyblivion's data (2026-11-06) the only such entries are
+            // SKYBCrVampPerk's SKYBVampDisease (Combat Hit) and one Sneaking ability, skipped below.
             switch (a_spell->GetSpellType()) {
                 case RE::MagicSystem::SpellType::kAbility:
                 case RE::MagicSystem::SpellType::kDisease:

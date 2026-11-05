@@ -30,8 +30,8 @@
 //does not resolve or is not a scroll, or a tier unlike its seat count is logged with its file and scroll id and
 //skipped. A file that is missing or not JSON is logged and skipped; recipes.json missing is reported in Status().
 //
-//Papyrus (Source/Scripts/SKYBScrollCraftData.psc, all global native): GetStatus, GetCount, GetTable,
-//GetScroll(index), Find(scroll), Resolve(school, wheel, aspect), KnownTable(known list), PlayUISound(editor
+//Papyrus (Source/Scripts/SKYBScrollCraftData.psc, all global native): GetStatus, GetScroll(index),
+//Find(scroll), Resolve(school, wheel, aspect), KnownTable(known list), PlayUISound(editor
 //ID). Adding to the known list stays in Papyrus (FormList.AddForm), the game's own binding. The wheel is five characters in seat order (top, bottom, left, right,
 //centre), "." for an empty seat. Indices are positions in this session's store: the quest keeps known recipes
 //as scroll forms (a FormList), never as indices.
@@ -67,7 +67,6 @@ namespace ScrollCraft {
 
 		[[nodiscard]] static const std::vector<Recipe>& Recipes() { return s_recipes; }
 		[[nodiscard]] static const std::string& Status() { return s_status; }
-		[[nodiscard]] static std::string Table();
 		[[nodiscard]] static int Find(const RE::TESForm* a_form);
 		//the recipe of this school with these seats: the aspect's delivery when one has it, else the plain form
 		//(neither touch nor area), else the first; -1 when none

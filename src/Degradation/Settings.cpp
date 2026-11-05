@@ -174,7 +174,6 @@ namespace SKYBDeg
 		Load();
 
 		s_tools = RE::TESForm::LookupByEditorID<RE::BGSListForm>(kToolsList);
-		s_pluginLoaded = s_tools != nullptr;
 		s_hammers.clear();
 		if (!s_tools) {
 			Log::WARN("FLST {} not found in any loaded plugin: no repair tool is known (the hammer will not open the menu)", kToolsList);

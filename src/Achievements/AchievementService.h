@@ -7,7 +7,7 @@ namespace Achievements {
 
 	//The achievements of the loaded save, and everything that changes or shows them.
 	//
-	//	Papyrus     SKYBAchievements.Unlock(id) / IsUnlocked / CheckProgress / GetUnlockedCount / GetTotalCount / Exists.
+	//	Papyrus     SKYBAchievements.Unlock(id) (the five query natives of earlier versions went unused and were removed, 2026-11-06).
 	//	            Triggering is Papyrus's business; the definitions are JSON (AchievementData).
 	//	Co-save     this save's unlocks: id, local date and time, the game's date string, the character.
 	//	On unlock   the toast (unless toastNotifications=0 in SKYBSettings.ini), the machine-wide record
@@ -27,10 +27,6 @@ namespace Achievements {
 
 		//True when this call unlocked it. Unknown ids and ones already earned are logged and return false.
 		static bool Unlock(std::string_view id);
-		[[nodiscard]] static bool IsUnlocked(std::string_view id);
-		//Unlocks a counted achievement once its count global reaches its total. True when it is (now) unlocked.
-		static bool CheckProgress(std::string_view id);
-		[[nodiscard]] static int UnlockedCount();
 	};
 
 }

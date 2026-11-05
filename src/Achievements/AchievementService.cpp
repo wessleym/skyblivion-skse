@@ -384,21 +384,6 @@ namespace Achievements {
 		bool PapyrusUnlock(RE::StaticFunctionTag*, RE::BSFixedString id) {
 			return AchievementService::Unlock(id.c_str());
 		}
-		bool PapyrusIsUnlocked(RE::StaticFunctionTag*, RE::BSFixedString id) {
-			return AchievementService::IsUnlocked(id.c_str());
-		}
-		bool PapyrusCheckProgress(RE::StaticFunctionTag*, RE::BSFixedString id) {
-			return AchievementService::CheckProgress(id.c_str());
-		}
-		bool PapyrusExists(RE::StaticFunctionTag*, RE::BSFixedString id) {
-			return AchievementData::Find(id.c_str()) != nullptr;
-		}
-		std::int32_t PapyrusUnlockedCount(RE::StaticFunctionTag*) {
-			return AchievementService::UnlockedCount();
-		}
-		std::int32_t PapyrusTotalCount(RE::StaticFunctionTag*) {
-			return static_cast<std::int32_t>(AchievementData::Count());
-		}
 	}
 
 	void AchievementService::InstallSerialization() {
@@ -426,11 +411,6 @@ namespace Achievements {
 	void AchievementService::RegisterPapyrus(RE::BSScript::Internal::VirtualMachine* vm) {
 		const auto* script = AchievementContract::ScriptName;
 		SKSEScriptRegistrar::Register(vm, script, "Unlock", PapyrusUnlock);
-		SKSEScriptRegistrar::Register(vm, script, "IsUnlocked", PapyrusIsUnlocked);
-		SKSEScriptRegistrar::Register(vm, script, "CheckProgress", PapyrusCheckProgress);
-		SKSEScriptRegistrar::Register(vm, script, "Exists", PapyrusExists);
-		SKSEScriptRegistrar::Register(vm, script, "GetUnlockedCount", PapyrusUnlockedCount);
-		SKSEScriptRegistrar::Register(vm, script, "GetTotalCount", PapyrusTotalCount);
 	}
 
 	bool AchievementService::Unlock(std::string_view id) {
@@ -459,47 +439,6 @@ namespace Achievements {
 			ModEvents::Send(AchievementContract::ModEvent::Earned, id);
 		});
 		return true;
-	}
-
-	bool AchievementService::IsUnlocked(std::string_view id) {
-		const auto* a = AchievementData::Find(id);
-		if (!a) {
-			return false;
-		}
-		std::scoped_lock lock(g_lock);
-		return g_unlocks.contains(a->id);
-	}
-
-	bool AchievementService::CheckProgress(std::string_view id) {
-		const auto* a = AchievementData::Find(id);
-		if (!a) {
-			Log::WARN("AchievementService: CheckProgress('{}'): no achievement has that id.", id);
-			return false;
-		}
-		if (IsUnlocked(a->id)) {
-			return true;
-		}
-		if (!a->progress.present) {
-			Log::WARN("AchievementService: CheckProgress('{}'): it has no progress in its JSON; use Unlock.", a->id);
-			return false;
-		}
-		const auto [count, total] = ReadProgress(*a);
-		if (total <= 0.0 || count < total) {
-			return false;
-		}
-		Unlock(a->id);
-		return true;
-	}
-
-	int AchievementService::UnlockedCount() {
-		std::scoped_lock lock(g_lock);
-		int count = 0;
-		for (const auto& [id, earned] : g_unlocks) {
-			if (AchievementData::Find(id)) {
-				++count;
-			}
-		}
-		return count;
 	}
 
 }

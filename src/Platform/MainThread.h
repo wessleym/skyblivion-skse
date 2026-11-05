@@ -17,7 +17,4 @@ namespace MainThread {
 	//Runs a_task on the main thread at the start of the next frame. Never inline, even when
 	//called from the main thread: a caller inside a movie's script stays inside it.
 	void Post(std::function<void()> a_task);
-
-	//True when the frame hook is in place.
-	bool Installed();
 }

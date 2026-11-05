@@ -28,9 +28,6 @@ namespace Skills::SkillData {
 		//With fortify and damage effects.
 		float current;
 		float base;
-		float permanent;
-		float xp;
-		float levelThreshold;
 		//xp / levelThreshold as a percentage; 0 when the threshold is not positive.
 		float progress;
 	};

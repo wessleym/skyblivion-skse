@@ -346,7 +346,8 @@ namespace Dialogue {
 				[](char x, char y) { return std::tolower(static_cast<unsigned char>(x)) == std::tolower(static_cast<unsigned char>(y)); });
 		}
 
-		//The natives SKYBDeg::RepairMenu registers on SKYBDegradation, for the service that has the same built-in call.
+		//The SKYBDegradation natives of earlier versions (OpenVendorRepair / OpenVendorRecharge; no longer registered,
+		//2026-11-06) for the service that has the same built-in call: the build's INI still names them.
 		bool OwnNative(const ServiceDef& service) {
 			if (!SameText(service.openClass, "SKYBDegradation")) {
 				return false;
@@ -447,11 +448,11 @@ namespace Dialogue {
 			return;
 		}
 		RE::BSTSmartPointer<RE::BSScript::IStackCallbackFunctor> callback;
-		//open= naming this plugin's own natives (SKYBDegradation.OpenVendorRepair / OpenVendorRecharge) opens the same
-		//menu as the built-in call, so the built-in call is used and Papyrus is not involved. And an open= whose script
-		//is not in the data is not dispatched: the plugin registers SKYBDegradation's natives whether or not the
-		//script that declares them is installed, and calling one with the script missing crashes the VM in the engine
-		//(2026-11-05: the build ships the INI naming SKYBDegradation but not Scripts\SKYBDegradation.pex).
+		//open= naming the former SKYBDegradation.OpenVendorRepair / OpenVendorRecharge natives (the build's INI does;
+		//the plugin no longer registers them, 2026-11-06) opens the same menu as the built-in call, so the built-in
+		//call is used and Papyrus is not involved. And an open= whose script is not in the data is not dispatched:
+		//calling a native with its script missing crashes the VM in the engine (2026-11-05: the build shipped the INI
+		//naming SKYBDegradation without Scripts\SKYBDegradation.pex).
 		bool builtIn = service->openClass.empty() || OwnNative(*service);
 		if (!builtIn && !ScriptInstalled(service->openClass)) {
 			if (!HasBuiltIn(*service)) {

@@ -43,5 +43,4 @@ namespace SKYBDeg::TemperHook
 {
 	// Called at plugin load; patches all seven sites or none.
 	bool Install();
-	[[nodiscard]] bool Active();
 }

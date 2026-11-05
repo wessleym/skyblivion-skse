@@ -83,8 +83,4 @@ namespace MainThread {
 		g_queue.push_back(std::move(a_task));
 	}
 
-	bool Installed() {
-		return g_installed;
-	}
-
 }

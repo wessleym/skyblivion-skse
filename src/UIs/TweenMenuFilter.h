@@ -29,7 +29,8 @@
 //HighlightCategory (by name) is wrapped so the selection bar beside a lone box stays hidden.
 //
 //The sink is registered at kDataLoaded and again on kNewGame / kPostLoadGame (idempotent); should
-//the lists still be empty when it runs, it tries once more a frame later from the UI task queue.
+//the lists still be empty when it runs, it tries once more at the start of the next frame, on the main
+//thread (MainThread::Post).
 //
 //What counts as a tool is what each tool itself counts: the ESM form lists SKYBSigilStonesAll
 //(the sigil quest's), SKYBDegRepairTools (the repair menu's) and SKYBAlchemyMortarPestleList

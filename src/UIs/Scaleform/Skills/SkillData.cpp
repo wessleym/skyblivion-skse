@@ -34,9 +34,6 @@ namespace Skills::SkillData {
 				actorValue,
 				actorValues->GetActorValue(actorValue),
 				actorValues->GetBaseActorValue(actorValue),
-				actorValues->GetPermanentActorValue(actorValue),
-				skill.xp,
-				threshold,
 				threshold > 0.0f ? skill.xp / threshold * 100.0f : 0.0f
 			};
 		}

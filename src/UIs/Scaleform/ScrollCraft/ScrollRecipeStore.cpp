@@ -245,14 +245,6 @@ namespace ScrollCraft {
 		{
 			return RE::BSFixedString(ScrollRecipeStore::Status());
 		}
-		std::int32_t PapyrusCount(RE::StaticFunctionTag*)
-		{
-			return static_cast<std::int32_t>(ScrollRecipeStore::Recipes().size());
-		}
-		RE::BSFixedString PapyrusTable(RE::StaticFunctionTag*)
-		{
-			return RE::BSFixedString(ScrollRecipeStore::Table());
-		}
 		RE::TESForm* PapyrusScroll(RE::StaticFunctionTag*, std::int32_t a_index)
 		{
 			const auto& all = ScrollRecipeStore::Recipes();
@@ -470,19 +462,6 @@ namespace ScrollCraft {
 				  DataFolder, skipped);
 	}
 
-	std::string ScrollRecipeStore::Table()
-	{
-		std::string out;
-		for (std::size_t i = 0; i < s_recipes.size(); ++i) {
-			const auto& r = s_recipes[i];
-			if (i > 0) {
-				out += '|';
-			}
-			out += std::format("{}:{}:{}:{}:{}", i, r.school, r.tier, r.delivery, r.wheel);
-		}
-		return out;
-	}
-
 	int ScrollRecipeStore::Find(const RE::TESForm* a_form)
 	{
 		if (!a_form) {
@@ -528,8 +507,6 @@ namespace ScrollCraft {
 	void ScrollRecipeStore::RegisterPapyrus(RE::BSScript::Internal::VirtualMachine* vm)
 	{
 		SKSEScriptRegistrar::Register(vm, ScriptName, "GetStatus", PapyrusStatus);
-		SKSEScriptRegistrar::Register(vm, ScriptName, "GetCount", PapyrusCount);
-		SKSEScriptRegistrar::Register(vm, ScriptName, "GetTable", PapyrusTable);
 		SKSEScriptRegistrar::Register(vm, ScriptName, "GetScroll", PapyrusScroll);
 		SKSEScriptRegistrar::Register(vm, ScriptName, "Find", PapyrusFind);
 		SKSEScriptRegistrar::Register(vm, ScriptName, "Resolve", PapyrusResolve);

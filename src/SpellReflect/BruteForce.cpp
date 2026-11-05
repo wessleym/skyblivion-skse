@@ -14,6 +14,7 @@
 #include <chrono>
 #include <cstdint>
 #include <format>
+#include <optional>
 #include <random>
 #include <string>
 #include <string_view>
@@ -165,13 +166,17 @@ namespace SpellReflect::BruteForce {
         }
 
         // Extra wear on the weapon that struck, through the degradation service (when it is on).
-        float Wear(RE::PlayerCharacter* a_player, RE::TESObjectWEAP* a_weapon, std::size_t a_lockLevel, bool a_success) {
+        // a_left: the hand that struck when the caller knows it (the hit-frame path reads it off the attack
+        // event); otherwise the hand holding the weapon, and the right one when both hold the same weapon.
+        float Wear(RE::PlayerCharacter* a_player, RE::TESObjectWEAP* a_weapon, std::size_t a_lockLevel, bool a_success,
+                   std::optional<bool> a_left) {
             using SKYBDeg::G;
             if (!SKYBDeg::Settings::On(G::Enabled)) {
                 return -1.0f;
             }
-            const bool right = a_player->GetEquippedObject(false) == a_weapon;
-            const auto list = SKYBDeg::Condition::FindWornList(a_weapon, !right);
+            const bool left = a_left ? *a_left :
+                                       a_player->GetEquippedObject(true) == a_weapon && a_player->GetEquippedObject(false) != a_weapon;
+            const auto list = SKYBDeg::Condition::FindWornList(a_weapon, left);
             if (!list) {
                 return -1.0f;
             }
@@ -209,9 +214,10 @@ namespace SpellReflect::BruteForce {
         }
 
         // false: within fAttemptGap of the last attempt on this container (the other hand, the
-        // same swing again, or the swing the other path already counted).
+        // same swing again, or the swing the other path already counted). a_left: the striking hand
+        // when known (see Wear).
         bool Attempt(RE::PlayerCharacter* a_player, RE::TESObjectREFR* a_container, RE::TESObjectWEAP* a_weapon, int a_rank,
-                     std::string_view a_via) {
+                     std::string_view a_via, std::optional<bool> a_left) {
             const auto& s = Settings::Get();
             const auto  now = Clock::now();
             const auto  id = a_container->GetFormID();
@@ -249,7 +255,7 @@ namespace SpellReflect::BruteForce {
                 MakeNoise(a_player, a_container, s.bruteNoiseLevel);
                 crime = ReportCrime(a_player, a_container, now);
                 if (forceable) {
-                    condition = Wear(a_player, a_weapon, static_cast<std::size_t>(lockLevel), success);
+                    condition = Wear(a_player, a_weapon, static_cast<std::size_t>(lockLevel), success, a_left);
                 }
             }
 
@@ -304,7 +310,8 @@ namespace SpellReflect::BruteForce {
                 if (!drop && rank < 0) {
                     drop = "no rank perk held";
                 }
-                const bool attempted = !drop && Attempt(player, target, weapon, rank, "hit event");
+                // the hit event names no hand: Wear reads it off the equipped weapons
+                const bool attempted = !drop && Attempt(player, target, weapon, rank, "hit event", std::nullopt);
                 if (TraceAllowed(Clock::now())) {
                     const auto source = a_event->source ? RE::TESForm::LookupByID(a_event->source) : nullptr;
                     Log::INFO("SpellReflect: brute force trace: hit event on {}; source {:08X} {} '{}', projectile {:08X}, flags 0x{:02X}, rank {} -> {}",
@@ -374,7 +381,7 @@ namespace SpellReflect::BruteForce {
             } else if (rank < 0) {
                 drop = "no rank perk held";
             }
-            const bool attempted = !drop && Attempt(player, target.get(), weapon, rank, "hit frame");
+            const bool attempted = !drop && Attempt(player, target.get(), weapon, rank, "hit frame", left);
             if (TraceAllowed(Clock::now())) {
                 Log::INFO("SpellReflect: brute force trace: hit frame, attack '{}' flags 0x{:X}, {} hand '{}', crosshair {} at {:.0f} units, rank {} -> {}",
                           attackEvent, attack ? attack->data.flags.underlying() : 0u, left ? "left" : "right", weapon ? weapon->GetName() : "",

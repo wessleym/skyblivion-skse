@@ -22,8 +22,6 @@ namespace SKYBDeg::TemperHook
 {
 	namespace
 	{
-		bool g_active = false;
-
 		using DamageFn = float(RE::ActorValueOwner*, RE::TESObjectWEAP*, RE::TESAmmo*, float, float, bool);
 		using ArmorBonusFn = float(float, RE::TESObjectARMO*);
 		REL::Relocation<DamageFn> g_damage40291;
@@ -182,11 +180,8 @@ namespace SKYBDeg::TemperHook
 		g_damage40291 = t.write_call<5>(at[4], Damage40291);
 		t.write_call<5>(at[5], Health);
 		g_armorBonus = t.write_call<5>(at[6], ArmorBonus);
-		g_active = true;
 		Log::INFO("temper hook: installed at 7 call sites on {} - condition below 100% now scales damage / armor "
 			"through the engine's own temper path", version.string());
 		return true;
 	}
-
-	bool Active() { return g_active; }
 }

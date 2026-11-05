@@ -61,7 +61,6 @@ namespace SKYBDeg
 		};
 		static constexpr std::array<const char*, 5> kHammerKeys{ "Common", "Steel", "Dwarven", "Ebony", "Forgemaster" };
 		[[nodiscard]] static const std::vector<Hammer>& Hammers() { return s_hammers; }
-		[[nodiscard]] static bool             PluginLoaded() { return s_pluginLoaded; }
 
 		//the tool list by editor ID: SKYBDegradation.esp, SKYBCombined.esp or the ESM
 		static constexpr const char* kToolsList = "SKYBDegRepairTools";
@@ -78,6 +77,5 @@ namespace SKYBDeg
 		static inline bool                                                s_iniSeen = false;
 		static inline RE::BGSListForm*                                    s_tools = nullptr;
 		static inline std::vector<Hammer>                                 s_hammers;
-		static inline bool                                                s_pluginLoaded = false;
 	};
 }

@@ -53,8 +53,6 @@ namespace Achievements {
 
 		//Null for an id nobody defined. Case-insensitive.
 		[[nodiscard]] static const Achievement* Find(std::string_view id);
-
-		[[nodiscard]] static std::size_t Count();
 	};
 
 }

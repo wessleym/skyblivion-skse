@@ -31,10 +31,11 @@
 //                  _root.gearService.SetStatus(lines)     lines = [{key, args:[...]}]
 //
 // Opened by InventoryHook (repair tool activated), the SKYBDegOpenRepairMenu mod event, or the
-// dialogue natives:
-//   vendor mode    SKYBDegradation.OpenVendorRepair: the vendor's Smithing sets the limit, no hammers,
+// dialogue services strip (DialogueServices: repair, recharge; the SKYBDegradation.OpenVendor* natives
+// of earlier versions are gone, 2026-11-06):
+//   vendor mode    OpenVendor: the vendor's Smithing sets the limit, no hammers,
 //                  the player pays gold (Condition::VendorCost) to 100% or to the vendor's limit
-//   recharge mode  SKYBDegradation.OpenVendorRecharge: lists every charged weapon / staff; Recharge (E)
+//   recharge mode  OpenRecharge: lists every charged weapon / staff; Recharge (E)
 //                  fills the selected one, Recharge All (R) every one; price = missing charge
 //                  (Condition::RechargeCost)
 // Opening from the inventory closes it first (no inventory changes under a live item list); with
@@ -54,7 +55,6 @@ namespace SKYBDeg
 		static void OpenVendor(RE::Actor* a_vendor);    // vendor repair service (dialogue)
 		static void OpenRecharge(RE::Actor* a_vendor);  // vendor recharge service (dialogue)
 		static void Close();
-		static bool RegisterPapyrus(RE::BSScript::IVirtualMachine* a_vm);
 
 		void                   Accept(RE::FxDelegateHandler::CallbackProcessor* a_cbReg) override;
 		RE::UI_MESSAGE_RESULTS ProcessMessage(RE::UIMessage& a_message) override;

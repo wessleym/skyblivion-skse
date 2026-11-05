@@ -1,5 +1,7 @@
 #include "TweenMenuFilter.h"
 
+#include "Platform/MainThread.h"
+
 // <Windows.h>, which this plugin's CommonLib build includes, maps PlaySound to PlaySoundA.
 #ifdef PlaySound
 #	undef PlaySound
@@ -50,7 +52,6 @@ namespace TweenTools {
 		constexpr std::uint32_t kChildColour = 0xE2CEAA;
 		constexpr std::uint32_t kChildLitColour = 0xFFFFFF;
 		constexpr double kChildScale = 82.0;    //% of the entry's label
-		constexpr double kChildIndent = 0.0;    //of the field's width: centred under TOOLS like every row
 		constexpr double kChildSlide = 0.10;    //of the field's width, the fold's travel
 
 		//The fold: each child takes kStepMs to appear, the next starts kStaggerMs later.
@@ -237,8 +238,10 @@ namespace TweenTools {
 			}
 		}
 		if (seen == 0 && !toolsSeen && !a_retry) {
-			//The overhaul's sink has not filled the lists yet (it ran after this one): once more next frame.
-			SKSE::GetTaskInterface()->AddUITask([] { Prepare(true); });
+			//The overhaul's sink has not filled the lists yet (it ran after this one): once more at the start of
+			//the next frame, on the main thread. Not SKSE's UI task queue: it can run on a worker thread while
+			//the main thread advances the movie whose lists this edits (Platform\MainThread.h).
+			MainThread::Post([] { Prepare(true); });
 			return;
 		}
 		//Pass 2: TOOLS itself: gone when nothing would be under it, else directly under ITEMS.
@@ -480,7 +483,7 @@ namespace TweenTools {
 		const double f = kChildScale / 100.0;
 		field.SetMember("_xscale", RE::GFxValue(xs * f));
 		field.SetMember("_yscale", RE::GFxValue(ys * f));
-		field.SetMember("_x", RE::GFxValue(x + w * (1.0 - f) / 2.0 + w * kChildIndent - w * kChildSlide * (1.0 - a_reveal)));
+		field.SetMember("_x", RE::GFxValue(x + w * (1.0 - f) / 2.0 - w * kChildSlide * (1.0 - a_reveal)));
 		field.SetMember("_y", RE::GFxValue(y + h * (1.0 - f) / 2.0));
 		a_clip.SetMember("SKYBStyled", RE::GFxValue(true));
 		field.SetMember("textColor", RE::GFxValue(static_cast<double>(a_lit ? kChildLitColour : kChildColour)));

@@ -984,52 +984,6 @@ namespace SKYBDeg
 		}
 	}
 
-	// ============================================================ papyrus ====
-	// SKYBDegradation.OpenVendorRepair(Actor akVendor) global native - the
-	// dialogue services strip calls it (SKYBDialogueServices.ini: [repair]
-	// open=SKYBDegradation.OpenVendorRepair) with the speaker.
-	namespace
-	{
-		void OpenVendorRepair(RE::StaticFunctionTag*, RE::Actor* a_vendor)
-		{
-			if (!a_vendor) {
-				Log::WARN("OpenVendorRepair: no vendor");
-				return;
-			}
-			const auto handle = a_vendor->GetHandle();
-			SKSE::GetTaskInterface()->AddTask([handle] {
-				if (auto vendor = handle.get()) {
-					RepairMenu::OpenVendor(vendor.get());
-				}
-			});
-		}
-	}
-
-	namespace
-	{
-		void OpenVendorRecharge(RE::StaticFunctionTag*, RE::Actor* a_vendor)
-		{
-			if (!a_vendor) {
-				Log::WARN("OpenVendorRecharge: no vendor");
-				return;
-			}
-			const auto handle = a_vendor->GetHandle();
-			SKSE::GetTaskInterface()->AddTask([handle] {
-				if (auto vendor = handle.get()) {
-					RepairMenu::OpenRecharge(vendor.get());
-				}
-			});
-		}
-	}
-
-	bool RepairMenu::RegisterPapyrus(RE::BSScript::IVirtualMachine* a_vm)
-	{
-		a_vm->RegisterFunction("OpenVendorRepair", "SKYBDegradation", OpenVendorRepair);
-		a_vm->RegisterFunction("OpenVendorRecharge", "SKYBDegradation", OpenVendorRecharge);
-		Log::INFO("papyrus: SKYBDegradation.OpenVendorRepair + OpenVendorRecharge registered");
-		return true;
-	}
-
 	// ============================================================ opener =====
 	void RepairMenuOpener::Register()
 	{

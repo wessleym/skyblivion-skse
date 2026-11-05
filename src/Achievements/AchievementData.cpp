@@ -253,8 +253,4 @@ namespace Achievements {
 		return &s_categories[it->second.first].entries[it->second.second];
 	}
 
-	std::size_t AchievementData::Count() {
-		return s_count;
-	}
-
 }
