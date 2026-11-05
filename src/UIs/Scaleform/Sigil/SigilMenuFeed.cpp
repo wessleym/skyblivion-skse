@@ -1,6 +1,8 @@
 #include "SigilMenuFeed.h"
 #include "SigilMenuContract.h"
+#include "Platform/FormCache.h"
 #include "Papyrus/ModEvents.h"
+#include "Platform/MainThread.h"
 #include "Sigil/SoulGems.h"
 #include "UIs/Scaleform/ScaleformUtility.h"
 
@@ -46,6 +48,47 @@ namespace Sigil {
 				static_cast<int>(effect->effectItem.magnitude), effect->effectItem.duration);
 		}
 
+		//Every effect of an enchantment (fields 12 and 13 of a stone row): "name^magnitude^duration^description~...",
+		//with <mag>, <dur> and <area> filled in and the row, field and effect separators scrubbed.
+		std::string EffectList(RE::TESForm* form) {
+			auto* enchantment = form ? form->As<RE::EnchantmentItem>() : nullptr;
+			if (!enchantment) {
+				return " ";
+			}
+			const auto scrub = [](std::string text) {
+				for (auto& c : text) {
+					if (c == '|' || c == ';' || c == '^' || c == '~') {
+						c = '/';
+					}
+				}
+				return text;
+			};
+			const auto fill = [](std::string text, std::string_view token, const std::string& value) {
+				for (auto at = text.find(token); at != std::string::npos; at = text.find(token, at + value.size())) {
+					text.replace(at, token.size(), value);
+				}
+				return text;
+			};
+			std::string out;
+			for (auto* effect : enchantment->effects) {
+				if (!effect || !effect->baseEffect) {
+					continue;
+				}
+				const auto magnitude = std::to_string(static_cast<int>(effect->effectItem.magnitude));
+				const auto duration = std::to_string(effect->effectItem.duration);
+				const auto area = std::to_string(effect->effectItem.area);
+				const char* raw = effect->baseEffect->magicItemDescription.c_str();
+				std::string description = raw ? raw : "";
+				description = fill(fill(fill(description, "<mag>", magnitude), "<dur>", duration), "<area>", area);
+				if (!out.empty()) {
+					out += '~';
+				}
+				out += std::format("{}^{}^{}^{}", scrub(effect->baseEffect->GetFullName()), magnitude, duration,
+					description.empty() ? std::string(" ") : scrub(description));
+			}
+			return out.empty() ? " " : out;
+		}
+
 		RE::TESForm* FormAt(const RE::BGSListForm* list, int index) {
 			return list && index >= 0 && index < static_cast<int>(list->forms.size()) ? list->forms[index] : nullptr;
 		}
@@ -69,10 +112,8 @@ namespace Sigil {
 			return;
 		}
 
-		auto* disallowEnchanting = RE::TESForm::LookupByEditorID<RE::BGSKeyword>("MagicDisallowEnchanting");
-		if (!disallowEnchanting) {
-			Log::WARN("SigilMenuFeed: MagicDisallowEnchanting keyword not resolved. Its filter is skipped.");
-		}
+		//Resolved once, at data load; null (logged once by the form table) skips its filter.
+		auto* disallowEnchanting = FormCache::Get<RE::BGSKeyword>("MagicDisallowEnchanting", "SigilMenuFeed");
 
 		std::string rows;
 		std::string formIDs;
@@ -212,8 +253,9 @@ namespace Sigil {
 			if (!rows.empty()) {
 				rows += ';';
 			}
-			rows += std::format("{}|{}|{}|{}|{}|{}|{}", index, PadField(stones->forms[index]->GetName()), count, tier,
-				weaponFields, armorFields, tierGemFields(tier));
+			rows += std::format("{}|{}|{}|{}|{}|{}|{}|{}|{}", index, PadField(stones->forms[index]->GetName()), count, tier,
+				weaponFields, armorFields, tierGemFields(tier),
+				EffectList(FormAt(weaponEnchantments, index)), EffectList(FormAt(armorEnchantments, index)));
 			++rowCount;
 		}
 
@@ -238,12 +280,12 @@ namespace Sigil {
 		if (!a_event) {
 			return RE::BSEventNotifyControl::kContinue;
 		}
-		//Inventory walks and GFx invokes belong on the main thread.
+		//Inventory walks and GFx invokes belong on the main thread; SKSE's task queues can run on worker threads.
 		if (a_event->eventName == SigilMenuContract::ModEvent::RequestGear) {
-			SKSE::GetTaskInterface()->AddTask([] { PushGear(); });
+			MainThread::Post([] { PushGear(); });
 		}
 		else if (a_event->eventName == SigilMenuContract::ModEvent::RequestStones) {
-			SKSE::GetTaskInterface()->AddTask([payload = ModEvents::StrArg(*a_event)] { PushStones(payload); });
+			MainThread::Post([payload = ModEvents::StrArg(*a_event)] { PushStones(payload); });
 		}
 		return RE::BSEventNotifyControl::kContinue;
 	}

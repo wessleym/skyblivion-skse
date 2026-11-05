@@ -2,18 +2,25 @@
 #include "StatsMenuHook.h"
 #include "PrismaUI/PrismaUIService.h"
 #include "PrismaUI/Persuasion/PersuasionView.h"
+#include "PrismaUI/Persuasion/PersuasionSettings.h"
 #include "PrismaUI/SpellMaking/SpellMakingStore.h"
 #include "PrismaUI/SpellMaking/SpellMakingView.h"
 #include "PrismaUI/Stats/StatsView.h"
-#include "Scaleform/Achievements/AchievementJournal.h"
 #include "Scaleform/Dialogue/DialogueFeed.h"
-#include "Scaleform/Factions/FactionFeed.h"
+#include "Scaleform/Factions/CharFactionsFeed.h"
+#include "Scaleform/Advancement/AdvancementSound.h"
+#include "Scaleform/CharacterSheet/CharRaceFeed.h"
+#include "Scaleform/Cursor/HoverCursor.h"
+#include "Scaleform/Help/HelpFeed.h"
 #include "Scaleform/LoadingScreen/LoadingScreenService.h"
 #include "Scaleform/Perks/PerkCurrency.h"
 #include "Scaleform/Perks/PerkDataStore.h"
+#include "Scaleform/Perks/PerkStick.h"
 #include "Scaleform/Perks/PerksFeed.h"
+#include "Scaleform/Persuasion/PersuasionMenu.h"
 #include "Scaleform/Sigil/SigilMenuFeed.h"
-#include "Scaleform/Skills/SkillsFeed.h"
+#include "Scaleform/SleepWait/WeatherArt.h"
+#include "Scaleform/Skills/SkillSheetFeed.h"
 #include "Scaleform/StartMenu/StartMenuService.h"
 #include "Scaleform/Toast/ToastService.h"
 #include "Scaleform/Translation/TranslationService.h"
@@ -38,16 +45,28 @@ namespace {
         Toast::ToastService::Register();
         // Registered already at kPostLoad; this catches a sink whose source did not exist yet.
         LoadingScreen::LoadingScreenService::Register();
-        Skills::SkillsFeed::Register();
-        Factions::FactionFeed::Register();
+        // Feeds of the skill sheet and the character sheet.
+        Skills::SkillSheetFeed::Register();
+        Factions::CharFactionsFeed::Register();
+        CharacterSheet::CharRaceFeed::Register();
         Dialogue::DialogueFeed::Register();
         Sigil::SigilMenuFeed::Register();
+        // The journal's System > Help page, from the JSON tree under ConfigFiles/Help.
+        Help::HelpFeed::Register();
+        // The persuasion wheel as a Scaleform menu.
+        Persuasion::PersuasionMenu::Register();
+        // The level-up screen's music and its cancel sound.
+        Advancement::AdvancementSound::Register();
         StartMenu::StartMenuService::Register();
-        Achievements::AchievementJournal::Register();
+        // The wait menu's weather picture, chosen from the sky's weather when the menu opens.
+        SleepWait::WeatherArt::Register();
+        // The hover cursor's menu sink (its movie listeners were registered at plugin load).
+        HoverCursor::Register();
         // Parsed now so the first stats-menu request knows whether the perk tree has any trees.
         PerksView::PerkDataStore::LoadOnce();
         PerksView::PerksFeed::Register();
         PerksView::PerkCurrency::Register();
+        PerksView::PerkStick::Register();
         // Last: it needs only the Scaleform loader, and every menu opened afterwards sees its keys.
         Translation::TranslationService::Register();
     }
@@ -101,7 +120,13 @@ void UISystem::OnDataLoaded() {
 }
 
 void UISystem::OpenPersuasion(RE::Actor* target) {
-    Persuasion::PersuasionView::Open(target);
+    // The Scaleform menu hosts the wheel; SKYBPersuasion.ini [General] UsePrismaView = 1 opens
+    // the PrismaUI view instead.
+    if (Persuasion::Settings::On(Persuasion::P::UsePrismaView)) {
+        Persuasion::PersuasionView::Open(target);
+    } else {
+        Persuasion::PersuasionMenu::Open(target);
+    }
 }
 
 void UISystem::OpenSpellMaking() {

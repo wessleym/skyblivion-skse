@@ -12,6 +12,7 @@
 //
 //A sink fires on the sender's thread: the Papyrus VM's, or the movie's for Scaleform.
 //Handlers copy what they need out of the event, then do game work inside SKSE::GetTaskInterface()->AddTask.
+//Anything that calls into a Scaleform movie goes through MainThread::Post instead (Platform/MainThread.h).
 class ModEvents {
 public:
 	//Adds a sink to SKSE's mod-event source. False when SKSE has no source yet.

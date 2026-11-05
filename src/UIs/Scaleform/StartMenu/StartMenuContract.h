@@ -24,8 +24,11 @@ namespace StartMenu::StartMenuContract {
 
 	//Option keys.
 	namespace Option {
-		//iDifficulty:GamePlay in the prefs collection, written through to SkyrimPrefs.ini as the settings menu does.
-		inline constexpr const char* Difficulty = "difficulty";
+		//"preset:<category>": the settings menu's preset for one category in the new game. A row for each
+		//category with a newgame label in Categories.csv. Its choices are the presets, led by "Current
+		//Settings" only when the category's new-game values match no preset (the player changed them).
+		//Applied to the new character when it is ready (StartMenuService::OnNewGame).
+		inline constexpr const char* PresetPrefix = "preset:";
 		//Achievements/toastNotifications in SKYBSettings.ini, applied to the toast global at once.
 		inline constexpr const char* ToastNotifications = "toastNotifications";
 		//Achievements/shared in SKYBSettings.ini: 0 per character, 1 every character's unlocks.

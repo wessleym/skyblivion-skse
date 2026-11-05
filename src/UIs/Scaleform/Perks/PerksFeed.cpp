@@ -1,7 +1,9 @@
 #include "PerksFeed.h"
 #include "PerkDataStore.h"
 #include "PerksContract.h"
+#include "Platform/FormCache.h"
 #include "Papyrus/ModEvents.h"
+#include "Platform/MainThread.h"
 #include "UIs/Scaleform/ScaleformUtility.h"
 
 #include <algorithm>
@@ -15,35 +17,20 @@ namespace PerksView {
 			return type == CurrencyType::kGlobalVariable ? "globalVariable" : "perkPoints";
 		}
 
-		//1 while the global is non-zero, else 0. A global that does not resolve reads as hidden,
-		//logged once per session per editor ID.
+		//1 while the global is non-zero, else 0. A global that does not resolve reads as hidden
+		//(the form table resolves each editor ID once and logs a miss once).
 		double VisibilityValue(const std::string& editorID) {
-			static std::unordered_set<std::string> reported;
-			auto* global = RE::TESForm::LookupByEditorID<RE::TESGlobal>(editorID);
-			if (!global) {
-				if (reported.insert(editorID).second) {
-					Log::WARN("PerksFeed: Visibility global '{}' not resolved. Hidden. Is po3 Tweaks installed?", editorID);
-				}
-				return 0.0;
-			}
-			return global->value != 0.0f ? 1.0 : 0.0;
+			auto* global = FormCache::Get<RE::TESGlobal>(editorID, "PerksFeed (visibility)");
+			return global && global->value != 0.0f ? 1.0 : 0.0;
 		}
 
 		//The highest contiguous rank held, walking ranks in order with HasPerk.
-		//A rank record that does not resolve stops the walk, logged once per session.
+		//A rank record that does not resolve stops the walk (the form table logs it once).
 		int OwnedRank(RE::PlayerCharacter* player, const Perk& perk) {
-			static std::unordered_set<std::string> reported;
-			auto* dataHandler = RE::TESDataHandler::GetSingleton();
 			int owned = 0;
 			for (const auto& rank : perk.ranks) {
-				auto* record = dataHandler ? dataHandler->LookupForm<RE::BGSPerk>(rank.rankId.formID, rank.rankId.plugin) : nullptr;
-				if (!record) {
-					if (reported.insert(rank.rankId.raw).second) {
-						Log::WARN("PerksFeed: Rank '{}' of perk '{}' did not resolve. Treated as not owned.", rank.rankId.raw, perk.id);
-					}
-					break;
-				}
-				if (!player->HasPerk(record)) {
+				auto* record = FormCache::GetLocal<RE::BGSPerk>(rank.rankId.formID, rank.rankId.plugin, "PerksFeed (rank)");
+				if (!record || !player->HasPerk(record)) {
 					break;
 				}
 				++owned;
@@ -175,13 +162,10 @@ namespace PerksView {
 			if (tree.currencyType == CurrencyType::kPerkPoints) {
 				balance = static_cast<double>(perkPoints);
 			}
-			else if (auto* global = RE::TESForm::LookupByEditorID<RE::TESGlobal>(tree.globalEditorId)) {
+			else if (auto* global = FormCache::Get<RE::TESGlobal>(tree.globalEditorId, "PerksFeed (currency)")) {
 				balance = static_cast<double>(global->value);
 			}
-			else {
-				Log::WARN("PerksFeed: Currency global '{}' of tree '{}' not resolved. Balance 0. Is po3 Tweaks installed?",
-					tree.globalEditorId, tree.id);
-			}
+			//else: the global did not resolve (logged once by the form table); the balance reads 0.
 			currency.SetMember(tree.id.c_str(), RE::GFxValue(balance));
 		}
 		state.SetMember("currency", currency);
@@ -267,10 +251,10 @@ namespace PerksView {
 			return RE::BSEventNotifyControl::kContinue;
 		}
 		if (a_event->eventName == PerksContract::ModEvent::RequestTrees) {
-			SKSE::GetTaskInterface()->AddTask([request = ModEvents::StrArg(*a_event)] { PushTrees(request); });
+			MainThread::Post([request = ModEvents::StrArg(*a_event)] { PushTrees(request); });
 		}
 		else if (a_event->eventName == PerksContract::ModEvent::RequestState) {
-			SKSE::GetTaskInterface()->AddTask([request = ModEvents::StrArg(*a_event)] { PushState(request); });
+			MainThread::Post([request = ModEvents::StrArg(*a_event)] { PushState(request); });
 		}
 		return RE::BSEventNotifyControl::kContinue;
 	}

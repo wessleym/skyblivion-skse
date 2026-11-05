@@ -8,7 +8,8 @@ namespace PerksView {
 	//
 	//The event reaches both sides: Papyrus adds the rank's perk record, and this deducts its cost of one.
 	//perkPoints spend from the engine's perk-point pool (Papyrus Game.AddPerkPoints(-1) did not move it on this runtime);
-	//globalVariable spends from the tree's GlobalVariable. Both stop at 0.
+	//globalVariable spends from the tree's GlobalVariable. Both stop at 0, and nothing is paid for a rank
+	//whose perk record does not resolve.
 	class PerkCurrency {
 	public:
 		//Call once, at kDataLoaded.
@@ -16,6 +17,7 @@ namespace PerksView {
 
 	private:
 		static void Deduct(const std::string& payload);
+		static bool RankExists(const std::string& rankRef);
 
 		class Sink : public RE::BSTEventSink<SKSE::ModCallbackEvent> {
 		public:

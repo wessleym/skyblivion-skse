@@ -1,4 +1,6 @@
 #include "DialogueSession.h"
+#include "Actors/ActorExpression.h"
+#include "Platform/MainThread.h"
 
 #include <atomic>
 #include <chrono>
@@ -15,17 +17,20 @@ namespace Persuasion {
 		std::atomic<bool>          s_keepAliveActive{ false };
 		std::atomic<std::uint32_t> s_keepAliveGeneration{ 0 };
 
+		//Into the movie: on the main thread, next frame.
 		void SetDialogueMenuVisible(bool visible) {
-			auto* ui = RE::UI::GetSingleton();
-			if (!ui) {
-				return;
-			}
-			auto menu = ui->GetMenu(RE::DialogueMenu::MENU_NAME);
-			if (!menu || !menu->uiMovie) {
-				return;
-			}
-			RE::GFxValue value{ visible };
-			menu->uiMovie->SetVariable("_root._visible", value);
+			MainThread::Post([visible] {
+				auto* ui = RE::UI::GetSingleton();
+				if (!ui) {
+					return;
+				}
+				auto menu = ui->GetMenu(RE::DialogueMenu::MENU_NAME);
+				if (!menu || !menu->uiMovie) {
+					return;
+				}
+				RE::GFxValue value{ visible };
+				menu->uiMovie->SetVariable("_root._visible", value);
+			});
 		}
 
 		// Puts the NPC into the engine's native "in conversation with the player" state.
@@ -57,8 +62,8 @@ namespace Persuasion {
 							return;
 						}
 						if (heldSamples->fetch_add(1) + 1 == 6) {//6 x 250ms = 1.5s unchanged
-							Log::WARN("Frozen mouth: actor {:08X} phoneme3 held {:.2f} for 1.5s.",
-								actor->formID, value);
+							Log::WARN("Frozen mouth: actor {:08X} phoneme3 held {:.2f} for 1.5s (expression override {}).",
+								actor->formID, value, faceGen->exprOverride ? "on" : "off");
 						}
 						});
 				}
@@ -119,6 +124,11 @@ namespace Persuasion {
 				}
 				if (actor) {
 					actor->EnableAI(true);
+					// The wheel's last expression is gone for certain before the new conversation's
+					// greeting: a hover's Set queued behind the close's Reset (both are tasks, and
+					// the task queue runs on several threads) could otherwise leave the override on,
+					// and an override holds the mouth still through every line that follows.
+					ActorExpression::ResetNow(actor.get());
 					if (auto* player = RE::PlayerCharacter::GetSingleton()) {
 						// Activate NPC to start conversation (same frame as EnableAI -- no gap to turn).
 						actor->ActivateRef(player, 0, nullptr, 1, false);
@@ -140,6 +150,8 @@ namespace Persuasion {
 				// Make dialogue menu visible in case it was hidden earlier.
 				SetDialogueMenuVisible(true);
 				if (RE::ActorPtr actor = handle.get()) {
+					// The face is the engine's again before the goodbye (see ReopenDialogueWhenClosed).
+					ActorExpression::ResetNow(actor.get());
 					// Freeze the NPC before the close releases the NPC so the NPC can't start walking away.
 					// Re-enabled in ReopenDialogueWhenClosed.
 					actor->EnableAI(false);
@@ -158,6 +170,16 @@ namespace Persuasion {
 		// Start dialogue, hide menu, and keep it alive.
 		SetActorDialogueWithPlayer(target, true);
 		SetDialogueMenuVisible(false);
+		// The pick that opened the wheel may have cut a line short: close the mouth it left open
+		// (the "Frozen mouth" of WatchForFrozenMouth) instead of showing it under the wheel.
+		{
+			RE::ActorHandle handle = target->GetHandle();
+			SKSE::GetTaskInterface()->AddTask([handle] {
+				if (RE::ActorPtr actor = handle.get()) {
+					ActorExpression::CloseMouthNow(actor.get());
+				}
+			});
+		}
 		StartConversationKeepAlive(target->GetHandle());
 		WatchForFrozenMouth(target->GetHandle());
 	}

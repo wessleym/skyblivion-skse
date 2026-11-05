@@ -20,6 +20,8 @@ namespace Dialogue::DialogueContract {
 		inline constexpr const char* OpenPersuasion = "SKYBOpenPersuasion";
 		//strArg: a service id. A service button's fallback when its row was -1: opens the service with the current speaker.
 		inline constexpr const char* OpenDialogueService = "SKYBOpenDialogueService";
+		//Diagnostic (DialogueLipTrace.h). strArg: how the pick was made; numArg: the topic index, -1 for the greeting.
+		inline constexpr const char* DialoguePick = "SKYBDialoguePick";
 	}
 
 	//Optional extension of the service table, relative to the game folder (see DialogueServices.h).

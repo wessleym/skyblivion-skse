@@ -2,22 +2,31 @@
 #include "FileUtility.h"
 #include "FormUtility.h"
 #include "GameUtility.h"
+#include "MenuDataUtility.h"
 #include "MouseUtility.h"
 #include "ObjectReferenceUtility.h"
 #include "QuestUtility.h"
 #include "SkillUtility.h"
 #include "UILauncher.h"
+#include "Achievements/AchievementService.h"
+#include "UIs/Scaleform/ScrollCraft/ScrollRecipeStore.h"
 
 static bool RegisterFuncs(RE::BSScript::Internal::VirtualMachine* vm) {
     Log::INFO("SKSEScriptRegistrar: Registering Custom Functions...");
     FileUtility::Register(vm);
     FormUtility::Register(vm);
     GameUtility::Register(vm);
+    //SKYBMenuData.BaseValues / TuningValues: a menu's opening values in one call each.
+    MenuDataUtility::Register(vm);
     MouseUtility::Register(vm);
     ObjectReferenceUtility::Register(vm);
     QuestUtility::Register(vm);
     SkillUtility::Register(vm);
     UILauncher::Register(vm);
+    //SKYBAchievements.Unlock and the rest (Source\Scripts\SKYBAchievements.psc).
+    Achievements::AchievementService::RegisterPapyrus(vm);
+    //SKYBScrollCraftData.GetStatus and the rest: the scroll recipes from recipes.json (Source\Scripts\SKYBScrollCraftData.psc).
+    ScrollCraft::ScrollRecipeStore::RegisterPapyrus(vm);
     Log::INFO("SKSEScriptRegistrar: Registering Custom Functions Complete");
     return true;
 }

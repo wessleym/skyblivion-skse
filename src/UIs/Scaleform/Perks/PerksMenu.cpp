@@ -16,8 +16,8 @@ namespace PerksView {
 	}
 
 	void PerksMenu::Open() {
-		ModEvents::Send(PerksContract::ModEvent::OpenCustomMenu, PerksContract::Menu::Tab);
-		Log::INFO("PerksMenu: Sent {} '{}'.", PerksContract::ModEvent::OpenCustomMenu, PerksContract::Menu::Tab);
+		ModEvents::Send(PerksContract::ModEvent::MenuSwitch, PerksContract::Menu::Tab);
+		Log::INFO("PerksMenu: Sent {} '{}'.", PerksContract::ModEvent::MenuSwitch, PerksContract::Menu::Tab);
 	}
 
 }

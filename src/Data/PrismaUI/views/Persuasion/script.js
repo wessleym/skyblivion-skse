@@ -1,9 +1,8 @@
 "use strict";
-//An NPC's Preference combined with a factor of disposition change
+//What the NPC thinks of an approach. How much it moves disposition comes from the rules (PersuasionRules).
 class Preference {
-    constructor(name, factor) {
+    constructor(name) {
         this.name = name;
-        this.factor = factor;
     }
     static fromName(name) {
         const preference = Preference.all.find(p => p.name == name);
@@ -13,12 +12,75 @@ class Preference {
         throw new Error("Preference not found: " + name);
     }
 }
-//Hate is ~1.5x Love at base skill.
-Preference.love = new Preference("Love", +2);
-Preference.like = new Preference("Like", +1);
-Preference.dislike = new Preference("Dislike", -1);
-Preference.hate = new Preference("Hate", -3);
+Preference.love = new Preference("Love");
+Preference.like = new Preference("Like");
+Preference.dislike = new Preference("Dislike");
+Preference.hate = new Preference("Hate");
 Preference.all = [Preference.love, Preference.like, Preference.dislike, Preference.hate];
+//The rules of one conversation, sent by C++ with the init payload (PersuasionRules::ToJson):
+//SKYBPersuasion.ini, the settings menu's overrides and the player's perk rules, already combined.
+class PersuasionRules {
+    constructor(data) {
+        this.data = data;
+    }
+    //Oblivion's wheel: used when C++ sends no rules.
+    static defaults() {
+        return {
+            responses: { Love: { factor: 2, add: 0 }, Like: { factor: 1, add: 0 }, Dislike: { factor: -1, add: 0 }, Hate: { factor: -3, add: 0 } },
+            approaches: { Admire: { mult: 1, add: 0 }, Boast: { mult: 1, add: 0 }, Joke: { mult: 1, add: 0 }, Coerce: { mult: 1, add: 0 } },
+            gainMult: 1,
+            lossMult: 1,
+            maxDisposition: 100,
+            closeOnMax: true,
+            maxRounds: 0,
+            decay: { whileOpen: false, perSecond: 0, perRotation: 0, startDelay: 0, floor: 0 },
+            penalty: { enabled: false, start: 0, strength: 0, curve: 1, relief: 0, floor: 1 },
+            bribeEnabled: true
+        };
+    }
+    //The payload's rules over the defaults, section by section, so a partial payload still works.
+    static from(data) {
+        const d = PersuasionRules.defaults();
+        if (data != null) {
+            Object.assign(d.responses, data.responses || {});
+            Object.assign(d.approaches, data.approaches || {});
+            Object.assign(d.decay, data.decay || {});
+            Object.assign(d.penalty, data.penalty || {});
+            const scalars = ["gainMult", "lossMult", "maxDisposition", "closeOnMax", "maxRounds", "bribeEnabled"];
+            scalars.forEach((key) => {
+                const value = data[key];
+                if (value != null) {
+                    d[key] = value;
+                }
+            });
+        }
+        return new PersuasionRules(d);
+    }
+    //What a gain at disposition is multiplied by: 1 below Start, down to Floor at the maximum, relieved by
+    //Speechcraft (relief is already scaled by the skill). The same formula as Rules::PenaltyMultiplier in C++.
+    penaltyMultiplier(disposition) {
+        const p = this.data.penalty;
+        if (!p.enabled) {
+            return 1;
+        }
+        const span = this.data.maxDisposition - p.start;
+        const x = span > 0 ? Math.max(0, Math.min(1, (disposition - p.start) / span)) : 1;
+        const penalty = p.strength * Math.pow(x, Math.max(0.01, p.curve)) * (1 - Math.max(0, Math.min(1, p.relief)));
+        const floor = Math.max(0, Math.min(1, p.floor));
+        return Math.max(floor, Math.min(1, 1 - penalty));
+    }
+    //One wedge's disposition change: size x response factor + response add, then x approach mult + approach add;
+    //a gain is then x gainMult x the penalty at the current disposition, a loss x lossMult.
+    wedgeDelta(magnitude, preference, action, disposition) {
+        const response = this.data.responses[preference];
+        const approach = this.data.approaches[action];
+        const raw = (magnitude * response.factor + response.add) * approach.mult + approach.add;
+        if (raw > 0) {
+            return raw * this.data.gainMult * this.penaltyMultiplier(disposition);
+        }
+        return raw * this.data.lossMult;
+    }
+}
 class PersuasionAction {
     constructor(id, quadrantStart) {
         this.id = id;
@@ -26,18 +88,20 @@ class PersuasionAction {
     }
 }
 class WedgeClickResult {
-    constructor(magnitude, preference, delta, disposition, roundComplete, maxReached) {
+    constructor(magnitude, preference, delta, disposition, roundComplete, maxReached, roundsExhausted) {
         this.magnitude = magnitude;
         this.preference = preference;
         this.delta = delta;
         this.disposition = disposition;
         this.roundComplete = roundComplete;
         this.maxReached = maxReached;
+        this.roundsExhausted = roundsExhausted;
     }
 }
 class NpcSession {
-    constructor(preferences, disposition) {
+    constructor(preferences, disposition, dispositionMaximum) {
         this.preferences = preferences;
+        this.dispositionMaximum = dispositionMaximum;
         this.gameOver = false;
         this.dispositionInternal = disposition;
     }
@@ -47,10 +111,16 @@ class NpcSession {
         return this.preferences[actionId];
     }
     isMaxReached() {
-        return this.dispositionInternal >= NpcSession.dispositionMaximum;
+        return this.dispositionInternal >= this.dispositionMaximum;
     }
     incrementDisposition(delta) {
-        this.dispositionInternal = Math.max(NpcSession.dispositionMinimum, Math.min(NpcSession.dispositionMaximum, this.disposition + delta));
+        this.dispositionInternal = Math.max(NpcSession.dispositionMinimum, Math.min(this.dispositionMaximum, this.disposition + delta));
+    }
+    //Decay: down by amount, never below floor, never up. Returns the change made (0 or negative).
+    decay(amount, floor) {
+        const before = this.dispositionInternal;
+        this.dispositionInternal = Math.min(before, Math.max(floor, before - amount));
+        return this.dispositionInternal - before;
     }
     setDisposition(disposition) {
         this.dispositionInternal = disposition;
@@ -60,7 +130,6 @@ class NpcSession {
     }
 }
 NpcSession.dispositionMinimum = 0;
-NpcSession.dispositionMaximum = 100;
 class Round {
     constructor() {
         this.magnitudes = Round.shuffle([0, 1, 2, 3]);
@@ -112,8 +181,25 @@ class Round {
 class PersuasionGame {
     constructor() {
         this.active = false;
+        this.rules = PersuasionRules.from(undefined);
+        this.roundsPlayed = 0;
         this.npc = null;
         this.round = null;
+    }
+    get currentRules() {
+        return this.rules;
+    }
+    //A conversation has been set up (init received), over or not.
+    get hasSession() {
+        return this.npc != null;
+    }
+    get bribeAllowed() {
+        return !this.isGameOver && this.rules.data.bribeEnabled;
+    }
+    //True when the NPC has heard enough: MaxRounds rounds played (0 = never).
+    get roundsExhausted() {
+        const max = this.rules.data.maxRounds;
+        return max > 0 && this.roundsPlayed >= max;
     }
     get npcNonNull() {
         if (this.npc != null) {
@@ -172,40 +258,107 @@ class PersuasionGame {
         }
         const magnitude = round.getMagnitudeIndexAt(index) + 1;
         const preference = npc.getPreference(actionId);
-        const delta = magnitude * preference.factor;
+        const delta = this.rules.wedgeDelta(magnitude, preference.name, actionId, npc.disposition);
         npc.incrementDisposition(delta);
         round.makeMagnitudeAsUsed(actionId, magnitude);
         const maxReached = npc.isMaxReached();
         const roundComplete = !maxReached && round.isComplete();
+        if (roundComplete) {
+            this.roundsPlayed++;
+        }
+        const roundsExhausted = roundComplete && this.roundsExhausted;
         if (maxReached || roundComplete) {
             round.lock();
         }
-        return new WedgeClickResult(magnitude, preference, delta, npc.disposition, roundComplete, maxReached);
+        return new WedgeClickResult(magnitude, preference, delta, npc.disposition, roundComplete, maxReached, roundsExhausted);
     }
     rotateMagnitudes() {
         this.roundNonNull.rotateMagnitudes();
     }
+    //[Decay] WhileOpen x PerSecond for seconds of open wheel. Returns the change made (0 or negative).
+    applyTimeDecay(seconds) {
+        const d = this.rules.data.decay;
+        if (!d.whileOpen || d.perSecond <= 0 || seconds <= 0 || this.npc == null || this.npc.isGameOver) {
+            return 0;
+        }
+        return this.npc.decay(d.perSecond * seconds, d.floor);
+    }
+    //[Decay] WhileOpen x PerRotation, once per rotation of the wheel. Returns the change made (0 or negative).
+    applyRotationDecay() {
+        const d = this.rules.data.decay;
+        if (!d.whileOpen || d.perRotation <= 0 || this.npc == null || this.npc.isGameOver) {
+            return 0;
+        }
+        return this.npc.decay(d.perRotation, d.floor);
+    }
     setDisposition(disposition) {
         this.npcNonNull.setDisposition(disposition);
     }
-    //Locks the game once disposition has reached the maximum.
+    //Locks the game once disposition has reached the maximum or the NPC has heard enough.
     end() {
         this.npcNonNull.end();
         this.roundNonNull.lock();
     }
-    //Resets and starts round 1.
-    reset(preferences, disposition) {
+    //Resets and starts round 1 under the conversation's rules.
+    reset(preferences, disposition, rules) {
         this.active = true;
-        this.npc = new NpcSession(preferences, disposition);
+        this.rules = rules;
+        this.roundsPlayed = 0;
+        this.npc = new NpcSession(preferences, disposition, rules.data.maxDisposition);
         this.startRound();
     }
 }
+//Lowers disposition while the wheel is open ([Decay] in the rules), a quarter-second at a time. Runs only
+//between start() and stop(); the game decides whether a tick changes anything (delay, floor, game over).
+class DecayTicker {
+    constructor(game, onChange) {
+        this.game = game;
+        this.onChange = onChange;
+        this.timer = null;
+        this.openedAt = 0;
+        this.lastTick = 0;
+    }
+    start() {
+        this.stop();
+        const d = this.game.currentRules.data.decay;
+        if (!d.whileOpen || d.perSecond <= 0) {
+            return;
+        }
+        this.openedAt = Date.now();
+        this.lastTick = this.openedAt;
+        this.timer = setInterval(() => this.tick(), 250);
+    }
+    stop() {
+        if (this.timer != null) {
+            clearInterval(this.timer);
+            this.timer = null;
+        }
+    }
+    tick() {
+        if (!this.game.isActive) {
+            this.stop();
+            return;
+        }
+        const now = Date.now();
+        const d = this.game.currentRules.data.decay;
+        if (now - this.openedAt < d.startDelay * 1000) {
+            this.lastTick = now;
+            return;
+        }
+        const seconds = (now - this.lastTick) / 1000;
+        this.lastTick = now;
+        if (this.game.applyTimeDecay(seconds) != 0) {
+            this.onChange();
+        }
+    }
+}
 class PersuasionBridges {
-    constructor(game, renderer, elements, actions) {
+    constructor(game, renderer, elements, actions, decayTicker) {
         this.game = game;
         this.renderer = renderer;
         this.elements = elements;
         this.actions = actions;
+        this.decayTicker = decayTicker;
         PersuasionBridges.instance = this;
     }
     //Throws if C++ never registered the JS -> C++ listeners.
@@ -220,6 +373,11 @@ class PersuasionBridges {
     dispositionChanged(disposition) { window.persuasionDispositionChanged(disposition); }
     close(closeMethod) {
         //Every close goes through here, so this is where the frame loop stops steering the view.
+        this.decayTicker.stop();
+        //Decay happened here, unseen by C++: the final value goes over before the view closes.
+        if (this.game.hasSession) {
+            this.dispositionChanged(this.game.disposition.toString());
+        }
         this.game.deactivate();
         window.persuasionClose(closeMethod);
     }
@@ -232,7 +390,9 @@ class PersuasionBridges {
         Object.keys(data.preferences).forEach((actionId) => {
             preferences[actionId] = Preference.fromName(data.preferences[actionId]);
         });
-        this.game.reset(preferences, data.disposition);
+        const rules = PersuasionRules.from(data.rules);
+        this.game.reset(preferences, data.disposition, rules);
+        console.log("Persuasion rules: " + JSON.stringify(rules.data));
         //Clear the wedge "used" marks and restore the label.
         this.actions.forEach((a) => { this.elements.setUsedVisual(a.id, false); });
         this.elements.dispositionLabel.reset();
@@ -241,9 +401,10 @@ class PersuasionBridges {
         this.renderer.updateDisposition(null);
         this.renderer.renderWedges();
         this.elements.setCloseButtonEnabled(this.game.canBeClosed);
-        this.elements.setBribeButtonEnabled(!this.game.isGameOver);
+        this.elements.setBribeButtonEnabled(this.game.bribeAllowed);
+        this.decayTicker.start();
         if (this.game.isMaxReached) {
-            this.endGame();
+            this.endGame("max");
         }
     }
     onBribeResult(payload) {
@@ -254,23 +415,35 @@ class PersuasionBridges {
             this.renderer.updateDisposition(this.game.disposition - previousDisposition);
             this.elements.dispositionLabel.showFeedback("+" + result.gain + " for " + result.price + "g");
             if (this.game.isMaxReached) {
-                this.endGame();
+                this.endGame("max");
             }
         }
         else {
             this.elements.dispositionLabel.showFeedback(result.reason || "Bribe failed");
         }
     }
-    endGame() {
+    //The conversation is over: the maximum was reached, or the NPC has heard enough ([General] MaxRounds).
+    //The wheel locks; it closes by itself after two seconds unless [General] CloseOnMax says to wait for the player.
+    endGame(reason) {
         this.game.end();
+        this.decayTicker.stop();
         this.actions.forEach((a) => { this.elements.setUsedVisual(a.id, true); });
         this.elements.setCloseButtonEnabled(this.game.canBeClosed);
-        this.elements.setBribeButtonEnabled(!this.game.isGameOver);
-        this.elements.dispositionLabel.showMaxReached();
-        console.log("Persuasion max disposition reached: " + this.game.disposition);
-        setTimeout(() => {
-            this.close("");
-        }, 2000);
+        this.elements.setBribeButtonEnabled(this.game.bribeAllowed);
+        if (reason == "max") {
+            this.elements.dispositionLabel.showMaxReached();
+        }
+        else {
+            this.elements.dispositionLabel.showEnded("Heard enough");
+        }
+        console.log("Persuasion over (" + reason + "): disposition " + this.game.disposition);
+        if (reason == "rounds" || this.game.currentRules.data.closeOnMax) {
+            setTimeout(() => {
+                if (this.game.isActive) {
+                    this.close("");
+                }
+            }, 2000);
+        }
     }
 }
 class ActionElements {
@@ -534,8 +707,12 @@ class DispositionLabel {
     }
     //Terminal caption once disposition hits the cap.
     showMaxReached() {
+        this.showEnded("Max reached");
+    }
+    //Terminal caption: the conversation is over (the cap, or the NPC has heard enough).
+    showEnded(message) {
         this.locked = true;
-        this.element.textContent = "Max reached";
+        this.element.textContent = message;
         this.element.classList.add("max-reached");
     }
     //Transient message (a bribe outcome). Reverts to "Disposition" after a delay unless the label has since locked to its terminal caption.
@@ -655,7 +832,10 @@ class FocusNavigator {
             refreshCloseButton();
         }
     }
-    const bridges = new PersuasionBridges(game, renderer, elements, actions);
+    //Decay while the wheel is open: the ticker lowers the number in the hub as it goes; the value reaches
+    //C++ with the next wedge click, or when the view closes.
+    const decayTicker = new DecayTicker(game, () => renderer.updateDisposition(null));
+    const bridges = new PersuasionBridges(game, renderer, elements, actions, decayTicker);
     //Applies a wedge click. Shared by the mouse (hitbox click) and the focused quadrant anchor's click
     //(fired natively by Enter/Space or the gamepad "accept" button).
     function activateQuadrant(action, i) {
@@ -681,7 +861,15 @@ class FocusNavigator {
             disposition: result.disposition
         }));
         if (result.maxReached) {
-            bridges.endGame();
+            bridges.endGame("max");
+            return;
+        }
+        if (result.roundsExhausted) {
+            console.log("Persuasion rounds exhausted: " + JSON.stringify({
+                uses: game.usedMagnitudes,
+                disposition: result.disposition
+            }));
+            bridges.endGame("rounds");
             return;
         }
         if (result.roundComplete) {
@@ -696,11 +884,17 @@ class FocusNavigator {
             elements.animateMagnitudeRotation(() => {
                 game.rotateMagnitudes();
                 renderer.renderWedges();
+                //[Decay] PerRotation: the turn of the wheel costs disposition.
+                const decayed = game.applyRotationDecay();
+                if (decayed != 0) {
+                    renderer.updateDisposition(decayed);
+                    bridges.dispositionChanged(game.disposition.toString());
+                }
             });
         }
     }
     function activateBribe() {
-        if (!game.isGameOver) {
+        if (game.bribeAllowed) {
             bridges.bribe(game.disposition.toString());
         }
     }
