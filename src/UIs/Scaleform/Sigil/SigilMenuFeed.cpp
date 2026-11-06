@@ -115,7 +115,7 @@ namespace Sigil {
 				}
 				//Stored in hundredths, as Papyrus GetArmorRating reads it.
 				const int armorRating = static_cast<int>(armor->armorRating / 100);
-				const char type = (REBridge::SlotMaskBits(armor) & kJewelrySlotMask) ? 'J' : 'A';
+				const char type = (armor->GetSlotMask().underlying() & kJewelrySlotMask) ? 'J' : 'A';
 				addRow(object, static_cast<int>(armor->GetGoldValue()), 0, armorRating, type);
 			}
 		}

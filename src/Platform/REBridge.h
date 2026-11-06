@@ -1,129 +1,74 @@
 #pragma once
 
 //RE:: API bridges
-//A few RE:: members differ in shape between CommonLib backends.
-//CommonLibSSE-NG is multi-runtime: members whose offset varies between SE and
-//VR exist behind a GetXxxRuntimeData() accessor whereas libxse/commonlibsse
-//(SE only) exposes them directly. These thin inline helpers hide that
-//difference so the application code stays uniform and backend-agnostic.
+//CommonLibSSE-NG builds one DLL for Skyrim SE, AE and VR. Members whose offset differs between runtimes
+//are reached through GetXxxRuntimeData() accessors, and multiply-inherited bases through AsXxx()
+//accessors. Some of those accessors read the wrong memory on VR, and some direct accesses compile but
+//use a fixed offset that is wrong at run time. These helpers are the project's one way to reach each.
 
-#include "Platform/Backend.h"
-
-#include <cmath>
 #include <cstddef>
 #include <cstdint>
-#include <limits>
 
 namespace REBridge
 {
 	//NG's GetPlayerRuntimeData() knows only the SE and AE positions: on VR it reads the wrong memory.
 	//VR keeps these fields in its own block, reached through GetVRInfoRuntimeData() (null outside VR).
 	//So PlayerCharacter fields get one bridge each, and there is no whole-struct PlayerData bridge.
-#if SKY_COMMONLIB == SKY_COMMONLIB_NG
 	//The VR block sits at 0xFE0; these are the absolute offsets CommonLib documents for its fields.
 	static_assert(offsetof(RE::PlayerCharacter::VR_INFO_RUNTIME_DATA, skills) == 0x10B0 - 0xFE0);
 	static_assert(offsetof(RE::PlayerCharacter::VR_INFO_RUNTIME_DATA, amountStolenSold) == 0x100C - 0xFE0);
-#endif
 
 	//The player's per-skill experience and level thresholds.
 	[[nodiscard]] inline RE::PlayerCharacter::PlayerSkills* PlayerSkills(RE::PlayerCharacter* a_player)
 	{
-#if SKY_COMMONLIB == SKY_COMMONLIB_NG
 		if (REL::Module::IsVR()) {
 			return a_player->GetVRInfoRuntimeData()->skills;
 		}
 		return a_player->GetPlayerRuntimeData().skills;
-#else
-		return a_player->skills;
-#endif
 	}
 
 	//Gold from stolen goods sold.
 	[[nodiscard]] inline std::int32_t& AmountStolenSold(RE::PlayerCharacter* a_player)
 	{
-#if SKY_COMMONLIB == SKY_COMMONLIB_NG
 		if (REL::Module::IsVR()) {
 			return a_player->GetVRInfoRuntimeData()->amountStolenSold;
 		}
 		return a_player->GetPlayerRuntimeData().amountStolenSold;
-#else
-		return a_player->amountStolenSold;
-#endif
 	}
 
 	//PlayerCharacter::GameStatsData: perkCount, difficulty, murder counts. NG's accessor includes VR's position.
 	[[nodiscard]] inline auto& GameStats(RE::PlayerCharacter* a_player)
 	{
-#if SKY_COMMONLIB == SKY_COMMONLIB_NG
 		return a_player->GetGameStatsData();
-#else
-		return *a_player;
-#endif
 	}
 
+	//Actor's ActorValueOwner base is at +0xB0 before 1.6.629 (SE, early AE, VR) and +0xB8 from 1.6.629.
+	//A static_cast, or an ActorValueOwner method called directly on an Actor*, uses the compile-time offset
+	//+0x90, so the call goes through an invalid vtable pointer. AsActorValueOwner() selects the offset at run time.
 	[[nodiscard]] inline RE::ActorValueOwner* AVOwner(RE::Actor* a_actor)
 	{
-#if SKY_COMMONLIB == SKY_COMMONLIB_NG
 		return a_actor->AsActorValueOwner();
-#else
-		return static_cast<RE::ActorValueOwner*>(a_actor);
-#endif
 	}
 
+	//Actor's ActorState base has the same hazard; AsActorState() selects its offset at run time.
 	[[nodiscard]] inline RE::ActorState* ActorStateOf(RE::Actor* a_actor)
 	{
-#if SKY_COMMONLIB == SKY_COMMONLIB_NG
 		return a_actor->AsActorState();
-#else
-		return static_cast<RE::ActorState*>(a_actor);
-#endif
 	}
 
 	//The actor's vendor faction, calculated when not yet cached.
 	//NG's GetVendorFaction returns the value it read before recalculating, so an uncached actor reads as null once.
 	[[nodiscard]] inline RE::TESFaction* VendorFaction(RE::Actor* a_actor)
 	{
-#if SKY_COMMONLIB == SKY_COMMONLIB_NG
 		if (auto* faction = a_actor->GetVendorFaction()) {
 			return faction;
 		}
 		return a_actor->GetActorRuntimeData().vendorFaction;
-#else
-		return a_actor->GetVendorFaction();
-#endif
 	}
 
 	//LoadingMenu's destination location.
 	[[nodiscard]] inline RE::BGSLocation* LoadingMenuLocation(RE::LoadingMenu* a_menu)
 	{
-#if SKY_COMMONLIB == SKY_COMMONLIB_NG
 		return a_menu->GetRuntimeData().currentLocation;
-#else
-		return a_menu->currentLocation;
-#endif
-	}
-
-	//Biped slot bits. NG returns an EnumSet, libxse a plain enum.
-	[[nodiscard]] inline std::uint32_t SlotMaskBits(const RE::BGSBipedObjectForm* a_form)
-	{
-#if SKY_COMMONLIB == SKY_COMMONLIB_NG
-		return a_form->GetSlotMask().underlying();
-#else
-		return static_cast<std::uint32_t>(a_form->GetSlotMask());
-#endif
-	}
-
-	//Whether the effect has this base, magnitude, area, duration, and cost. libxse lacks NG's Effect::IsMatch, so it is mirrored here.
-	[[nodiscard]] inline bool EffectMatches(RE::Effect* a_effect, RE::EffectSetting* a_base, float a_magnitude, std::uint32_t a_area, std::uint32_t a_duration, float a_cost)
-	{
-#if SKY_COMMONLIB == SKY_COMMONLIB_NG
-		return a_effect->IsMatch(a_base, a_magnitude, a_area, a_duration, a_cost);
-#else
-		const auto essentiallyEqual = [](float a, float b) {
-			return std::fabs(a - b) <= std::fmin(std::fabs(a), std::fabs(b)) * std::numeric_limits<float>::epsilon();
-		};
-		return a_effect->baseEffect == a_base &&
-		       essentiallyEqual(a_effect->effectItem.magnitude, a_magnitude) && a_effect->effectItem.area == a_area && a_effect->effectItem.duration == a_duration && essentiallyEqual(a_effect->cost, a_cost);
-#endif
 	}
 }
