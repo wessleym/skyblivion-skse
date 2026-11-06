@@ -1,4 +1,3 @@
-#include <Windows.h> //ClibUtil/EditorID.hpp calls GetModuleHandleA. The libxse backend does not include it.
 #include "DispositionSystem.h"
 #include "TESFactions.h"
 #include "TESGlobals.h"

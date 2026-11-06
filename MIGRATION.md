@@ -1,65 +1,61 @@
-# CommonLib backends
+# CommonLib
 
-This plugin builds against either of two CommonLib variants, selected by the
-`backend` xmake option. **CommonLibSSE-NG is the default**. It produces a single
-DLL for Skyrim SE + AE + VR.
-
-## Switching
+The plugin builds against **CommonLibSSE-NG** (`alandtse/CommonLibVR@ng`, submodule
+`lib/commonlibsse-ng`) and produces one DLL for Skyrim SE, AE and VR.
 
 ```
-xmake f --backend=ng       && xmake    # SE + AE + VR  (default)
-xmake f --backend=libxse   && xmake    # SE + AE only
+xmake f -m releasedbg    # configure (once)
+xmake                    # build
 ```
 
-Run `xmake f` from **PowerShell**, not a bash or git-bash shell. From bash, xmake
-misdetects the platform as `mingw`. Plain `xmake` builds are fine from either.
-
-The `backend` option drives the submodule, the plugin rule, and the
-`SKY_COMMONLIB` macro together. Switching forces a full plugin rebuild.
-
-| backend | library | submodule | runtimes |
-|---|---|---|---|
-| `ng` (default) | CommonLibSSE-NG (`alandtse/CommonLibVR@ng`) | `lib/commonlibsse-ng` | SE + AE + VR |
-| `libxse` | `libxse/commonlibsse` | `lib/commonlibsse` | SE + AE |
+Run `xmake f` from **PowerShell**, not bash or Git Bash: from bash, xmake detects the
+platform as `mingw`. `xmake` itself runs from either.
 
 ## Why NG
 
-SKSE VR's loader requires the `SKSEPlugin_Query` export. The libxse build emits
-only `SKSEPlugin_Version` (post-AE), so SKSE VR rejected the DLL
-(*"does not appear to be an SKSE plugin"*). NG's `SKSEPluginInfo` macro emits
-`SKSEPlugin_Query`, `SKSEPlugin_Load`, and `SKSEPlugin_Version`. All three are
-verified present in the built DLL.
+SKSE VR's loader requires the `SKSEPlugin_Query` export. The libxse build exported
+only `SKSEPlugin_Version` (the post-AE convention), so SKSE VR rejected the DLL
+(*"does not appear to be an SKSE plugin"*). NG's plugin rule exports
+`SKSEPlugin_Query`, `SKSEPlugin_Load` and `SKSEPlugin_Version`; all three are present
+in the built DLL.
 
-## Backend-specific code
+## The retired libxse backend
 
-All CommonLib-variant-specific code is confined to `src/Platform/`:
+Until 2026-11-05 an xmake `backend` option could also build the plugin against
+`libxse/commonlibsse` (SE and AE only). That option was removed:
 
-- `Backend.h`: backend selector macro (`SKY_COMMONLIB`, set by xmake).
-- `Log.h` / `Log.cpp`: logging facade. NG logs via spdlog (`SKSE::log`);
-  libxse via `REX::`.
+- No released DLL used it. The deployed DLL is NG's, and libxse does not support VR.
+- PR #3's hooks (the Main::Update frame hook, SpellReflect, PerkSpells, the temper
+  patches) use NG's multi-runtime address API (`RelocationID`, `VariantID`,
+  `RelocateVirtual`, `REL::Module::IsAE`/`IsVR`), which has no libxse equivalent.
+  Supporting libxse would require a second implementation of each hook, with no
+  build that runs it.
+
+The last commit that builds on libxse is tagged `libxse-last`. Restoring the backend
+means restoring, from that tag, the `backend` option in `xmake.lua`, the
+`lib/commonlibsse` submodule, `src/Platform/Backend.h` and the `SKY_COMMONLIB`
+branches in `src/Platform/`, and then writing libxse versions of the hooks.
+
+## Runtime-specific code
+
+Code that depends on the runtime (SE, AE, VR) belongs in `src/Platform/`:
+
+- `Log.h` / `Log.cpp`: the logging interface. Everything else logs through `Log::`.
 - `Entry.cpp`: the SKSE entry export.
-- `REBridge.h`: bridges `RE::` API that differs between backends. NG is
-  multi-runtime: members whose offset varies across SE/AE/VR sit behind
-  `GetXxxRuntimeData()` accessors, whereas libxse exposes them directly. Add a
-  helper here for any future such divergence rather than `#if`-ing application
-  code.
+- `REBridge.h`: the project's one way to reach `RE::` members whose NG accessor is
+  wrong on some runtime, or whose direct access compiles to a wrong offset. Add a
+  helper there instead of reaching into runtime data from application code.
 
-## What the NG migration required
+Known cases, each covered by a `REBridge` helper:
 
-Beyond adding the submodule and selecting the `commonlibsse-ng.plugin` rule:
+1. `RE::PlayerCharacter` runtime data: NG's `GetPlayerRuntimeData()` and
+   `GetInfoRuntimeData()` read the wrong memory on VR. Use the per-field helpers
+   (`PlayerSkills`, `AmountStolenSold`, `GameStats`).
+2. `Actor` inherits `ActorValueOwner` and `ActorState` at runtime-dependent offsets.
+   A `static_cast` to either base, or calling an inherited method directly on an
+   `Actor*` (e.g. `IsWeaponDrawn`), compiles to a fixed offset and crashes at run
+   time. Use `REBridge::AVOwner()` / `REBridge::ActorStateOf()`.
 
-1. `REBridge::PlayerData()`: `RE::PlayerCharacter` members `amountStolenSold`,
-   `murder`, and `skills` are behind `GetPlayerRuntimeData()` in NG's
-   multi-runtime build (a compile error without it).
-2. `NOMINMAX` (in `xmake.lua`): NG's headers pull in `<Windows.h>` without it,
-   and its `min` / `max` macros broke `std::min` / `std::max`.
-3. `REBridge::AVOwner()` and `REBridge::ActorStateOf()`: `Actor` multiply-inherits
-   `ActorValueOwner` and `ActorState` at version-varying offsets on NG. Reaching
-   those bases--by `static_cast` **or** by calling an inherited method directly
-   on an `Actor*` (`IsWeaponDrawn`)--**compiles** but adjusts `this` wrong.
-   `static_cast<RE::ActorValueOwner*>` crashed (null-vtable AV in
-   `DispositionSystem::SetInitialDisposition`, found via crash dump); `Actor`'s
-   `AsActorValueOwner()` / `AsActorState()` give the correct upcast.
-
-Only a handful of call sites changed. They route through `REBridge.h` helpers;
-the bulk of the application code is untouched.
+`xmake.lua` defines `NOMINMAX` and `NOGDI`: NG's headers include `<Windows.h>`, whose
+`min` / `max` macros break `std::min` / `std::max` and whose `ERROR` macro collides
+with `Log::ERROR`.

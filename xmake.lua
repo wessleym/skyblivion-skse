@@ -1,33 +1,5 @@
--- ============================================================================
---  CommonLib backend selection
--- ----------------------------------------------------------------------------
---  Switch backend, then build:
---      xmake f --backend=ng       &&  xmake     (default: Skyrim SE/AE/VR)
---      xmake f --backend=libxse   &&  xmake     (Skyrim SE/AE only)
---  The choice persists until the next `xmake f`. This one switch drives all
---  three moving parts: the CommonLib submodule, the plugin rule, and the
---  SKY_COMMONLIB macro that src/Platform/ compiles against. Switching forces a
---  full rebuild (the backends use entirely different headers). See MIGRATION.md.
---
---    libxse  libxse/commonlibsse  -- Skyrim SE/AE only.
---            submodule: lib/commonlibsse
---    ng      CommonLibSSE-NG (alandtse/CommonLibVR@ng) -- one DLL for
---            SE + AE + VR. submodule: lib/commonlibsse-ng
--- ============================================================================
-option("backend", function()
-    set_default("ng")
-    set_values("libxse", "ng")
-    set_description("CommonLib backend: 'libxse' (SE/AE) or 'ng' (SE/AE/VR)")
-end)
-
-local backend_ng = is_config("backend", "ng")
-
--- include subprojects (CommonLib backend driven by the `backend` option)
-if backend_ng then
-    includes("lib/commonlibsse-ng")
-else
-    includes("lib/commonlibsse")
-end
+-- CommonLibSSE-NG (alandtse/CommonLibVR@ng): one DLL for Skyrim SE, AE and VR. See MIGRATION.md.
+includes("lib/commonlibsse-ng")
 includes("lib/clib-util")
 
 -- set project constants
@@ -41,13 +13,13 @@ set_warnings("allextra")
 add_rules("mode.debug", "mode.releasedbg")
 add_rules("plugin.vsxmake.autoupdate")
 
--- default build mode, so `xmake f --backend=...` need not re-specify -m
+-- default build mode
 set_defaultmode("releasedbg")
 
--- third-party packages (backend-agnostic — pulled directly, not via a CommonLib)
+-- third-party packages (pulled directly, not via CommonLib)
 add_requires("nlohmann_json v3.12.0")  -- JSON parsing for the spell-making buy payload
 
--- plugin metadata (shared by whichever CommonLib plugin rule is used)
+-- plugin metadata
 local plugin_desc = {
     name = "Skyblivion",
     author = "Skyblivion Team",
@@ -56,15 +28,7 @@ local plugin_desc = {
 
 -- define targets
 target("Skyblivion")
-    -- CommonLib plugin rule + SKY_COMMONLIB macro, driven by the `backend`
-    -- option above. NG migration: confirm NG's plugin rule name (MIGRATION.md).
-    if backend_ng then
-        add_rules("commonlibsse-ng.plugin", plugin_desc)
-        add_defines("SKY_COMMONLIB=2")  -- SKY_COMMONLIB_NG
-    else
-        add_rules("commonlibsse.plugin", plugin_desc)
-        add_defines("SKY_COMMONLIB=1")  -- SKY_COMMONLIB_LIBXSE
-    end
+    add_rules("commonlibsse-ng.plugin", plugin_desc)
 
     -- add dependencies
     add_deps("clib-util")
@@ -78,10 +42,8 @@ target("Skyblivion")
     -- IntelliSense only: the build already gets these from the commonlibsse-ng dep, but
     -- xmake's vsxmake generator doesn't copy dep flags into the .vcxproj, so without them
     -- the IDE parses CommonLib with no runtime target defined. Harmless build duplicates.
-    if backend_ng then
-        add_defines("ENABLE_SKYRIM_SE=1", "ENABLE_SKYRIM_AE=1", "ENABLE_SKYRIM_VR=1")
-        add_includedirs("lib/commonlibsse-ng/extern/openvr/headers")
-    end
+    add_defines("ENABLE_SKYRIM_SE=1", "ENABLE_SKYRIM_AE=1", "ENABLE_SKYRIM_VR=1")
+    add_includedirs("lib/commonlibsse-ng/extern/openvr/headers")
 
     -- add src files
     add_files("src/**.cpp")
