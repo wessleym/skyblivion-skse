@@ -1,6 +1,7 @@
 #include "UISystem.h"
 #include "StatsMenuHook.h"
 #include "PrismaUI/PrismaUIService.h"
+#include "PrismaUI/Persuasion/DialogueSession.h"
 #include "PrismaUI/Persuasion/PersuasionView.h"
 #include "PrismaUI/Persuasion/PersuasionSettings.h"
 #include "PrismaUI/SpellMaking/SpellMakingStore.h"
@@ -107,6 +108,10 @@ void UISystem::OnGameStarting() {
 
 void UISystem::OnPreLoadGame(std::string_view saveName) {
     OnGameStarting();
+    //A load does not close the PrismaUI persuasion wheel: it is hidden here and the NPC let go.
+    //(The Scaleform wheel gets the engine's kHide and does the same itself.)
+    Persuasion::PersuasionView::OnPreLoadGame();
+    Persuasion::DialogueSession::Abort();
     SpellMaking::SpellMakingStore::RestoreBeforeLoad(saveName);
 }
 
@@ -114,6 +119,8 @@ void UISystem::OnDataLoaded() {
     Log::INFO("UISystem: OnDataLoaded...");
     RegisterScaleformServices();
     CreatePrismaViews();
+    // Shared by both persuasion hosts: the wheel closes when its NPC dies.
+    Persuasion::DialogueSession::Register();
     // After both: it opens the SKYBPerksView tree, else the Stats PrismaUI view, else the vanilla screen.
     StatsMenuHook::Initialize();
     Log::INFO("UISystem: OnDataLoaded Complete");

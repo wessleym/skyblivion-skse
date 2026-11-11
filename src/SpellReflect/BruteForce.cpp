@@ -6,11 +6,11 @@
 #include "Degradation/Condition.h"
 #include "Degradation/DecayService.h"
 #include "Degradation/Settings.h"
+#include "Platform/Text.h"
 
 #include <algorithm>
 #include <array>
 #include <atomic>
-#include <cctype>
 #include <chrono>
 #include <cstdint>
 #include <format>
@@ -33,7 +33,7 @@ namespace SpellReflect::BruteForce {
         std::array<RE::BGSPerk*, Settings::kBruteRanks> g_rankPerks{};
         std::uint32_t                                   g_logged = 0;
 
-        // main thread only (hit events): last attempt and last crime report per container
+        // last attempt and last crime report per container (hit events and the hit-frame task: one at a time)
         std::unordered_map<RE::FormID, Clock::time_point> g_lastAttempt;
         std::unordered_map<RE::FormID, Clock::time_point> g_lastCrime;
 
@@ -55,66 +55,21 @@ namespace SpellReflect::BruteForce {
             return -1;
         }
 
-        std::string RankText(int a_rank) {
-            return a_rank < 0 ? "none"s : std::to_string(a_rank + 1);
-        }
-
-        // [BruteForce] bTrace: at most 5 lines a second and 500 a session.
-        constexpr std::uint32_t kTraceMax = 500;
-        std::uint32_t           g_traceCount = 0;
-        std::uint32_t           g_traceInWindow = 0;
-        Clock::time_point       g_traceWindow{};
-
-        bool TraceAllowed(Clock::time_point a_now) {
-            if (!Settings::Get().bruteTrace || g_traceCount >= kTraceMax) {
-                return false;
-            }
-            if (a_now - g_traceWindow > 1s) {
-                g_traceWindow = a_now;
-                g_traceInWindow = 0;
-            }
-            if (g_traceInWindow >= 5) {
-                return false;
-            }
-            ++g_traceInWindow;
-            if (++g_traceCount == kTraceMax) {
-                Log::INFO("SpellReflect: brute force trace: {} lines written; the trace stops here until the game restarts", kTraceMax);
-            }
-            return true;
-        }
-
         const char* LockText(RE::TESObjectREFR* a_ref) {
             const auto level = std::to_underlying(a_ref->GetLockLevel());
             return level >= 0 && level <= static_cast<int>(Settings::kLockLevels) ? kLockNames[static_cast<std::size_t>(level)] : "none";
         }
 
-        // "CONT 'Chest' 0001A2B3 (locked, lock Adept)"
-        std::string Describe(RE::TESObjectREFR* a_ref) {
-            if (!a_ref) {
-                return "nothing";
-            }
-            const auto base = a_ref->GetBaseObject();
-            const auto name = a_ref->GetDisplayFullName();
-            return std::format("{} '{}' {:08X} ({}, lock {})", base ? RE::FormTypeToString(base->GetFormType()) : "no base"sv,
-                               name ? name : "", a_ref->GetFormID(), a_ref->IsLocked() ? "locked" : "not locked", LockText(a_ref));
-        }
-
-        // Locked containers, and locked doors unless [BruteForce] bDoors = 0. Null when it can be forced.
-        const char* LockGate(RE::TESObjectREFR* a_target) {
+        // A locked container, or a locked door unless [BruteForce] bDoors = 0.
+        bool CanForce(RE::TESObjectREFR* a_target) {
             const auto base = a_target->GetBaseObject();
             const bool lockable = base && (base->Is(RE::FormType::Container) || (base->Is(RE::FormType::Door) && Settings::Get().bruteDoors));
-            if (!lockable) {
-                return "not a container (or a door with bDoors)";
-            }
-            return a_target->IsLocked() ? nullptr : "not locked";
+            return lockable && a_target->IsLocked();
         }
 
-        // A melee weapon that may force locks (fists only with bAllowUnarmed). Null when it may.
-        const char* WeaponGate(const RE::TESObjectWEAP* a_weapon) {
-            if (!a_weapon || !a_weapon->IsMelee()) {
-                return "not a melee weapon";
-            }
-            return a_weapon->IsHandToHandMelee() && !Settings::Get().bruteAllowUnarmed ? "unarmed (bAllowUnarmed = 0)" : nullptr;
+        // A melee weapon that may force locks (fists only with bAllowUnarmed).
+        bool CanForceWith(const RE::TESObjectWEAP* a_weapon) {
+            return a_weapon && a_weapon->IsMelee() && (!a_weapon->IsHandToHandMelee() || Settings::Get().bruteAllowUnarmed);
         }
 
         float Roll() {
@@ -196,7 +151,7 @@ namespace SpellReflect::BruteForce {
                 return;
             }
             tasks->AddTask([a_sound, handle = a_lock->GetHandle()]() {
-                const auto ref = handle.get();
+                const auto ref = REBridge::Lookup(handle);
                 const auto audio = RE::BSAudioManager::GetSingleton();
                 if (!ref || !audio) {
                     return;
@@ -213,16 +168,16 @@ namespace SpellReflect::BruteForce {
             });
         }
 
-        // false: within fAttemptGap of the last attempt on this container (the other hand, the
+        // Nothing within fAttemptGap of the last attempt on this container (the other hand, the
         // same swing again, or the swing the other path already counted). a_left: the striking hand
         // when known (see Wear).
-        bool Attempt(RE::PlayerCharacter* a_player, RE::TESObjectREFR* a_container, RE::TESObjectWEAP* a_weapon, int a_rank,
+        void Attempt(RE::PlayerCharacter* a_player, RE::TESObjectREFR* a_container, RE::TESObjectWEAP* a_weapon, int a_rank,
                      std::string_view a_via, std::optional<bool> a_left) {
             const auto& s = Settings::Get();
             const auto  now = Clock::now();
             const auto  id = a_container->GetFormID();
             if (Within(g_lastAttempt, id, s.bruteAttemptGap, now)) {
-                return false;
+                return;
             }
             g_lastAttempt[id] = now;
             if (g_logged < s.logEvents) {
@@ -240,7 +195,7 @@ namespace SpellReflect::BruteForce {
             if (success) {
                 if (const auto lock = a_container->GetLock()) {
                     lock->SetLocked(false);
-                    a_container->AddLockChange();
+                    REBridge::AddLockChange(a_container);
                 }
                 Message(s.bruteSuccessMessage);
                 PlaySoundAt(g_successSound, a_container);
@@ -263,8 +218,7 @@ namespace SpellReflect::BruteForce {
                 ++g_logged;
                 const auto name = a_container->GetDisplayFullName();
                 Log::INFO("SpellReflect: brute force: {} '{}' {:08X} lock {} rank {} weapon '{}' chance {:.0f}% roll {:.1f} -> {}; noise {}; crime: {}; weapon condition {}",
-                          isDoor ? "door" : "container", name ? name : "", id,
-                          lockLevel >= 0 && lockLevel <= static_cast<int>(Settings::kLockLevels) ? kLockNames[static_cast<std::size_t>(lockLevel)] : "?",
+                          isDoor ? "door" : "container", name ? name : "", id, LockText(a_container),
                           a_rank + 1, a_weapon->GetName(), chance, roll, success ? "UNLOCKED" : (chance > 0.0f ? "held" : "too strong"),
                           s.bruteNoiseLevel, crime, condition < 0.0f ? "unchanged (degradation off)"s : std::format("{:.1f}%", condition * 100.0f));
             }
@@ -273,7 +227,6 @@ namespace SpellReflect::BruteForce {
             if (success && s.bruteOpenOnSuccess && !isDoor) {
                 a_container->ActivateRef(a_player, 0, nullptr, 0, false);
             }
-            return true;
         }
 
         class HitSink final : public RE::BSTEventSink<RE::TESHitEvent> {
@@ -295,29 +248,14 @@ namespace SpellReflect::BruteForce {
                     return RE::BSEventNotifyControl::kContinue;
                 }
                 // the weapon's own event (an enchantment's or poison's follow-up names the ENCH / ALCH)
-                const auto  weapon = RE::TESForm::LookupByID<RE::TESObjectWEAP>(a_event->source);
-                const char* drop = nullptr;
-                if (a_event->projectile != 0) {
-                    drop = "a projectile";
-                } else if (a_event->flags.none(RE::TESHitEvent::Flag::kPowerAttack)) {
-                    drop = "not a power attack";
-                } else if (const auto why = WeaponGate(weapon)) {
-                    drop = why;
-                } else if (const auto lock = LockGate(target)) {
-                    drop = lock;
+                const auto weapon = RE::TESForm::LookupByID<RE::TESObjectWEAP>(a_event->source);
+                if (a_event->projectile != 0 || a_event->flags.none(RE::TESHitEvent::Flag::kPowerAttack) ||
+                    !CanForceWith(weapon) || !CanForce(target)) {
+                    return RE::BSEventNotifyControl::kContinue;
                 }
-                const int rank = RankOf(player);
-                if (!drop && rank < 0) {
-                    drop = "no rank perk held";
-                }
-                // the hit event names no hand: Wear reads it off the equipped weapons
-                const bool attempted = !drop && Attempt(player, target, weapon, rank, "hit event", std::nullopt);
-                if (TraceAllowed(Clock::now())) {
-                    const auto source = a_event->source ? RE::TESForm::LookupByID(a_event->source) : nullptr;
-                    Log::INFO("SpellReflect: brute force trace: hit event on {}; source {:08X} {} '{}', projectile {:08X}, flags 0x{:02X}, rank {} -> {}",
-                              Describe(target), a_event->source, source ? RE::FormTypeToString(source->GetFormType()) : "none"sv,
-                              source ? source->GetName() : "", a_event->projectile, a_event->flags.underlying(), RankText(rank),
-                              drop ? drop : (attempted ? "attempt" : "within the attempt gap (already counted)"));
+                if (const int rank = RankOf(player); rank >= 0) {
+                    // the hit event names no hand: Wear reads it off the equipped weapons
+                    Attempt(player, target, weapon, rank, "hit event", std::nullopt);
                 }
                 return RE::BSEventNotifyControl::kContinue;
             }
@@ -334,10 +272,7 @@ namespace SpellReflect::BruteForce {
         constexpr auto          kSameSwing = 150ms;  // one swing reaches both player graphs (first and third person)
 
         bool ContainsNoCase(std::string_view a_text, std::string_view a_part) {
-            const auto hit = std::ranges::search(a_text, a_part, [](char a_l, char a_r) {
-                return std::tolower(static_cast<unsigned char>(a_l)) == std::tolower(static_cast<unsigned char>(a_r));
-            });
-            return !hit.empty();
+            return Text::Lower(a_text).find(Text::Lower(a_part)) != std::string::npos;
         }
 
         RE::TESObjectWEAP* StrikingWeapon(RE::PlayerCharacter* a_player, bool a_left) {
@@ -357,35 +292,17 @@ namespace SpellReflect::BruteForce {
             const auto             high = process ? process->high : nullptr;
             const auto             attack = high ? high->attackData.get() : nullptr;
             const std::string_view attackEvent = attack && attack->event.c_str() ? attack->event.c_str() : "";
-            const bool             left = ContainsNoCase(attackEvent, "left");
-            const auto             target = g_crosshair.get();
-            const float            distance = target ? player->GetPosition().GetDistance(target->GetPosition()) : -1.0f;
-            const auto             weapon = StrikingWeapon(player, left);
-            const int              rank = RankOf(player);
-
-            const char* drop = nullptr;
-            if (!attack) {
-                drop = "no attack data";
-            } else if (attack->data.flags.none(RE::AttackData::AttackFlag::kPowerAttack)) {
-                drop = "not a power attack";
-            } else if (!target) {
-                drop = "no crosshair reference";
-            } else if (target.get() == player || target->As<RE::Actor>()) {
-                drop = "aimed at an actor";
-            } else if (const auto lock = LockGate(target.get())) {
-                drop = lock;
-            } else if (distance > s.bruteReach) {
-                drop = "out of reach (fReach)";
-            } else if (const auto why = WeaponGate(weapon)) {
-                drop = why;
-            } else if (rank < 0) {
-                drop = "no rank perk held";
+            const bool             left = ContainsNoCase(attackEvent, "lefthand");  // "attackPowerStartLeft" is the right hand
+            const auto             target = REBridge::Lookup(g_crosshair);
+            if (!attack || attack->data.flags.none(RE::AttackData::AttackFlag::kPowerAttack) || !target ||
+                target->As<RE::Actor>() || !CanForce(target.get()) ||
+                player->GetPosition().GetDistance(target->GetPosition()) > s.bruteReach) {
+                return;
             }
-            const bool attempted = !drop && Attempt(player, target.get(), weapon, rank, "hit frame", left);
-            if (TraceAllowed(Clock::now())) {
-                Log::INFO("SpellReflect: brute force trace: hit frame, attack '{}' flags 0x{:X}, {} hand '{}', crosshair {} at {:.0f} units, rank {} -> {}",
-                          attackEvent, attack ? attack->data.flags.underlying() : 0u, left ? "left" : "right", weapon ? weapon->GetName() : "",
-                          Describe(target.get()), distance, RankText(rank), drop ? drop : (attempted ? "attempt" : "within the attempt gap (already counted)"));
+            const auto weapon = StrikingWeapon(player, left);
+            const int  rank = RankOf(player);
+            if (CanForceWith(weapon) && rank >= 0) {
+                Attempt(player, target.get(), weapon, rank, "hit frame", left);
             }
         }
 
@@ -511,9 +428,5 @@ namespace SpellReflect::BruteForce {
         holder->AddEventSink<RE::TESHitEvent>(HitSink::GetSingleton());
         Log::INFO("SpellReflect: brute force: listening for hit events ({} of {} rank perks found)", found, Settings::kBruteRanks);
         InstallHitFrame();
-        if (s.bruteTrace) {
-            Log::INFO("SpellReflect: brute force: trace on (every player hit on a non-actor and every player hit frame; 5 lines a second, {} at most)",
-                      kTraceMax);
-        }
     }
 }

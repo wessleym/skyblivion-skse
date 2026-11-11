@@ -1,4 +1,4 @@
-// Generated from Settings.csv and Categories.csv by gen_settings.py - do not edit by hand.
+// Generated from Settings.csv and Categories.csv by gen_settings.py (not in this repository). Do not edit by hand.
 #pragma once
 
 #include <array>
@@ -71,7 +71,7 @@ namespace SKYBSettingsMenu
         { "DegWeapBreak", "Progression", "$SKYB_settings_group_gear_degradation", Type::kToggle, Applier::kDegradation, "Breakage", "Enabled", 0.0f, 1.0f, 1.0f, "", 0, Scope::kSave, "now", "$SKYB_settings_row_deg_weap_break", { 1.0f, 0.0f, 1.0f, 1.0f }, false },
         { "DegWeapBreakBelow", "Progression", "$SKYB_settings_group_gear_degradation", Type::kNumber, Applier::kDegradation, "Breakage", "Threshold", 0.2f, 0.9f, 0.05f, "pct", 0, Scope::kSave, "now", "$SKYB_settings_row_deg_weap_break_below", { 0.4f, 0.3f, 0.5f, 0.4f }, false },
         { "DegWeapBreakChance", "Progression", "$SKYB_settings_group_gear_degradation", Type::kNumber, Applier::kDegradation, "Breakage", "ChanceMult", 0.0f, 3.0f, 0.25f, "mult", 0, Scope::kSave, "now", "$SKYB_settings_row_deg_weap_break_chance", { 1.0f, 0.5f, 1.5f, 1.25f }, false },
-        { "DegWeapUsableAt", "Progression", "$SKYB_settings_group_gear_degradation", Type::kNumber, Applier::kDegradation, "Breakage", "UsableAt", 0.2f, 1.5f, 0.05f, "pct", 0, Scope::kSave, "now", "$SKYB_settings_row_deg_weap_usable_at", { 0.6f, 0.4f, 0.8f, 0.6f }, false },
+        { "DegWeapUsableAt", "Progression", "$SKYB_settings_group_gear_degradation", Type::kNumber, Applier::kDegradation, "Breakage", "UsableAt", 0.2f, 1.0f, 0.05f, "pct", 0, Scope::kSave, "now", "$SKYB_settings_row_deg_weap_usable_at", { 0.6f, 0.4f, 0.8f, 0.6f }, false },
         { "CmbDamageTaken", "Combat", "$SKYB_settings_group_damage", Type::kNumber, Applier::kCombat, "Damage", "Taken", 0.25f, 3.0f, 0.05f, "mult", 0, Scope::kSave, "now", "$SKYB_settings_row_cmb_damage_taken", { 1.0f, 0.75f, 1.5f, 1.5f }, false },
         { "CmbDamageDealt", "Combat", "$SKYB_settings_group_damage", Type::kNumber, Applier::kCombat, "Damage", "Dealt", 0.25f, 3.0f, 0.05f, "mult", 0, Scope::kSave, "now", "$SKYB_settings_row_cmb_damage_dealt", { 1.0f, 1.25f, 0.8f, 1.5f }, false },
         { "CmbAllies", "Combat", "$SKYB_settings_group_damage", Type::kToggle, Applier::kCombat, "Damage", "Allies", 0.0f, 1.0f, 1.0f, "", 0, Scope::kSave, "now", "$SKYB_settings_row_cmb_allies", { 1.0f, 1.0f, 1.0f, 1.0f }, false },

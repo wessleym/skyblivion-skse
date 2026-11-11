@@ -35,7 +35,7 @@ namespace SKYBSettingsMenu
 
 		static void InstallSerialization();  // plugin load: adds its record to Storage::CoSave
 		void        Register();              // kDataLoaded
-		void        OnGameReady();           // kPostLoadGame / kNewGame: fill the save's values, apply every row
+		void        OnGameReady(bool a_newGame);  // kPostLoadGame (false) / kNewGame (true): fill the save's values, apply every row
 
 		// True on the title screen / before any game: save rows then edit the
 		// new-game defaults.

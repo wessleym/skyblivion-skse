@@ -1,29 +1,28 @@
 #include "SettingsMenu/SettingsStore.h"
 
+#include "Degradation/Settings.h"
+#include "Hotkeys/HotkeyService.h"
 #include "Platform/FormCache.h"
 #include "Platform/MainThread.h"
+#include "Platform/Text.h"
+#include "Settings/SettingsService.h"
+#include "SettingsMenu/CombatService.h"
+#include "SettingsMenu/EconomyService.h"
+#include "SettingsMenu/InterfaceAdapters.h"
+#include "SettingsMenu/SoundService.h"
+#include "Storage/CoSave.h"
+#include "UIs/PrismaUI/Persuasion/PersuasionSettings.h"
 
-#include <charconv>
-#include <cstdlib>
-#include <cstring>
-#include <format>
-
-#include <Windows.h>
 #include <array>
 #include <atomic>
 #include <cmath>
+#include <cstdlib>
+#include <cstring>
+#include <format>
 #include <optional>
 #include <unordered_set>
 
-#include "SettingsMenu/CombatService.h"
-#include "SettingsMenu/EconomyService.h"
-#include "SettingsMenu/SoundService.h"
-#include "Hotkeys/HotkeyService.h"
-#include "SettingsMenu/InterfaceAdapters.h"
-#include "Degradation/Settings.h"
-#include "UIs/PrismaUI/Persuasion/PersuasionSettings.h"
-#include "Settings/SettingsService.h"
-#include "Storage/CoSave.h"
+#include <Windows.h>
 
 namespace SKYBSettingsMenu
 {
@@ -38,11 +37,7 @@ namespace SKYBSettingsMenu
 		std::optional<float> ParseFloat(const std::string& a_s)
 		{
 			float v = 0.0f;
-			const auto [ptr, err] = std::from_chars(a_s.data(), a_s.data() + a_s.size(), v);
-			if (a_s.empty() || err != std::errc{} || ptr != a_s.data() + a_s.size()) {
-				return std::nullopt;
-			}
-			return v;
+			return Text::Parse(a_s, v) ? std::optional{ v } : std::nullopt;
 		}
 	}
 
@@ -130,7 +125,7 @@ namespace SKYBSettingsMenu
 					return;
 				}
 				Log::INFO("settings menu: a game started without a load / new-game message (coc from the title screen?)");
-				OnGameReady();
+				OnGameReady(true);
 			});
 		}
 		return RE::BSEventNotifyControl::kContinue;
@@ -142,23 +137,8 @@ namespace SKYBSettingsMenu
 	// SkyrimPrefs.ini as the game's own menu does.
 	namespace
 	{
-		// the setting of this name under any section (bCrosshairEnabled, bSaveOn*, fHUDOpacity are not found
-		// as "name:Main", though SkyrimPrefs.ini keeps them under [MAIN]: the game registers them otherwise)
-		RE::Setting* FindByName(RE::INISettingCollection* a_coll, std::string_view a_name)
-		{
-			if (!a_coll) {
-				return nullptr;
-			}
-			for (auto* setting : a_coll->settings) {
-				const char* n = setting ? setting->GetName() : nullptr;
-				if (n && std::strlen(n) > a_name.size() && n[a_name.size()] == ':' &&
-					_strnicmp(n, a_name.data(), a_name.size()) == 0) {
-					return setting;
-				}
-			}
-			return nullptr;
-		}
-
+		// Some of SkyrimPrefs.ini's [MAIN] keys (bCrosshairEnabled, bSaveOn*, fHUDOpacity) are not registered settings
+		// on any runtime (logged on AE and VR): those are read and written as lines of the file.
 		RE::Setting* GameSetting(std::string_view a_name, bool* a_isPref = nullptr)
 		{
 			auto* prefs = RE::INIPrefSettingCollection::GetSingleton();
@@ -167,22 +147,13 @@ namespace SKYBSettingsMenu
 			bool         pref = false;
 			if (prefs && (found = prefs->GetSetting(a_name)) != nullptr) {
 				pref = true;
-			} else if (ini && (found = ini->GetSetting(a_name)) != nullptr) {
-				pref = false;
-			} else {
-				const auto bare = a_name.substr(0, a_name.find(':'));
-				if ((found = FindByName(prefs, bare)) != nullptr) {
-					pref = true;
-				} else {
-					found = FindByName(ini, bare);
-				}
+			} else if (ini) {
+				found = ini->GetSetting(a_name);
+			}
+			if (!found) {
 				static std::unordered_set<std::string> told;
 				if (told.insert(std::string(a_name)).second) {
-					if (found) {
-						Log::INFO("settings menu: {} is the game's {} ({})", a_name, found->GetName(), pref ? "SkyrimPrefs.ini" : "Skyrim.ini");
-					} else {
-						Log::INFO("settings menu: the game registers no setting {} - read and written in SkyrimPrefs.ini itself (takes effect at the next start)", a_name);
-					}
+					Log::INFO("settings menu: the game registers no setting {} - read and written in SkyrimPrefs.ini itself (takes effect at the next start)", a_name);
 				}
 			}
 			if (found && a_isPref) {
@@ -239,17 +210,20 @@ namespace SKYBSettingsMenu
 			if (!crosshair && !opacity) {
 				return;
 			}
-			auto* ui = RE::UI::GetSingleton();
-			auto  hud = ui ? ui->GetMovieView(RE::HUDMenu::MENU_NAME) : nullptr;
-			if (!hud) {
-				return;
-			}
-			if (crosshair) {
-				RE::GFxValue arg(a_value >= 0.5f);
-				hud->Invoke("_root.HUDMovieBaseInstance.SetCrosshairEnabled", nullptr, &arg, 1);
-			} else {
-				hud->SetVariable("_root.HUDMovieBaseInstance._alpha", RE::GFxValue(static_cast<double>(a_value) * 100.0));
-			}
+			//Into the HUD movie on the main thread (Platform\MainThread.h).
+			MainThread::Post([crosshair, a_value] {
+				auto* ui = RE::UI::GetSingleton();
+				auto  hud = ui ? ui->GetMovieView(RE::HUDMenu::MENU_NAME) : nullptr;
+				if (!hud) {
+					return;
+				}
+				if (crosshair) {
+					RE::GFxValue arg(a_value >= 0.5f);
+					hud->Invoke("_root.HUDMovieBaseInstance.SetCrosshairEnabled", nullptr, &arg, 1);
+				} else {
+					hud->SetVariable("_root.HUDMovieBaseInstance._alpha", RE::GFxValue(static_cast<double>(a_value) * 100.0));
+				}
+			});
 		}
 
 		// The fade multipliers (fLODFadeOutMultActors / Items / Objects): the engine works from its own copy of them,
@@ -317,31 +291,6 @@ namespace SKYBSettingsMenu
 		// Brightness (fGamma:Display): the game's own slider stores min + x (max - min) into this setting and calls
 		// nothing (the journal's OptionChange handler, AE id 53310, case 13); the renderer divides by the setting when
 		// it fills the image-space shader constants each frame (AE id 77258), so the write itself is the live change.
-		// Checked once: the setting the collection returned is the game's own object (AE id 388987), else a WARN.
-		bool IsGamma(std::string_view a_name)
-		{
-			return _strnicmp(a_name.data(), "fGamma:", 7) == 0;
-		}
-
-		void CheckGamma(const RE::Setting* a_setting)
-		{
-			static bool told = false;
-			if (told) {
-				return;
-			}
-			told = true;
-			if (!REL::Module::IsAE()) {
-				Log::INFO("settings menu: brightness - the renderer reads fGamma each frame (the object not checked on this runtime)");
-				return;
-			}
-			const auto own = REL::ID(388987).address();
-			if (own == reinterpret_cast<std::uintptr_t>(a_setting)) {
-				Log::INFO("settings menu: brightness writes the game's own fGamma setting (the renderer reads it each frame)");
-			} else {
-				Log::WARN("settings menu: brightness - the setting found at {:X} is not the game's fGamma object at {:X}; the picture may not change until the next start",
-						  reinterpret_cast<std::uintptr_t>(a_setting), own);
-			}
-		}
 
 		// the autosave row's intervals (minutes), after "Off"; the game's own list
 		constexpr std::array<float, 6> kAutosaveMinutes{ 5.0f, 10.0f, 15.0f, 30.0f, 45.0f, 60.0f };
@@ -455,9 +404,6 @@ namespace SKYBSettingsMenu
 			if (IsFade(a_name)) {
 				g_fadePending = true;
 				RefreshFades();
-			}
-			if (IsGamma(a_name)) {
-				CheckGamma(s);
 			}
 		}
 	}
@@ -702,10 +648,10 @@ namespace SKYBSettingsMenu
 	}
 
 	// Once per game: a new game reaches this from the kNewGame task and from the loading screen's
-	// close (whichever comes first); the co-save revert, and the title screen, arm it again.
-	void Store::OnGameReady()
+	// close (whichever comes first), a loaded one from kPostLoadGame; the co-save revert, and the
+	// title screen, arm it again.
+	void Store::OnGameReady(bool a_newGame)
 	{
-		std::size_t                     filled = 0;
 		std::unordered_set<std::string> filledIds;
 		{
 			std::scoped_lock lock(_lock);
@@ -725,11 +671,17 @@ namespace SKYBSettingsMenu
 				have = _save.contains(r.id);
 			}
 			if (!have) {
-				const float d = StoredDefault(r);
+				// a loaded game without the row (a save from before it existed) keeps its own value of a global
+				std::optional<float> own;
+				if (!a_newGame && r.applier == Applier::kGameGlobal) {
+					own = ReadGlobal(r.key);
+				}
+				const float d = own ? Snap(r, *own) : StoredDefault(r);
 				std::scoped_lock lock(_lock);
 				_save[r.id] = d;
-				filledIds.insert(r.id);
-				++filled;
+				if (!own) {
+					filledIds.insert(r.id);
+				}
 			}
 		}
 		EconomyService::GetSingleton()->OnGameReady();  // the player's price perk
@@ -737,7 +689,7 @@ namespace SKYBSettingsMenu
 			// a gameglobal row is set only for a new character (filled from the new-game defaults just now);
 			// a loaded game keeps its own value of the global
 			if (r.applier == Applier::kGameGlobal) {
-				if (filledIds.contains(r.id)) {
+				if (a_newGame && filledIds.contains(r.id)) {
 					float v = 0.0f;
 					{
 						std::scoped_lock lock(_lock);
@@ -751,7 +703,7 @@ namespace SKYBSettingsMenu
 		}
 		HotkeyService::GetSingleton()->ApplyGameKeys();  // QuickLoot / moreHUD keys
 		Log::INFO("settings menu: game ready - {} value(s) applied, {} taken from the new-game defaults", kRows.size(),
-					 filled);
+					 filledIds.size());
 	}
 
 	// ============================================================ co-save ====

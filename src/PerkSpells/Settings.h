@@ -31,8 +31,6 @@ namespace PerkSpells::Settings {
         bool                                                ownerCasts = true;
         bool                                                swingHostileToAttacker = true;
         std::array<bool, std::to_underlying(Kind::kTotal)> enabled{ true, true, true, true, true };
-        bool                                                patchEveryCallSite = false;
-        std::uint32_t                                       logCallsPerEntryPoint = 25;
     };
 
     void              Load();

@@ -1,9 +1,11 @@
 #include "DialogueServices.h"
 #include "DialogueContract.h"
 #include "Degradation/RepairMenu.h"
+#include "Platform/FormCache.h"
+#include "Platform/IniFile.h"
+#include "Platform/Text.h"
 
-#include <cstdint>
-#include <fstream>
+#include <algorithm>
 #include <string_view>
 #include <vector>
 
@@ -12,98 +14,22 @@ namespace Dialogue {
 	namespace {
 		struct ServiceTopic {
 			std::string editorID;
-			std::uint32_t formID = 0;
-			std::string plugin;
 			std::string icon;
-			RE::TESTopic* form = nullptr;
-			bool lookupAttempted = false;
-		};
-
-		struct ServiceFaction {
-			std::string editorID;
-			std::uint32_t formID = 0;
-			std::string plugin;
-			RE::TESFaction* form = nullptr;
-			bool lookupAttempted = false;
 		};
 
 		struct ServiceDef {
 			std::string id;
 			std::vector<ServiceTopic> topics;
-			std::vector<ServiceFaction> factions;
+			std::vector<std::string> factions;  //editor IDs
 			bool fallback = false;
 			std::string openClass;
 			std::string openFunction;
 		};
 
-		std::string Trim(std::string_view text) {
-			const auto begin = text.find_first_not_of(" \t\r\n");
-			if (begin == std::string_view::npos) {
-				return {};
-			}
-			const auto end = text.find_last_not_of(" \t\r\n");
-			return std::string(text.substr(begin, end - begin + 1));
-		}
-
-		//Splits on a separator, trimming each piece and dropping empty ones.
-		std::vector<std::string> SplitList(std::string_view text, char separator) {
-			std::vector<std::string> pieces;
-			while (true) {
-				const auto position = text.find(separator);
-				auto piece = Trim(text.substr(0, position));
-				if (!piece.empty()) {
-					pieces.push_back(std::move(piece));
-				}
-				if (position == std::string_view::npos) {
-					return pieces;
-				}
-				text = text.substr(position + 1);
-			}
-		}
-
-		//"210285:Skyblivion.esm" -> the plugin-relative form ID and the plugin.
-		bool ParseFormKey(const std::string& key, std::uint32_t& formID, std::string& plugin) {
-			const auto colon = key.find(':');
-			if (colon == std::string::npos) {
-				return false;
-			}
-			try {
-				formID = static_cast<std::uint32_t>(std::stoul(key.substr(0, colon), nullptr, 16));
-			}
-			catch (...) {
-				return false;
-			}
-			plugin = Trim(std::string_view(key).substr(colon + 1));
-			return !plugin.empty();
-		}
-
-		//"EditorID|FormKey|Icon"; the FormKey and icon are optional.
+		//"EditorID|Icon"; the icon is optional.
 		ServiceTopic MakeTopic(const std::string& spec) {
-			ServiceTopic topic;
-			const auto parts = SplitList(spec, '|');
-			if (!parts.empty()) {
-				topic.editorID = parts[0];
-			}
-			if (parts.size() > 1) {
-				ParseFormKey(parts[1], topic.formID, topic.plugin);
-			}
-			if (parts.size() > 2) {
-				topic.icon = parts[2];
-			}
-			return topic;
-		}
-
-		//"EditorID|FormKey"; the FormKey is optional.
-		ServiceFaction MakeFaction(const std::string& spec) {
-			ServiceFaction faction;
-			const auto parts = SplitList(spec, '|');
-			if (!parts.empty()) {
-				faction.editorID = parts[0];
-			}
-			if (parts.size() > 1) {
-				ParseFormKey(parts[1], faction.formID, faction.plugin);
-			}
-			return faction;
+			const auto parts = Text::Split(spec, '|');
+			return { parts.empty() ? std::string{} : parts[0], parts.size() > 1 ? parts[1] : std::string{} };
 		}
 
 		std::vector<ServiceDef> BuiltInServices() {
@@ -112,64 +38,64 @@ namespace Dialogue {
 			ServiceDef barter;
 			barter.id = "barter";
 			for (const char* spec : {
-					 "SKYBDialGenericForSaleTopic|210285:Skyblivion.esm",
-					 "SKYBWERoadDealer01SaleTopic|0DED9A:Skyblivion.esm",
+					 "SKYBDialGenericForSaleTopic",
+					 "SKYBWERoadDealer01SaleTopic",
 				 }) {
 				barter.topics.push_back(MakeTopic(spec));
 			}
 			for (const char* spec : {
-					 "SKYBJobMerchantFaction|25637B:Skyblivion.esm",
-					 "SKYBWEServicesMerchantFaction|28F8E8:Skyblivion.esm",
+					 "SKYBJobMerchantFaction",
+					 "SKYBWEServicesMerchantFaction",
 				 }) {
-				barter.factions.push_back(MakeFaction(spec));
+				barter.factions.push_back(spec);
 			}
 			services.push_back(std::move(barter));
 
 			ServiceDef training;
 			training.id = "training";
 			for (const char* spec : {
-					 "TES4TrainingAlchemyTopic|210C4F:Skyblivion.esm|Alchemy",
-					 "TES4TrainingAlterationTopic|210C10:Skyblivion.esm|Alteration",
-					 "TES4TrainingArcheryTopic|210C99:Skyblivion.esm|Archery",
-					 "TES4TrainingBlockTopic|210CB2:Skyblivion.esm|Block",
-					 "TES4TrainingConjurationTopic|210C5B:Skyblivion.esm|Conjuration",
-					 "TES4TrainingDestructionTopic|210C43:Skyblivion.esm|Destruction",
-					 "TES4TrainingEnchantingTopic|210CCB:Skyblivion.esm|Enchanting",
-					 "TES4TrainingHeavyArmorTopic|210C74:Skyblivion.esm|HeavyArmor",
-					 "TES4TrainingIllusionTopic|210CBE:Skyblivion.esm|Illusion",
-					 "TES4TrainingLightArmorTopic|210C13:Skyblivion.esm|LightArmor",
-					 "TES4TrainingLockpickingTopic|210CD9:Skyblivion.esm|Lockpicking",
-					 "TES4TrainingOneHandedTopic|210C81:Skyblivion.esm|OneHanded",
-					 "TES4TrainingPickpocketTopic|0F968B:Skyblivion.esm|Pickpocket",
-					 "TES4TrainingRestorationTopic|210C8D:Skyblivion.esm|Restoration",
-					 "TES4TrainingSmithingTopic|210CA5:Skyblivion.esm|Smithing",
-					 "TES4TrainingSneakTopic|210C2A:Skyblivion.esm|Sneak",
-					 "SKYBDialGenericTrainSpeechTopic|210C37:Skyblivion.esm|Speech",
-					 "TES4TrainingTwoHandedTopic|210C67:Skyblivion.esm|TwoHanded",
+					 "TES4TrainingAlchemyTopic|Alchemy",
+					 "TES4TrainingAlterationTopic|Alteration",
+					 "TES4TrainingArcheryTopic|Archery",
+					 "TES4TrainingBlockTopic|Block",
+					 "TES4TrainingConjurationTopic|Conjuration",
+					 "TES4TrainingDestructionTopic|Destruction",
+					 "TES4TrainingEnchantingTopic|Enchanting",
+					 "TES4TrainingHeavyArmorTopic|HeavyArmor",
+					 "TES4TrainingIllusionTopic|Illusion",
+					 "TES4TrainingLightArmorTopic|LightArmor",
+					 "TES4TrainingLockpickingTopic|Lockpicking",
+					 "TES4TrainingOneHandedTopic|OneHanded",
+					 "TES4TrainingPickpocketTopic|Pickpocket",
+					 "TES4TrainingRestorationTopic|Restoration",
+					 "TES4TrainingSmithingTopic|Smithing",
+					 "TES4TrainingSneakTopic|Sneak",
+					 "SKYBDialGenericTrainSpeechTopic|Speech",
+					 "TES4TrainingTwoHandedTopic|TwoHanded",
 				 }) {
 				training.topics.push_back(MakeTopic(spec));
 			}
 			for (const char* spec : {
-					 "SKYBTrainerFactionAlchemy|009667:Skyblivion.esm",
-					 "SKYBTrainerFactionAlteration|009668:Skyblivion.esm",
-					 "SKYBTrainerFactionMarksman|00967A:Skyblivion.esm",
-					 "SKYBTrainerFactionBlock|009671:Skyblivion.esm",
-					 "SKYBTrainerFactionConjuration|009672:Skyblivion.esm",
-					 "SKYBTrainerFactionDestruction|009673:Skyblivion.esm",
-					 "SKYBTrainerFactionEnchanting|009674:Skyblivion.esm",
-					 "SKYBTrainerFactionHeavyArmor|009676:Skyblivion.esm",
-					 "SKYBTrainerFactionIllusion|009677:Skyblivion.esm",
-					 "SKYBTrainerFactionLightArmor|009678:Skyblivion.esm",
-					 "SKYBTrainerFactionLockpicking|009679:Skyblivion.esm",
-					 "SKYBTrainerFactionOneHanded|00967B:Skyblivion.esm",
-					 "SKYBTrainerFactionPickpocket|00967C:Skyblivion.esm",
-					 "SKYBTrainerFactionRestoration|0560C0:Skyblivion.esm",
-					 "SKYBTrainerFactionSmithing|0564D1:Skyblivion.esm",
-					 "SKYBFactionTrainerSneak|0564F4:Skyblivion.esm",
-					 "SKYBTrainerFactionSpeechcraft|0564F5:Skyblivion.esm",
-					 "SKYBTrainerFactionTwoHanded|13C216:Skyblivion.esm",
+					 "SKYBTrainerFactionAlchemy",
+					 "SKYBTrainerFactionAlteration",
+					 "SKYBTrainerFactionMarksman",
+					 "SKYBTrainerFactionBlock",
+					 "SKYBTrainerFactionConjuration",
+					 "SKYBTrainerFactionDestruction",
+					 "SKYBTrainerFactionEnchanting",
+					 "SKYBTrainerFactionHeavyArmor",
+					 "SKYBTrainerFactionIllusion",
+					 "SKYBTrainerFactionLightArmor",
+					 "SKYBTrainerFactionLockpicking",
+					 "SKYBTrainerFactionOneHanded",
+					 "SKYBTrainerFactionPickpocket",
+					 "SKYBTrainerFactionRestoration",
+					 "SKYBTrainerFactionSmithing",
+					 "SKYBFactionTrainerSneak",
+					 "SKYBTrainerFactionSpeechcraft",
+					 "SKYBTrainerFactionTwoHanded",
 				 }) {
-				training.factions.push_back(MakeFaction(spec));
+				training.factions.push_back(spec);
 			}
 			services.push_back(std::move(training));
 
@@ -177,57 +103,38 @@ namespace Dialogue {
 			ServiceDef repair;
 			repair.id = "repair";
 			repair.fallback = true;
-			repair.factions.push_back(MakeFaction("SKYBRepairFaction|0D8209:Skyblivion.esm"));
-			repair.factions.push_back(MakeFaction("SKYBRepairmanFaction|295CE7:Skyblivion.esm"));
+			repair.factions.push_back("SKYBRepairFaction");
+			repair.factions.push_back("SKYBRepairmanFaction");
 			services.push_back(std::move(repair));
 
 			ServiceDef recharge;
 			recharge.id = "recharge";
 			recharge.fallback = true;
-			recharge.factions.push_back(MakeFaction("SKYBRechargeFaction|0D820A:Skyblivion.esm"));
+			recharge.factions.push_back("SKYBRechargeFaction");
 			services.push_back(std::move(recharge));
 
 			return services;
 		}
 
 		void ApplyServicesIni(std::vector<ServiceDef>& services) {
-			std::ifstream in(DialogueContract::ServicesIniFile);
-			if (!in) {
-				return;
-			}
-			Log::INFO("DialogueServices: Reading {}.", DialogueContract::ServicesIniFile);
 			ServiceDef* current = nullptr;
-			std::string line;
-			int lineNumber = 0;
-			while (std::getline(in, line)) {
-				++lineNumber;
-				const auto text = Trim(line);
-				if (text.empty() || text[0] == ';' || text[0] == '#') {
-					continue;
+			const bool read = IniFile::Read(DialogueContract::ServicesIniFile, "DialogueServices", [&](const IniFile::Entry& a_entry) {
+				if (a_entry.section.empty()) {
+					Log::WARN("DialogueServices: {}({}) ignored: no [service] above it.", DialogueContract::ServicesIniFile, a_entry.line);
+					return;
 				}
-				if (text.front() == '[' && text.back() == ']') {
-					const auto id = Trim(std::string_view(text).substr(1, text.size() - 2));
-					current = nullptr;
-					for (auto& service : services) {
-						if (service.id == id) {
-							current = &service;
-						}
+				if (!current || current->id != a_entry.section) {
+					const auto found = std::ranges::find(services, a_entry.section, &ServiceDef::id);
+					if (found != services.end()) {
+						current = &*found;
+					} else {
+						current = &services.emplace_back();
+						current->id = a_entry.section;
+						Log::INFO("DialogueServices: New service '{}' from the INI (the menu must know it too).", current->id);
 					}
-					if (!current) {
-						services.push_back(ServiceDef{});
-						current = &services.back();
-						current->id = id;
-						Log::INFO("DialogueServices: New service '{}' from the INI (the menu must know it too).", id);
-					}
-					continue;
 				}
-				const auto equals = text.find('=');
-				if (equals == std::string::npos || !current) {
-					Log::WARN("DialogueServices: {}({}) ignored ('{}').", DialogueContract::ServicesIniFile, lineNumber, text);
-					continue;
-				}
-				const auto key = Trim(std::string_view(text).substr(0, equals));
-				const auto value = Trim(std::string_view(text).substr(equals + 1));
+				const auto& key = a_entry.key;
+				const auto& value = a_entry.value;
 				if (key == "clear") {
 					if (value == "1") {
 						current->topics.clear();
@@ -235,13 +142,13 @@ namespace Dialogue {
 					}
 				}
 				else if (key == "topics") {
-					for (const auto& spec : SplitList(value, ',')) {
+					for (const auto& spec : Text::Split(value, ',')) {
 						current->topics.push_back(MakeTopic(spec));
 					}
 				}
 				else if (key == "factions") {
-					for (const auto& spec : SplitList(value, ',')) {
-						current->factions.push_back(MakeFaction(spec));
+					for (const auto& spec : Text::Split(value, ',')) {
+						current->factions.push_back(spec);
 					}
 				}
 				else if (key == "fallback") {
@@ -260,6 +167,9 @@ namespace Dialogue {
 				else {
 					Log::WARN("DialogueServices: [{}] unknown key '{}'.", current->id, key);
 				}
+			});
+			if (read) {
+				Log::INFO("DialogueServices: Read {}.", DialogueContract::ServicesIniFile);
 			}
 		}
 
@@ -280,80 +190,35 @@ namespace Dialogue {
 			return services;
 		}
 
-		//Editor ID first (po3 Tweaks caches them), then the FormKey. Each entry resolves once.
-		RE::TESTopic* Resolve(ServiceTopic& topic) {
-			if (topic.form || topic.lookupAttempted) {
-				return topic.form;
-			}
-			topic.lookupAttempted = true;
-			if (!topic.editorID.empty()) {
-				topic.form = RE::TESForm::LookupByEditorID<RE::TESTopic>(topic.editorID);
-			}
-			if (!topic.form && topic.formID) {
-				if (auto* dataHandler = RE::TESDataHandler::GetSingleton()) {
-					topic.form = dataHandler->LookupForm<RE::TESTopic>(topic.formID, topic.plugin);
-				}
-			}
-			if (!topic.form) {
-				Log::WARN("DialogueServices: Topic '{}' not resolved.", topic.editorID);
-			}
-			return topic.form;
-		}
-
-		RE::TESFaction* Resolve(ServiceFaction& faction) {
-			if (faction.form || faction.lookupAttempted) {
-				return faction.form;
-			}
-			faction.lookupAttempted = true;
-			if (!faction.editorID.empty()) {
-				faction.form = RE::TESForm::LookupByEditorID<RE::TESFaction>(faction.editorID);
-			}
-			if (!faction.form && faction.formID) {
-				if (auto* dataHandler = RE::TESDataHandler::GetSingleton()) {
-					faction.form = dataHandler->LookupForm<RE::TESFaction>(faction.formID, faction.plugin);
-				}
-			}
-			if (!faction.form) {
-				Log::WARN("DialogueServices: Faction '{}' not resolved.", faction.editorID);
-			}
-			return faction.form;
-		}
-
 		bool InServiceFaction(RE::Actor* speaker, ServiceDef& service) {
 			if (!speaker) {
 				return false;
 			}
-			for (auto& faction : service.factions) {
-				if (auto* form = Resolve(faction); form && speaker->IsInFaction(form)) {
+			for (const auto& faction : service.factions) {
+				if (auto* form = FormCache::Get<RE::TESFaction>(faction, "DialogueServices"); form && speaker->IsInFaction(form)) {
 					return true;
 				}
 			}
 			return false;
 		}
 
-		//Whether the fallback path has anything to call: an open= from the table, or a built-in call.
-		bool CanOpen(const ServiceDef& service) {
-			return !service.openClass.empty() || service.id == "barter" || service.id == "training" ||
-				   service.id == "repair" || service.id == "recharge";
-		}
-
 		bool HasBuiltIn(const ServiceDef& service) {
 			return service.id == "barter" || service.id == "training" || service.id == "repair" || service.id == "recharge";
 		}
 
-		bool SameText(std::string_view a, std::string_view b) {
-			return a.size() == b.size() && std::equal(a.begin(), a.end(), b.begin(),
-				[](char x, char y) { return std::tolower(static_cast<unsigned char>(x)) == std::tolower(static_cast<unsigned char>(y)); });
+		//Whether the fallback path has anything to call: an open= from the table, or a built-in call.
+		bool CanOpen(const ServiceDef& service) {
+			return !service.openClass.empty() || HasBuiltIn(service);
 		}
 
 		//The SKYBDegradation natives of earlier versions (OpenVendorRepair / OpenVendorRecharge; no longer registered,
 		//2026-11-06) for the service that has the same built-in call: the build's INI still names them.
 		bool OwnNative(const ServiceDef& service) {
-			if (!SameText(service.openClass, "SKYBDegradation")) {
+			if (!Text::IEquals(service.openClass, "SKYBDegradation")) {
 				return false;
 			}
-			return (service.id == "repair" && SameText(service.openFunction, "OpenVendorRepair")) ||
-				   (service.id == "recharge" && SameText(service.openFunction, "OpenVendorRecharge"));
+			return (service.id == "repair" && Text::IEquals(service.openFunction, "OpenVendorRepair")) ||
+				   (service.id == "recharge" && Text::IEquals(service.openFunction, "OpenVendorRecharge"));
 		}
 
 		//Whether Scripts\<class>.pex is in the data (loose or in an archive).
@@ -371,8 +236,8 @@ namespace Dialogue {
 			int row = 0;
 			for (auto* entry : *topicManager->dialogueList) {
 				if (entry && entry->parentTopic) {
-					for (auto& topic : service.topics) {
-						if (Resolve(topic) == entry->parentTopic) {
+					for (const auto& topic : service.topics) {
+						if (FormCache::Get<RE::TESTopic>(topic.editorID, "DialogueServices") == entry->parentTopic) {
 							icon = topic.icon;
 							return row;
 						}
@@ -416,13 +281,9 @@ namespace Dialogue {
 	//led to a list without the row. Both are gated by the speaker's factions, the topic's own condition.
 	void DialogueServices::Open(const std::string& serviceID, RE::Actor* speaker) {
 		ServiceDef* service = nullptr;
-		//Without case: the id can arrive as "Recharge" when the BSFixedString pool already holds that spelling.
-		const auto sameId = [&serviceID](const std::string& id) {
-			return id.size() == serviceID.size() && std::equal(id.begin(), id.end(), serviceID.begin(),
-				[](char a, char b) { return std::tolower(static_cast<unsigned char>(a)) == std::tolower(static_cast<unsigned char>(b)); });
-		};
 		for (auto& candidate : Services()) {
-			if (sameId(candidate.id)) {
+			//Without case: the id can arrive as "Recharge" when the BSFixedString pool already holds that spelling.
+			if (Text::IEquals(candidate.id, serviceID)) {
 				service = &candidate;
 			}
 		}
@@ -491,7 +352,7 @@ namespace Dialogue {
 			const bool recharge = service->id == "recharge";
 			const auto handle = speaker->GetHandle();
 			SKSE::GetTaskInterface()->AddTask([handle, recharge] {
-				if (auto vendor = handle.get()) {
+				if (auto vendor = REBridge::Lookup(handle)) {
 					if (recharge) {
 						SKYBDeg::RepairMenu::OpenRecharge(vendor.get());
 					}

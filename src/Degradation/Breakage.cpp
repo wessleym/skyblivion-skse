@@ -3,16 +3,12 @@
 #include "Degradation/Condition.h"
 #include "Degradation/Settings.h"
 #include "Platform/MainThread.h"
+#include "Resources.h"
 
 #include <algorithm>
 #include <cmath>
 #include <format>
 #include <string>
-
-// <Windows.h>, which this plugin's CommonLib build includes, maps PlaySound to PlaySoundA.
-#ifdef PlaySound
-#	undef PlaySound
-#endif
 
 namespace SKYBDeg::Breakage
 {
@@ -23,12 +19,25 @@ namespace SKYBDeg::Breakage
 
 		bool EndsWithSuffix(std::string_view a_name)
 		{
-			return a_name.size() > kSuffix.size() && a_name.substr(a_name.size() - kSuffix.size()) == kSuffix;
+			return a_name.size() > kSuffix.size() && a_name.ends_with(kSuffix);
+		}
+
+		// The custom name alone. The engine renders a custom name as the name plus a temper word while health is
+		// above 1.0 ("Iron Sword (Broken) (Fine)" after a grindstone), and keeps the name's own length.
+		std::string_view CustomName(const RE::ExtraTextDisplayData* a_text)
+		{
+			const char* text = a_text ? a_text->displayName.c_str() : nullptr;
+			if (!text) {
+				return {};
+			}
+			const std::string_view whole(text);
+			const std::size_t      own = a_text->IsPlayerSet() ? a_text->customNameLength : 0;
+			return own > 0 && own <= whole.size() ? whole.substr(0, own) : whole;
 		}
 
 		std::string NameOf(RE::TESBoundObject* a_obj, RE::ExtraDataList* a_list)
 		{
-			const char* name = a_list ? a_list->GetDisplayName(a_obj) : nullptr;
+			const char* name = a_list ? REBridge::DisplayName(a_list, a_obj) : nullptr;
 			return name && *name ? name : (a_obj->GetName() ? a_obj->GetName() : "");
 		}
 
@@ -37,26 +46,42 @@ namespace SKYBDeg::Breakage
 			if (IsMarked(a_list)) {
 				return;
 			}
-			const std::string name = NameOf(a_obj, a_list) + std::string(kSuffix);
-			if (auto text = a_list->GetByType<RE::ExtraTextDisplayData>()) {
+			auto*             existing = a_list->GetByType<RE::ExtraTextDisplayData>();
+			const std::string own = existing && existing->IsPlayerSet() ? std::string(CustomName(existing)) : NameOf(a_obj, a_list);
+			const std::string name = own + std::string(kSuffix);
+			if (auto text = existing) {
 				text->SetName(name.c_str());
 			} else {
 				a_list->Add(new RE::ExtraTextDisplayData(name.c_str()));
 			}
 		}
 
-		void Unmark(RE::ExtraDataList* a_list)
+		void Unmark(RE::TESBoundObject* a_obj, RE::ExtraDataList* a_list)
 		{
 			auto text = a_list ? a_list->GetByType<RE::ExtraTextDisplayData>() : nullptr;
 			if (!text || !text->displayName.c_str()) {
 				return;
 			}
-			std::string name = text->displayName.c_str();
+			std::string name(CustomName(text));
 			if (!EndsWithSuffix(name)) {
 				return;
 			}
 			name.resize(name.size() - kSuffix.size());
 			text->SetName(name.c_str());
+			//Back to the plain base name: the custom-name record Mark set goes too, so the displayed name follows the
+			//base object again (a translation, a renaming mod) and the item stacks with unmarked copies. A name the
+			//player gave it is kept. Removing the record frees it, and this can run on a hit event's thread while
+			//another thread reads the name: it is removed on the main thread, next frame.
+			const char* baseName = a_obj ? a_obj->GetName() : nullptr;
+			if (baseName && name == baseName) {
+				MainThread::Post([a_obj, a_list] {
+					auto*       record = Condition::ListIsLive(a_obj, a_list) ? a_list->GetByType<RE::ExtraTextDisplayData>() : nullptr;
+					const char* plain = a_obj->GetName();
+					if (record && plain && CustomName(record) == plain) {
+						a_list->RemoveByType(RE::ExtraDataType::kTextDisplayData);
+					}
+				});
+			}
 		}
 
 		// next frame, on the main thread: the hit / equip event that asked is still running
@@ -68,17 +93,24 @@ namespace SKYBDeg::Breakage
 				if (!player || !manager || !Condition::ListIsLive(a_obj, a_list)) {
 					return;
 				}
-				if (!a_list->HasType<RE::ExtraWorn>() && !a_list->HasType<RE::ExtraWornLeft>()) {
+				const bool left = a_list->HasType<RE::ExtraWornLeft>();
+				if (!left && !a_list->HasType<RE::ExtraWorn>()) {
 					return;
 				}
-				manager->UnequipObject(player, a_obj, a_list, 1, nullptr, false, false, false);
+				//A one-handed weapon (its own slot is EitherHand): the hand it is in, so that an identical copy in the
+				//other hand stays equipped. Two-handed weapons and bows keep no slot (BothHands).
+				//(Resources, by form ID: NG's default-object lookup is unreliable on 1.6.1170, see Resources::PlayerGold.)
+				const auto* weap = a_obj->As<RE::TESObjectWEAP>();
+				const RE::BGSEquipSlot* slot = weap && weap->GetEquipSlot() == Resources::eitherHandSlot ?
+					(left ? Resources::leftHandSlot : Resources::rightHandSlot) : nullptr;
+				manager->UnequipObject(player, a_obj, a_list, 1, slot, false, false, false);
 			});
 		}
 
 		void Break(RE::TESBoundObject* a_obj, RE::ExtraDataList* a_list, float a_q, float a_chance)
 		{
 			const std::string before = NameOf(a_obj, a_list);
-			Condition::SetHealth(a_list, std::min(a_q, Settings::Get(G::WeapBrokenCondition)));
+			Condition::SetHealth(a_obj, a_list, std::min(a_q, Settings::Get(G::WeapBrokenCondition)));
 			Mark(a_obj, a_list);
 			Log::INFO("breakage: '{}' broke at {:.1f}% (chance {:.2f}%)", before, a_q * 100.0f, a_chance * 100.0f);
 			RE::PlaySound(kBreakSound);
@@ -90,12 +122,19 @@ namespace SKYBDeg::Breakage
 	bool IsMarked(const RE::ExtraDataList* a_list)
 	{
 		auto text = a_list ? a_list->GetByType<RE::ExtraTextDisplayData>() : nullptr;
-		return text && text->displayName.c_str() && EndsWithSuffix(text->displayName.c_str());
+		return EndsWithSuffix(CustomName(text));
 	}
 
 	void OnUse(RE::TESBoundObject* a_obj, RE::ExtraDataList* a_list, bool a_power, bool a_block)
 	{
-		if (!a_obj || !a_list || !Settings::On(G::WeapBreakEnabled) || IsMarked(a_list)) {
+		if (!a_obj || !a_list || !Settings::On(G::WeapBreakEnabled)) {
+			return;
+		}
+		if (IsMarked(a_list)) {
+			//Restored without our repair (a grindstone tempers a broken weapon): the mark goes.
+			if (Condition::GetHealth(a_list) >= Settings::Get(G::WeapUsableAt)) {
+				Unmark(a_obj, a_list);
+			}
 			return;
 		}
 		const float q = Condition::GetHealth(a_list);
@@ -122,10 +161,10 @@ namespace SKYBDeg::Breakage
 		}
 	}
 
-	void OnConditionSet(RE::ExtraDataList* a_list, float a_value)
+	void OnConditionSet(RE::TESBoundObject* a_obj, RE::ExtraDataList* a_list, float a_value)
 	{
 		if (a_value >= Settings::Get(G::WeapUsableAt) && IsMarked(a_list)) {
-			Unmark(a_list);
+			Unmark(a_obj, a_list);
 			Log::INFO("breakage: a weapon repaired to {:.1f}% is usable again", a_value * 100.0f);
 		}
 	}
@@ -140,7 +179,8 @@ namespace SKYBDeg::Breakage
 
 	RE::BSEventNotifyControl EquipGuard::ProcessEvent(const RE::TESEquipEvent* a_event, RE::BSTEventSource<RE::TESEquipEvent>*)
 	{
-		if (!a_event || !a_event->equipped) {
+		//Degradation or breakage off: a weapon marked broken can be used.
+		if (!a_event || !a_event->equipped || !Settings::On(G::Enabled) || !Settings::On(G::WeapBreakEnabled)) {
 			return RE::BSEventNotifyControl::kContinue;
 		}
 		auto player = RE::PlayerCharacter::GetSingleton();
@@ -159,7 +199,7 @@ namespace SKYBDeg::Breakage
 			}
 			const float usable = Settings::Get(G::WeapUsableAt);
 			if (Condition::GetHealth(list) >= usable) {
-				Unmark(list);  // UsableAt was lowered since it broke
+				Unmark(obj, list);  // UsableAt was lowered since it broke
 				continue;
 			}
 			RE::SendHUDMessage::ShowHUDMessage(

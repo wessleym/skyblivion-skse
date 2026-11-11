@@ -21,7 +21,7 @@ namespace Toast {
 		//Call once, at kDataLoaded.
 		static void Register();
 
-		//Safe from any thread: all GFx work is marshaled to UI tasks.
+		//Safe from any thread: all GFx work is marshaled to the main thread (MainThread::Post).
 		static void Show(std::string header, std::string title, std::string desc, std::string icon);
 
 	private:
@@ -33,7 +33,7 @@ namespace Toast {
 		//Retries DeliverIfReady until the clip reports ready, then drops the held toasts after about three seconds.
 		static void FlushWhenReady();
 
-		//One try, as a UI task: delivers everything held once the clip is ready.
+		//One try, on the main thread: delivers everything held once the clip is ready.
 		//Ends the chain when there is no HUD movie; the held toasts wait for the next HUD open.
 		//False while the clip is not ready yet.
 		static bool DeliverIfReady();
@@ -57,7 +57,7 @@ namespace Toast {
 		static constexpr int kReadyAttempts = 60;
 		static constexpr std::chrono::milliseconds kReadyInterval{ 50 };
 
-		//Guards s_pending and s_flushChainActive, which the sinks and UI tasks share.
+		//Guards s_pending and s_flushChainActive, which the sinks and the main-thread tasks share.
 		static inline std::mutex s_lock;
 		static inline std::vector<ToastFields> s_pending;
 		static inline bool s_flushChainActive = false;

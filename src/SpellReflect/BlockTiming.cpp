@@ -3,31 +3,15 @@
 #include "SpellReflect/Settings.h"
 
 #include <algorithm>
-#include <array>
 #include <atomic>
 #include <chrono>
-#include <cmath>
-#include <cstdint>
-#include <cstring>
-#include <format>
-#include <mutex>
-#include <optional>
-#include <random>
-#include <span>
-#include <string>
-#include <string_view>
-#include <thread>
-#include <unordered_map>
 #include <utility>
-#include <vector>
 
 using namespace std::literals;
 
 namespace SpellReflect::BlockTiming {
     namespace {
         using Clock = std::chrono::steady_clock;
-
-        constexpr REL::RelocationID kLookupAVByName{ 26570, 27203 };  // the lookup Papyrus GetActorValue uses
 
         // Clock ticks of the last press; 0 = never. Written by the input
         // thread, read by projectile hits.
@@ -70,9 +54,7 @@ namespace SpellReflect::BlockTiming {
 
     void OnDataLoaded() {
         const auto& name = Settings::Get().windowActorValue;
-        using Fn = RE::ActorValue(const char*);
-        REL::Relocation<Fn> lookup{ kLookupAVByName };
-        g_windowAV = lookup(name.c_str());
+        g_windowAV = REBridge::ActorValueByName(name.c_str());
         if (g_windowAV == RE::ActorValue::kNone) {
             Log::WARN("SpellReflect: window actor value '{}' not found; the window is fWindowBase only", name);
         } else {
@@ -90,7 +72,7 @@ namespace SpellReflect::BlockTiming {
     }
 
     float WindowPoints(RE::Actor* a_actor) {
-        return g_windowAV != RE::ActorValue::kNone ? a_actor->AsActorValueOwner()->GetActorValue(g_windowAV) : 0.0f;
+        return g_windowAV != RE::ActorValue::kNone ? REBridge::AVOwner(a_actor)->GetActorValue(g_windowAV) : 0.0f;
     }
 
     float Window(RE::Actor* a_actor) {

@@ -2,22 +2,18 @@
 
 #include "Papyrus/SKSEScriptRegistrar.h"
 #include "Platform/FormCache.h"
+#include "Platform/JsonFile.h"
+#include "Platform/Text.h"
+#include "UIs/Scaleform/ScaleformUtility.h"
 
 #include <algorithm>
 #include <cctype>
 #include <filesystem>
-#include <fstream>
 #include <map>
 #include <set>
-#include <sstream>
 #include <tuple>
 
 #include <nlohmann/json.hpp>
-
-// <Windows.h>, which this plugin's CommonLib build includes, maps PlaySound to PlaySoundA.
-#ifdef PlaySound
-#	undef PlaySound
-#endif
 
 namespace fs = std::filesystem;
 using nlohmann::json;
@@ -29,29 +25,6 @@ namespace ScrollCraft {
 		constexpr const char* kDeliveries = "ATRSG";
 		//the delivery an aspect essence asks for: Aether touch, Daedric ground, Ember aimed, Gloam self, Vital area
 		constexpr const char* kAspectDelivery = "TGASR";
-
-		std::string Lower(std::string a_text)
-		{
-			std::transform(a_text.begin(), a_text.end(), a_text.begin(),
-						   [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
-			return a_text;
-		}
-
-		//"HEX|Plugin" -> the scroll, or null (logged by the caller)
-		RE::TESForm* ResolveFormRef(const std::string& a_ref)
-		{
-			const auto bar = a_ref.find('|');
-			if (bar == std::string::npos || bar == 0 || bar + 1 >= a_ref.size()) {
-				return nullptr;
-			}
-			std::uint32_t localID = 0;
-			try {
-				localID = static_cast<std::uint32_t>(std::stoul(a_ref.substr(0, bar), nullptr, 16));
-			} catch (...) {
-				return nullptr;
-			}
-			return FormCache::ResolveLocal(localID & 0x00FFFFFF, a_ref.substr(bar + 1), RE::FormType::Scroll, "ScrollRecipeStore");
-		}
 
 		//One recipe object -> Recipe; the reason when it is refused. a_disabled: the recipe asks to be removed
 		//(only scroll and form are needed then).
@@ -85,7 +58,7 @@ namespace ScrollCraft {
 				a_why = "'form' (\"HEX|Plugin\") missing";
 				return false;
 			}
-			a_out.form = ResolveFormRef(a_out.formRef);
+			a_out.form = FormCache::GetRef<RE::ScrollItem>(a_out.formRef, "ScrollRecipeStore");
 			if (!a_out.form) {
 				a_why = "'form' " + a_out.formRef + " does not resolve to a scroll (is the plugin loaded?)";
 				return false;
@@ -220,10 +193,11 @@ namespace ScrollCraft {
 			std::vector<fs::path> others;
 			bool base = false;
 			for (const auto& entry : fs::directory_iterator(dir, ec)) {
-				if (!entry.is_regular_file() || Lower(entry.path().extension().string()) != ".json") {
+				std::error_code fileEc;
+				if (!entry.is_regular_file(fileEc) || Text::Lower(Text::Utf8(entry.path().extension())) != ".json") {
 					continue;
 				}
-				if (Lower(entry.path().filename().string()) == ScrollRecipeStore::BaseFile) {
+				if (Text::Lower(Text::Utf8(entry.path().filename())) == ScrollRecipeStore::BaseFile) {
 					out.insert(out.begin(), entry.path());
 					base = true;
 				} else {
@@ -231,7 +205,7 @@ namespace ScrollCraft {
 				}
 			}
 			std::sort(others.begin(), others.end(), [](const fs::path& a, const fs::path& b) {
-				return Lower(a.filename().string()) < Lower(b.filename().string());
+				return Text::Lower(Text::Utf8(a.filename())) < Text::Lower(Text::Utf8(b.filename()));
 			});
 			out.insert(out.end(), others.begin(), others.end());
 			if (!base) {
@@ -324,20 +298,18 @@ namespace ScrollCraft {
 		bool PapyrusHideInventory(RE::StaticFunctionTag*)
 		{
 			auto* ui = RE::UI::GetSingleton();
-			auto* queue = RE::UIMessageQueue::GetSingleton();
-			if (!ui || !queue || !ui->IsMenuOpen(RE::InventoryMenu::MENU_NAME)) {
+			if (!ui || !ui->IsMenuOpen(RE::InventoryMenu::MENU_NAME)) {
 				return false;
 			}
-			queue->AddMessage(RE::InventoryMenu::MENU_NAME, RE::UI_MESSAGE_TYPE::kHide, nullptr);
+			ScaleformUtility::HideMenu(RE::InventoryMenu::MENU_NAME);
 			return true;
 		}
 		void PapyrusShowInventory(RE::StaticFunctionTag*)
 		{
 			SKSE::GetTaskInterface()->AddTask([] {
 				auto* ui = RE::UI::GetSingleton();
-				auto* queue = RE::UIMessageQueue::GetSingleton();
-				if (ui && queue && !ui->IsMenuOpen(RE::InventoryMenu::MENU_NAME)) {
-					queue->AddMessage(RE::InventoryMenu::MENU_NAME, RE::UI_MESSAGE_TYPE::kShow, nullptr);
+				if (ui && !ui->IsMenuOpen(RE::InventoryMenu::MENU_NAME)) {
+					ScaleformUtility::ShowMenu(RE::InventoryMenu::MENU_NAME);
 				}
 			});
 		}
@@ -365,26 +337,21 @@ namespace ScrollCraft {
 		int skipped = 0;
 		int filesRead = 0;
 		for (std::size_t f = 0; f < files.size(); ++f) {
-			const auto label = files[f].filename().string();
-			std::ifstream file(files[f], std::ios::binary);
-			if (!file) {
-				Log::WARN("ScrollRecipeStore: {}: cannot be opened; skipped", label);
-				continue;
-			}
-			std::stringstream text;
-			text << file.rdbuf();
-			const auto doc = json::parse(text.str(), nullptr, false);
-			const auto recipes = doc.is_object() ? doc.find("recipes") : doc.end();
-			if (doc.is_discarded() || !doc.is_object() || recipes == doc.end() || !recipes->is_array()) {
-				Log::WARN("ScrollRecipeStore: {}: not valid JSON with a \"recipes\" array; skipped", label);
+			const auto label = Text::Utf8(files[f].filename());
+			const auto doc = JsonFile::ReadObject(files[f], "ScrollRecipeStore");
+			const auto recipes = doc ? doc->find("recipes") : json::const_iterator{};
+			if (!doc || recipes == doc->end() || !recipes->is_array()) {
+				if (doc) {
+					Log::WARN("ScrollRecipeStore: {}: no \"recipes\" array; skipped", label);
+				}
 				if (f == 0 && baseMissing.empty()) {
-					baseMissing = std::format("{} is not valid JSON", BaseFile);
+					baseMissing = std::format("{} is not valid JSON with a \"recipes\" array", BaseFile);
 				}
 				continue;
 			}
 			++filesRead;
 			if (f == 0) {
-				ReadTables(doc, label);
+				ReadTables(*doc, label);
 			}
 			std::size_t at = 0;
 			for (const auto& item : *recipes) {

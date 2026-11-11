@@ -78,7 +78,7 @@ namespace Toast {
 	}
 
 	void ToastService::FlushWhenReady() {
-		ScaleformUtility::RetryOnUIThread(kReadyAttempts, kReadyInterval, DeliverIfReady, [] {
+		ScaleformUtility::RetryOnMainThread(kReadyAttempts, kReadyInterval, DeliverIfReady, [] {
 			std::scoped_lock lock(s_lock);
 			Log::WARN("ToastService: The toast movie never reported ready. Dropping {} held toast(s).", s_pending.size());
 			s_pending.clear();

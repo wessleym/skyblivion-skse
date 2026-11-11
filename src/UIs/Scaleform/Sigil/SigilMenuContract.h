@@ -1,7 +1,7 @@
 #pragma once
 
-//The sigil stone menu's data feeds. The rows are byte-compatible with the Papyrus builders they replace,
-//so the SWF cannot tell the producers apart. The enchant and gem operations are in Sigil/SigilContract.h.
+//The sigil stone menu's data feeds, which replace the Papyrus builders. The gear rows are the builders'
+//format; the stone rows add two fields (the effect lists). The enchant and gem operations are in Sigil/SigilContract.h.
 namespace Sigil::SigilMenuContract {
 	//The sigil menu is hosted in CustomMenu.
 	inline constexpr const char* MenuName = "CustomMenu";

@@ -6,8 +6,9 @@
 // and, optionally, the player's allies.
 //
 //   player  every level of fDiffMultHPByPC{VE,E,N,H,VH,L} (damage dealt) and
-//           fDiffMultHPToPC{..} (damage taken) = its data-load value x the row,
-//           so the rows stack with difficulty and cover weapons and spells.
+//           fDiffMultHPToPC{..} (damage taken) = 1 x the row: the difficulty's own
+//           multipliers are set aside (the vanilla difficulty option is hidden), so
+//           the rows alone scale damage, weapons and spells alike.
 //           Game settings are not saved: SettingsStore re-applies on every load.
 //   allies  the four Multiply entries of SKYBCombatAllyPerk (weapons and damaging
 //           spells, taken / dealt), which fire only for player teammates and
@@ -25,12 +26,8 @@ private:
 	CombatService() = default;
 	void Apply();
 
-	struct Gmst {
-		RE::Setting* setting = nullptr;
-		float        base = 1.0f;
-	};
-	std::array<Gmst, 6> _byPC{};  // damage the player deals, per difficulty level
-	std::array<Gmst, 6> _toPC{};  // damage the player takes
+	std::array<RE::Setting*, 6> _byPC{};  // damage the player deals, per difficulty level
+	std::array<RE::Setting*, 6> _toPC{};  // damage the player takes
 	// the ally perk's value slots, in the ESP's entry order
 	RE::BGSEntryPointFunctionDataOneValue* _incomingWeapon = nullptr;
 	RE::BGSEntryPointFunctionDataOneValue* _outgoingWeapon = nullptr;

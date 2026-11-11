@@ -111,7 +111,6 @@ namespace SpellReflect::Settings {
         // crosshair reference within this many units (does not need a TESHitEvent on the container)
         bool        bruteHitFrame = true;
         float       bruteReach = 250.0f;
-        bool        bruteTrace = false;  // log every player hit on a non-actor and every power-attack hit frame
 
         // [Feedback] editor IDs (or Plugin|0xID); visual = ARTO or EFSH; empty = none.
         // Sound records lose their editor IDs at runtime, so the sounds come from
@@ -129,7 +128,6 @@ namespace SpellReflect::Settings {
         // [Debug]
         bool          observeOnly = false;
         std::uint32_t logEvents = 500;
-        bool          traceReturns = false;  // log what happens to returned projectiles (diagnostic)
     };
 
     void             Load();

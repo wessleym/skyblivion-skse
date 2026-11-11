@@ -9,8 +9,8 @@ namespace Dialogue {
 	//Each service has topics (the prompts whose fragments open it) and factions (who offers it).
 	//The built-in table can be extended or overridden by DialogueContract::ServicesIniFile:
 	//	[barter]                       ; section = service id
-	//	topics=EditorID|FormKey|icon   ; comma-separated; FormKey ("210285:Skyblivion.esm") and icon optional
-	//	factions=EditorID|FormKey      ; comma-separated
+	//	topics=EditorID|icon           ; comma-separated; icon optional
+	//	factions=EditorID              ; comma-separated
 	//	fallback=1                     ; offer and open with no row (default 0)
 	//	open=Class.Function            ; Papyrus static call, (Actor speaker)
 	//	clear=1                        ; drop the built-in topics and factions first

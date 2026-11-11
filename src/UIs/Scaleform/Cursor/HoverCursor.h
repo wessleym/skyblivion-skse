@@ -21,7 +21,7 @@
 //the cursor menu's own script moves whichever is showing. No change to cursormenu.swf, no
 //per-frame work: the listener runs only when the mouse moves, clicks or scrolls.
 //
-//Settings: Data\SKSE\Plugins\SKYBHoverCursor.ini ([HoverCursor] bEnabled, sExcludeMenus). Ledger L-0343.
+//Settings: Data\SKSE\Plugins\SKYBHoverCursor.ini ([HoverCursor] bEnabled, sExcludeMenus).
 namespace HoverCursor {
 	//SKSEPlugin_Load: the Scaleform callback (SKSE accepts them only while the plugin loads).
 	void InstallScaleform();

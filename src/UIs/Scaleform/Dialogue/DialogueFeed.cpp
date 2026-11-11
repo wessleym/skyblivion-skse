@@ -1,6 +1,5 @@
 #include "DialogueFeed.h"
 #include "DialogueContract.h"
-#include "DialogueLipTrace.h"
 #include "DialogueServices.h"
 #include "Platform/FormCache.h"
 #include "Disposition/DispositionSystem.h"
@@ -15,16 +14,13 @@
 namespace Dialogue {
 
 	namespace {
-		//Both resolve once, at data load, through the form table (editor ID first, since it survives a form
-		//renumber; the form key covers a load order without po3 Tweaks).
+		//Both resolve once, at data load, through the form table.
 		RE::TESTopic* PersuasionTopic() {
-			return FormCache::Get<RE::TESTopic>(DialogueContract::Forms::PersuasionTopicEditorID,
-				DialogueContract::Forms::PersuasionTopicFormID, DialogueContract::Forms::Plugin, "DialogueFeed");
+			return FormCache::Get<RE::TESTopic>(DialogueContract::Forms::PersuasionTopicEditorID, "DialogueFeed");
 		}
 
 		RE::TESFaction* NoPersuadeFaction() {
-			return FormCache::Get<RE::TESFaction>(DialogueContract::Forms::NoPersuadeFactionEditorID,
-				DialogueContract::Forms::NoPersuadeFactionFormID, DialogueContract::Forms::Plugin, "DialogueFeed");
+			return FormCache::Get<RE::TESFaction>(DialogueContract::Forms::NoPersuadeFactionEditorID, "DialogueFeed");
 		}
 
 		//The current speaker, or the last one, which the menu still shows while a response plays.
@@ -34,7 +30,7 @@ namespace Dialogue {
 				return nullptr;
 			}
 			auto handle = topicManager->speaker ? topicManager->speaker : topicManager->lastSpeaker;
-			auto reference = handle.get();
+			auto reference = REBridge::Lookup(handle);
 			return reference ? reference->As<RE::Actor>() : nullptr;
 		}
 
@@ -161,9 +157,6 @@ namespace Dialogue {
 			SKSE::GetTaskInterface()->AddTask([serviceID = ModEvents::StrArg(*a_event)] {
 				DialogueServices::Open(serviceID, DialogueSpeaker());
 			});
-		}
-		else if (a_event->eventName == DialogueContract::ModEvent::DialoguePick) {
-			DialogueLipTrace::Start(ModEvents::StrArg(*a_event), static_cast<int>(a_event->numArg));
 		}
 		return RE::BSEventNotifyControl::kContinue;
 	}

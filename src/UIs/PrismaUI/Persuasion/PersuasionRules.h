@@ -29,8 +29,8 @@ namespace Persuasion
 		// Reloads the INIs if they changed, then settings -> perks -> this player's values.
 		[[nodiscard]] static Effective Resolve();
 
-		// What a gain at a_disposition is multiplied by: 1 below Penalty.Start, down to Penalty.Floor
-		// at MaxDisposition, relieved by the player's Speechcraft. 1 when the penalty is off.
+		// What a gain at a_disposition is multiplied by: 1 below Penalty.Start, falling to
+		// 1 - Strength x (1 - Speechcraft relief) at MaxDisposition, never below Penalty.Floor. 1 when the penalty is off.
 		[[nodiscard]] static float PenaltyMultiplier(const Effective& a_eff, float a_disposition);
 
 		// The "rules" object of the view's init payload (see script.ts, PersuasionRules).

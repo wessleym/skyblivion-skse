@@ -5,8 +5,6 @@
 #include <utility>
 #include <vector>
 
-#include <Windows.h>
-
 namespace MainThread {
 
 	namespace {
@@ -24,7 +22,6 @@ namespace MainThread {
 		std::mutex                         g_lock;
 		std::vector<std::function<void()>> g_queue;
 		std::atomic<bool>                  g_installed{ false };
-		std::atomic<bool>                  g_firstFrameLogged{ false };
 
 		//Runs what was posted before this frame. A task posting another task gets the next frame.
 		void Drain() {
@@ -32,9 +29,6 @@ namespace MainThread {
 			{
 				std::scoped_lock lock(g_lock);
 				tasks.swap(g_queue);
-			}
-			if (!g_firstFrameLogged.exchange(true)) {
-				Log::INFO("MainThread: frame hook running on thread {}", ::GetCurrentThreadId());
 			}
 			for (auto& task : tasks) {
 				if (task) {

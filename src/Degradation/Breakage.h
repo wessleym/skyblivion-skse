@@ -21,7 +21,7 @@ namespace SKYBDeg::Breakage
 	void OnUse(RE::TESBoundObject* a_obj, RE::ExtraDataList* a_list, bool a_power, bool a_block);
 
 	// The condition of a marked instance changed to a_value: unmark it at UsableAt or above.
-	void OnConditionSet(RE::ExtraDataList* a_list, float a_value);
+	void OnConditionSet(RE::TESBoundObject* a_obj, RE::ExtraDataList* a_list, float a_value);
 
 	// Undoes the player equipping a broken weapon.
 	class EquipGuard : public RE::BSTEventSink<RE::TESEquipEvent>

@@ -19,10 +19,6 @@ namespace StartMenu {
 		//Call once, at kDataLoaded, after SettingsService.
 		static void Register();
 
-		//At kPostLoadGame and in the kNewGame task: clears UI::modal when no modal menu is left on the stack
-		//(the title screen's Creations login menu can close without clearing it, blocking all input but the console).
-		static void RepairInputAfterMenus();
-
 		//In the kNewGame task, after the settings store has filled the new character's values: the presets
 		//chosen on the new-game panel, if any, replace its Combat / Progression rows. Once per choice.
 		static void OnNewGame();

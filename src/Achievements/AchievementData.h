@@ -6,8 +6,8 @@
 
 namespace Achievements {
 
-	//An achievement counted by a global: the menu shows count / total, and SKYBAchievements.CheckProgress
-	//unlocks once the count reaches the total. Globals are named by editor ID.
+	//An achievement counted by a global: the menu shows count / total. Nothing here unlocks it: the script
+	//that raises the count calls SKYBAchievements.Unlock. Globals are named by editor ID.
 	struct Progress {
 		bool present = false;
 		std::string countGlobal;

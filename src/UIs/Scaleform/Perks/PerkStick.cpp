@@ -2,6 +2,7 @@
 #include "PerksContract.h"
 #include "Papyrus/ModEvents.h"
 #include "Platform/MainThread.h"
+#include "UIs/Scaleform/ScaleformUtility.h"
 
 namespace PerksView {
 
@@ -83,10 +84,8 @@ namespace PerksView {
 		if (function.empty()) {
 			return;
 		}
-		auto  ui = RE::UI::GetSingleton();
-		auto  m = ui && ui->IsMenuOpen(menu) ? ui->GetMenu(menu) : nullptr;
-		auto  movie = m ? m->uiMovie : nullptr;
-		bool  ok = false;
+		auto movie = ScaleformUtility::OpenMenuMovie(menu);
+		bool ok = false;
 		if (movie) {
 			RE::GFxValue args[2] = { RE::GFxValue(static_cast<double>(x)), RE::GFxValue(static_cast<double>(y)) };
 			ok = movie->Invoke(function.c_str(), nullptr, args, 2);

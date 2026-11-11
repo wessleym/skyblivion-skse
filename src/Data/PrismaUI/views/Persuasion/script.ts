@@ -43,46 +43,15 @@ interface PersuasionRulesData {
     decay: PersuasionDecayRule;
     penalty: PersuasionPenaltyRule;
     bribeEnabled: boolean;
+    //Free turns of the wheel per conversation ([General] FreeRotations, raised by the Speechcraft mastery perks).
+    freeRotations: number;
 }
 
 class PersuasionRules {
-    private constructor(public readonly data: PersuasionRulesData) { }
+    public constructor(public readonly data: PersuasionRulesData) { }
 
-    //Oblivion's wheel: used when C++ sends no rules.
-    private static defaults(): PersuasionRulesData {
-        return {
-            responses: { Love: { factor: 2, add: 0 }, Like: { factor: 1, add: 0 }, Dislike: { factor: -1, add: 0 }, Hate: { factor: -3, add: 0 } },
-            approaches: { Admire: { mult: 1, add: 0 }, Boast: { mult: 1, add: 0 }, Joke: { mult: 1, add: 0 }, Coerce: { mult: 1, add: 0 } },
-            gainMult: 1,
-            lossMult: 1,
-            maxDisposition: 100,
-            closeOnMax: true,
-            maxRounds: 0,
-            decay: { whileOpen: false, perSecond: 0, perRotation: 0, startDelay: 0, floor: 0 },
-            penalty: { enabled: false, start: 0, strength: 0, curve: 1, relief: 0, floor: 1 },
-            bribeEnabled: true
-        };
-    }
-
-    //The payload's rules over the defaults, section by section, so a partial payload still works.
-    public static from(data: Partial<PersuasionRulesData> | undefined) {
-        const d = PersuasionRules.defaults();
-        if (data != null) {
-            Object.assign(d.responses, data.responses || {});
-            Object.assign(d.approaches, data.approaches || {});
-            Object.assign(d.decay, data.decay || {});
-            Object.assign(d.penalty, data.penalty || {});
-            const scalars: (keyof PersuasionRulesData)[] = ["gainMult", "lossMult", "maxDisposition", "closeOnMax", "maxRounds", "bribeEnabled"];
-            scalars.forEach((key) => {
-                const value = data[key];
-                if (value != null) { (<any>d)[key] = value; }
-            });
-        }
-        return new PersuasionRules(d);
-    }
-
-    //What a gain at disposition is multiplied by: 1 below Start, down to Floor at the maximum, relieved by
-    //Speechcraft (relief is already scaled by the skill). The same formula as Rules::PenaltyMultiplier in C++.
+    //What a gain at disposition is multiplied by: 1 below Start, falling to 1 - Strength x (1 - relief) at the
+    //maximum, never below Floor (relief is already scaled by Speechcraft). The same formula as Rules::PenaltyMultiplier in C++.
     public penaltyMultiplier(disposition: number) {
         const p = this.data.penalty;
         if (!p.enabled) { return 1; }
@@ -123,7 +92,7 @@ interface PersuasionInitData {
     name: string;
     disposition: number;
     preferences: Record<PersuasionActionId, PreferenceString>;
-    rules?: Partial<PersuasionRulesData>;//absent: Oblivion's defaults apply
+    rules: PersuasionRulesData;
 }
 
 class WedgeClickResult {
@@ -248,8 +217,10 @@ class PersuasionGame {
     private npc: NpcSession | null;
     private round: Round | null;
     private active = false;
-    private rules = PersuasionRules.from(undefined);
+    private rules!: PersuasionRules;//set by reset (init), before anything reads it
     private roundsPlayed = 0;
+    private freeRotationsLeft = 0;
+    private freeTurnThisRound = false;
     public constructor() {
         this.npc = null;
         this.round = null;
@@ -326,6 +297,26 @@ class PersuasionGame {
 
     public startRound() {
         this.round = new Round();
+        this.freeTurnThisRound = false;
+    }
+
+    public get freeRotationsRemaining() {
+        return this.freeRotationsLeft;
+    }
+
+    //A free turn of the wheel: the wedge sizes move one quadrant clockwise without a pick, as in the Scaleform
+    //wheel (SKYBPersuasionWheel.swf). At most one per round, while the round is open, and only while some are left.
+    public get rotateAllowed() {
+        return this.active && this.npc != null && this.round != null && !this.npc.isGameOver &&
+            !this.round.isLocked && this.freeRotationsLeft > 0 && !this.freeTurnThisRound;
+    }
+
+    //Spends one free turn. False, spending nothing, when none may be taken now.
+    public useFreeRotation() {
+        if (!this.rotateAllowed) { return false; }
+        this.freeRotationsLeft--;
+        this.freeTurnThisRound = true;
+        return true;
     }
 
     public handleWedgeClicked(actionId: PersuasionActionId, index: number) {
@@ -388,6 +379,7 @@ class PersuasionGame {
         this.active = true;
         this.rules = rules;
         this.roundsPlayed = 0;
+        this.freeRotationsLeft = Math.max(0, Math.floor(rules.data.freeRotations));
         this.npc = new NpcSession(preferences, disposition, rules.data.maxDisposition);
         this.startRound();
     }
@@ -446,6 +438,8 @@ class PersuasionBridges {
     //C++ -> JS static entry points:
     static init(payload: string | PersuasionInitData) { PersuasionBridges.instance.onInit(payload); }
     static bribeResult(payload: string | PersuasionBribeResult) { PersuasionBridges.instance.onBribeResult(payload); }
+    //C++ is closing the view: a game is loading, or the NPC died (the world runs under the wheel).
+    static abort() { PersuasionBridges.instance.onAbort(); }
 
     //JS -> C++:
     public wedgeHover(preference: PreferenceString | "") { window.persuasionWedgeHover(preference); }
@@ -460,10 +454,23 @@ class PersuasionBridges {
         this.game.deactivate();
         window.persuasionClose(closeMethod);
     }
-    public bribe(disposition: string) { window.persuasionBribe(disposition); }
+    //As close, without telling C++ (it is the one closing): the frame loop and the decay stop.
+    private onAbort() {
+        this.decayTicker.stop();
+        this.game.deactivate();
+    }
+    //One bribe at a time: the result arrives a frame or more later, and a second request sent before it
+    //would be priced at the same disposition and charged again.
+    private bribePending = false;
+    public bribe(disposition: string) {
+        if (this.bribePending) { return; }
+        this.bribePending = true;
+        window.persuasionBribe(disposition);
+    }
 
     // --- Inbound handler logic (instance) -----------------------------------------
     private onInit(payload: string | PersuasionInitData) {
+        this.bribePending = false;
         const data = (typeof payload == "string") ? <PersuasionInitData>JSON.parse(payload) : payload;
 
         //Convert PreferenceStrings to actual Preferences:
@@ -472,9 +479,7 @@ class PersuasionBridges {
             preferences[actionId] = Preference.fromName(data.preferences[actionId]);
         });
 
-        const rules = PersuasionRules.from(data.rules);
-        this.game.reset(preferences, data.disposition, rules);
-        console.log("Persuasion rules: " + JSON.stringify(rules.data));
+        this.game.reset(preferences, data.disposition, new PersuasionRules(data.rules));
         //Clear the wedge "used" marks and restore the label.
         this.actions.forEach((a) => { this.elements.setUsedVisual(a.id, false); });
         this.elements.dispositionLabel.reset();
@@ -491,6 +496,7 @@ class PersuasionBridges {
     }
 
     private onBribeResult(payload: string | PersuasionBribeResult) {
+        this.bribePending = false;
         const result = typeof payload == "string" ? <PersuasionBribeResult>JSON.parse(payload) : payload;
         if (result.success) {
             const previousDisposition = this.game.disposition;
@@ -547,6 +553,8 @@ class PersuasionViewElements {
     private readonly npcDispositionEl: HTMLElement;
     private readonly bribeButtonEl: HTMLButtonElement;
     private readonly closeButtonEl: HTMLButtonElement;
+    private readonly rotateButtonEl: HTMLButtonElement;
+    private rotateButtonState = "";
     private readonly barsRotorEl: HTMLElement;
     private readonly hitboxGroupEl: HTMLElement;
     private readonly persuasionActionIdToActionElements: Record<PersuasionActionId, ActionElements>;
@@ -557,6 +565,7 @@ class PersuasionViewElements {
         this.npcDispositionEl = el("npc-disposition");
         this.bribeButtonEl = <HTMLButtonElement>el("bribe-btn");
         this.closeButtonEl = <HTMLButtonElement>el("close-btn");
+        this.rotateButtonEl = <HTMLButtonElement>el("rotate-btn");
         this.barsRotorEl = el("bars-rotor");
         this.hitboxGroupEl = el("hitbox-group");
         this.persuasionActionIdToActionElements = PersuasionViewElements.getPersuasionActionIdToActionElements(actions, barCount);
@@ -641,6 +650,9 @@ class PersuasionViewElements {
     public onCloseClicked(handler: () => void) {
         this.closeButtonEl.addEventListener("click", handler);
     }
+    public onRotateClicked(handler: () => void) {
+        this.rotateButtonEl.addEventListener("click", handler);
+    }
     public onHitboxClicked(actionId: PersuasionActionId, handler: () => void) {
         this.persuasionActionIdToActionElements[actionId].hitbox.addEventListener("click", handler);
     }
@@ -672,18 +684,33 @@ class PersuasionViewElements {
     public setBribeButtonEnabled(enabled: boolean) {
         this.bribeButtonEl.disabled = !enabled;
     }
+    //The free-turn button: shown only when the conversation has free turns, labelled with how many are left.
+    //Called every frame, so the DOM is touched only when something changed.
+    public setRotateButton(shown: boolean, enabled: boolean, left: number) {
+        const state = shown + "|" + enabled + "|" + left;
+        if (state == this.rotateButtonState) { return; }
+        this.rotateButtonState = state;
+        this.rotateButtonEl.hidden = !shown;
+        this.rotateButtonEl.disabled = !shown || !enabled;
+        this.rotateButtonEl.textContent = "Rotate (" + left + ")";
+        if (this.rotateButtonEl.disabled && document.activeElement == this.rotateButtonEl) {
+            this.rotateButtonEl.blur();
+        }
+    }
     public isRotating() {
         return this.barsRotorEl.classList.contains("spinning");
     }
     public focusTarget(target: NavTarget) {
         if (target == "Close") { this.closeButtonEl.focus(); }
         else if (target == "Bribe") { this.bribeButtonEl.focus(); }
+        else if (target == "Rotate") { this.rotateButtonEl.focus(); }
         else { this.focusAction(target); }
     }
     //Whether a target can receive focus, read straight from each element's real disabled state.
     public isTargetEnabled(target: NavTarget) {
         if (target == "Close") { return !this.closeButtonEl.disabled; }
         if (target == "Bribe") { return !this.bribeButtonEl.disabled; }
+        if (target == "Rotate") { return !this.rotateButtonEl.disabled; }
         return !this.persuasionActionIdToActionElements[target].invisibleFocusButton.disabled;
     }
     //The navigation target currently holding focus (document.activeElement), or null if it's none of ours.
@@ -691,6 +718,7 @@ class PersuasionViewElements {
         const active = document.activeElement;
         if (active == this.closeButtonEl) { return "Close"; }
         if (active == this.bribeButtonEl) { return "Bribe"; }
+        if (active == this.rotateButtonEl) { return "Rotate"; }
         const ids = Object.keys(this.persuasionActionIdToActionElements) as PersuasionActionId[];
         for (const id of ids) {
             if (this.persuasionActionIdToActionElements[id].invisibleFocusButton == active) { return id; }
@@ -867,7 +895,9 @@ class PersuasionRenderer {
 }
 
 type NavDirection = "Up" | "Down" | "Left" | "Right";
-type NavTarget = PersuasionActionId | "Close" | "Bribe";
+type NavTarget = PersuasionActionId | "Close" | "Rotate" | "Bribe";
+//The bottom buttons, left to right as index.html lays them out.
+const kButtonRow: NavTarget[] = ["Close", "Rotate", "Bribe"];
 
 //Allows keyboard or gamepad DOM element focusing
 class FocusNavigator {
@@ -881,11 +911,21 @@ class FocusNavigator {
 
     //The target a direction moves to, or null to stay put (nothing there, or a disabled button).
     private neighbor(current: NavTarget | null, direction: NavDirection) {
-        if (current == "Close" || current == "Bribe") {
-            if (direction == "Up") { return "Joke"; }
+        if (current != null && kButtonRow.indexOf(current) >= 0) {
+            if (direction == "Up") {
+                //The bottom quadrant first, else any quadrant still to pick; a used one can't take the focus.
+                for (const target of ["Joke", "Coerce", "Boast", "Admire"] as NavTarget[]) {
+                    if (this.elements.isTargetEnabled(target)) { return target; }
+                }
+                return null;
+            }
             if (direction == "Left" || direction == "Right") {
-                const other = current == "Close" ? "Bribe" : "Close";
-                return this.elements.isTargetEnabled(other) ? other : null;//can't move onto a disabled button.
+                //The next enabled button that way; can't move onto a disabled (or hidden) button.
+                const step = direction == "Right" ? 1 : -1;
+                for (let i = kButtonRow.indexOf(current) + step; i >= 0 && i < kButtonRow.length; i += step) {
+                    if (this.elements.isTargetEnabled(kButtonRow[i])) { return kButtonRow[i]; }
+                }
+                return null;
             }
             return null;//down from a button goes nowhere.
         }
@@ -897,10 +937,12 @@ class FocusNavigator {
         return this.firstEnabledButton();
     }
 
-    //The button Down lands on: Close when it's enabled (between rounds), otherwise Bribe (mid-round).
-    private firstEnabledButton() {
-        if (this.elements.isTargetEnabled("Close")) { return "Close"; }
-        if (this.elements.isTargetEnabled("Bribe")) { return "Bribe"; }
+    //The button Down lands on: Close when it's enabled (between rounds), otherwise Bribe (mid-round),
+    //otherwise Rotate.
+    private firstEnabledButton(): NavTarget | null {
+        for (const target of ["Close", "Bribe", "Rotate"] as NavTarget[]) {
+            if (this.elements.isTargetEnabled(target)) { return target; }
+        }
         return null;
     }
 }
@@ -966,10 +1008,6 @@ class FocusNavigator {
         }
 
         if (result.roundsExhausted) {
-            console.log("Persuasion rounds exhausted: " + JSON.stringify({
-                uses: game.usedMagnitudes,
-                disposition: result.disposition
-            }));
             bridges.endGame("rounds");
             return;
         }
@@ -1008,8 +1046,19 @@ class FocusNavigator {
         }
     }
 
+    //A free turn (Rotate button, R, pad Y): the wedge sizes move one quadrant without a pick. It costs no
+    //disposition: [Decay] PerRotation is for the turn that follows a pick.
+    function activateRotate() {
+        if (elements.isRotating() || !game.useFreeRotation()) { return; }
+        elements.animateMagnitudeRotation(() => {
+            game.rotateMagnitudes();
+            renderer.renderWedges();
+        });
+    }
+
     elements.onBribeClicked(activateBribe);
     elements.onCloseClicked(activateClose);
+    elements.onRotateClicked(activateRotate);
 
     actions.forEach((action, i) => {
         elements.onHitboxClicked(action.id, () => activateQuadrant(action, i));
@@ -1031,7 +1080,7 @@ class FocusNavigator {
         elements.onHitboxMouseLeave(action.id, () => elements.blurAction(action.id));
     });
 
-    //Directional navigation over the wheel and the two bottom buttons.
+    //Directional navigation over the wheel and the bottom buttons.
     //Driven by the keyboard here and by the gamepad d-pad or stick below; both just move the DOM focus cursor.
     const focusNavigator = new FocusNavigator(elements);
     document.addEventListener("keydown", (e) => {
@@ -1042,6 +1091,11 @@ class FocusNavigator {
             if (e.key == "ArrowLeft" || code == 37) { return "Left"; }
             if (e.key == "ArrowRight" || code == 39) { return "Right"; }
             return null;
+        }
+        if (e.key == "r" || e.key == "R" || (<any>e).keyCode == 82) {
+            activateRotate();
+            e.preventDefault();
+            return;
         }
         const direction = keyEventToNavDirection(e);
         if (direction == null) { return; }
@@ -1069,6 +1123,9 @@ class FocusNavigator {
             if (game.canBeClosed) {
                 bridges.close("cancel-gamepad-button-pressed");
             }
+        }
+        else if (detail.w3cButtonIndex == 3) {//Y: a free turn, as in the Scaleform wheel
+            activateRotate();
         }
     });
 
@@ -1100,6 +1157,9 @@ class FocusNavigator {
             requestAnimationFrame(onAnimationFrame);
             return;
         }
+        //The free-turn button follows the game (rounds, game over, turns left) wherever that changes.
+        elements.setRotateButton(game.hasSession && game.currentRules.data.freeRotations > 0,
+            game.rotateAllowed && !elements.isRotating(), game.freeRotationsRemaining);
         const gamepadDirection = getGamepadDirection();
         if (gamepadDirection != null && lastGamepadDirection != gamepadDirection) {
             focusNavigator.handle(gamepadDirection);

@@ -24,12 +24,11 @@ void CombatService::Register() {
 			//every difficulty level deals and takes x1: the settings menu's Damage rows are the only scale
 			//(the vanilla difficulty option is hidden in the journal and the title screen)
 			Log::INFO("combat: {} was {} - now 1 (times the Damage row)", name, s->GetFloat());
-			(*arr)[i] = {s, 1.0f};
+			(*arr)[i] = s;
 		}
 	}
 
-	auto* dh = RE::TESDataHandler::GetSingleton();
-	auto* perk = dh ? RE::TESForm::LookupByEditorID<RE::BGSPerk>(kAllyPerk) : nullptr;
+	auto* perk = RE::TESForm::LookupByEditorID<RE::BGSPerk>(kAllyPerk);
 	if (!perk) {
 		Log::WARN("combat: perk {} not found in any loaded plugin - the damage rows reach the player only, not allies", kAllyPerk);
 	} else {
@@ -92,11 +91,11 @@ void CombatService::Apply() {
 		return;  // values arrive before data load only on odd paths; Register applies them
 	}
 	for (std::size_t i = 0; i < kLevels.size(); ++i) {
-		if (_byPC[i].setting) {
-			_byPC[i].setting->data.f = _byPC[i].base * _dealt;
+		if (_byPC[i]) {
+			_byPC[i]->data.f = _dealt;
 		}
-		if (_toPC[i].setting) {
-			_toPC[i].setting->data.f = _toPC[i].base * _taken;
+		if (_toPC[i]) {
+			_toPC[i]->data.f = _taken;
 		}
 	}
 	const float taken = _allies ? _taken : 1.0f;

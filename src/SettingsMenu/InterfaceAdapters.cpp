@@ -1,5 +1,6 @@
 #include "SettingsMenu/InterfaceAdapters.h"
 
+#include "Papyrus/ModEvents.h"
 #include "Platform/FormCache.h"
 
 #include <algorithm>
@@ -90,6 +91,32 @@ namespace {
 
 	// QuickLootIEMCM clears IsInitialLoad once OnConfigInit has imported/reset
 	// its settings; before that anything written would be overwritten
+	enum class Write { kUnchanged, kWritten, kWrongType };
+
+	// a_value into a QuickLoot property, as the property's type (bool, int or float); nothing when it holds it already
+	Write WriteProperty(RE::BSScript::Variable& a_var, float a_value) {
+		if (a_var.IsBool()) {
+			if (a_var.GetBool() == (a_value >= 0.5f)) {
+				return Write::kUnchanged;
+			}
+			a_var.SetBool(a_value >= 0.5f);
+		} else if (a_var.IsInt()) {
+			const auto v = static_cast<std::int32_t>(std::lround(a_value));
+			if (a_var.GetSInt() == v) {
+				return Write::kUnchanged;
+			}
+			a_var.SetSInt(v);
+		} else if (a_var.IsFloat()) {
+			if (std::abs(a_var.GetFloat() - a_value) <= 1e-4f) {
+				return Write::kUnchanged;
+			}
+			a_var.SetFloat(a_value);
+		} else {
+			return Write::kWrongType;
+		}
+		return Write::kWritten;
+	}
+
 	bool QuickLootInitialised(const ObjectPtr& a_ql) {
 		const auto* flag = a_ql->GetProperty("IsInitialLoad");
 		return !flag || !flag->IsBool() || !flag->GetBool();
@@ -116,9 +143,7 @@ InterfaceAdapters* InterfaceAdapters::GetSingleton() {
 }
 
 void InterfaceAdapters::Register() {
-	if (auto src = SKSE::GetModCallbackEventSource()) {
-		src->AddEventSink(this);
-	}
+	ModEvents::AddSink(this);
 	Log::INFO("interface: adapters ready (moreHUD globals, QuickLoot properties, MCM pages hidden: {})", kHiddenPages.size());
 }
 
@@ -219,25 +244,20 @@ void InterfaceAdapters::Flush() {
 			_quickLootWaitLogged = false;
 			std::size_t written = 0;
 			for (const auto& [name, value] : _quickLoot) {
-			for (const auto& ql : all) {
-				auto* var = ql->GetProperty(name.c_str());
-				if (!var) {
-					Log::WARN("interface: QuickLoot has no property {}", name);
-					continue;
+				for (const auto& ql : all) {
+					auto* var = ql->GetProperty(name.c_str());
+					if (!var) {
+						Log::WARN("interface: QuickLoot has no property {}", name);
+						continue;
+					}
+					const auto result = WriteProperty(*var, value);
+					if (result == Write::kWrongType) {
+						Log::WARN("interface: QuickLoot property {} has an unexpected type", name);
+						continue;
+					}
+					_quickLootApplied[name] = value;
+					written += result == Write::kWritten ? 1 : 0;
 				}
-				if (var->IsBool()) {
-					var->SetBool(value >= 0.5f);
-				} else if (var->IsInt()) {
-					var->SetSInt(static_cast<std::int32_t>(std::lround(value)));
-				} else if (var->IsFloat()) {
-					var->SetFloat(value);
-				} else {
-					Log::WARN("interface: QuickLoot property {} has an unexpected type", name);
-					continue;
-				}
-				_quickLootApplied[name] = value;
-				++written;
-			}
 			}
 			_quickLoot.clear();
 			_quickLootDirty = false;
@@ -272,25 +292,15 @@ void InterfaceAdapters::Recheck() {
 	}
 	std::size_t rewritten = 0;
 	for (const auto& ql : all) {
-	if (!QuickLootInitialised(ql)) {
-		continue;
-	}
-	for (const auto& [name, value] : _quickLootApplied) {
-		auto* var = ql->GetProperty(name.c_str());
-		if (!var) {
+		if (!QuickLootInitialised(ql)) {
 			continue;
 		}
-		if (var->IsBool() && var->GetBool() != (value >= 0.5f)) {
-			var->SetBool(value >= 0.5f);
-		} else if (var->IsInt() && var->GetSInt() != static_cast<std::int32_t>(std::lround(value))) {
-			var->SetSInt(static_cast<std::int32_t>(std::lround(value)));
-		} else if (var->IsFloat() && std::abs(var->GetFloat() - value) > 1e-4f) {
-			var->SetFloat(value);
-		} else {
-			continue;
+		for (const auto& [name, value] : _quickLootApplied) {
+			auto* var = ql->GetProperty(name.c_str());
+			if (var && WriteProperty(*var, value) == Write::kWritten) {
+				++rewritten;
+			}
 		}
-		++rewritten;
-	}
 	}
 	if (rewritten > 0) {
 		RE::BSTSmartPointer<RE::BSScript::IStackCallbackFunctor> none;

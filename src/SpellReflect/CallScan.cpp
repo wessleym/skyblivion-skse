@@ -1,22 +1,13 @@
 #include "SpellReflect/CallScan.h"
 
 #include <algorithm>
-#include <array>
-#include <atomic>
-#include <chrono>
-#include <cmath>
 #include <cstdint>
 #include <cstring>
 #include <format>
-#include <mutex>
 #include <optional>
-#include <random>
 #include <span>
 #include <string>
 #include <string_view>
-#include <thread>
-#include <unordered_map>
-#include <utility>
 #include <vector>
 
 using namespace std::literals;
@@ -117,27 +108,26 @@ namespace SpellReflect::CallScan {
         return calls;
     }
 
-    std::optional<std::uintptr_t> FindCallIn(std::string_view a_tag, std::uint64_t a_callerId, std::uintptr_t a_callee,
+    std::optional<std::uintptr_t> FindCallIn(std::string_view a_tag, std::string_view a_callerName, std::uintptr_t a_caller, std::uintptr_t a_callee,
                                              const std::vector<Call>& a_calls, std::span<const Hint> a_hints) {
         const auto& img = GetImage();
-        const auto  caller = REL::ID(a_callerId).address();
 
         std::vector<std::uintptr_t> found;
         for (const auto& call : a_calls) {
-            if (call.function == caller) {
+            if (call.function == a_caller) {
                 found.push_back(call.site);
             }
         }
         if (found.size() == 1) {
-            Log::INFO("SpellReflect: {}: call found in {} at +{:#x}", a_tag, a_callerId, found[0] - caller);
+            Log::INFO("SpellReflect: {}: call found in {} at +{:#x}", a_tag, a_callerName, found[0] - a_caller);
             return found[0];
         }
         if (found.size() > 1) {
             std::string offsets;
             for (const auto site : found) {
-                offsets += std::format(" +{:#x}", site - caller);
+                offsets += std::format(" +{:#x}", site - a_caller);
             }
-            Log::ERROR("SpellReflect: {}: {} calls in {} ({}), expected one", a_tag, found.size(), a_callerId, offsets);
+            Log::ERROR("SpellReflect: {}: {} calls in {} ({}), expected one", a_tag, found.size(), a_callerName, offsets);
             return std::nullopt;
         }
 
@@ -147,14 +137,14 @@ namespace SpellReflect::CallScan {
             if (hint.runtime != runtime) {
                 continue;
             }
-            const auto site = caller + hint.offset;
+            const auto site = a_caller + hint.offset;
             const auto target = reinterpret_cast<const std::uint8_t*>(site)[0] == 0xE8 ? CallTarget(site) : 0;
             if (target && (target < img.textBegin || target >= img.textEnd)) {
-                Log::INFO("SpellReflect: {}: {}+{:#x} is already hooked by another plugin; chaining", a_tag, a_callerId, hint.offset);
+                Log::INFO("SpellReflect: {}: {}+{:#x} is already hooked by another plugin; chaining", a_tag, a_callerName, hint.offset);
                 return site;
             }
         }
-        Log::ERROR("SpellReflect: {}: no call of {:#x} found in {}", a_tag, a_callee - img.base, a_callerId);
+        Log::ERROR("SpellReflect: {}: no call of {:#x} found in {}", a_tag, a_callee - img.base, a_callerName);
         return std::nullopt;
     }
 }

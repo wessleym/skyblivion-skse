@@ -3,13 +3,13 @@
 #include <cstdint>
 #include <optional>
 #include <span>
-#include <string>
 #include <string_view>
 #include <vector>
 
 // Finds engine call sites at run time instead of trusting a fixed offset per
-// game version. A hook point is named by two Address Library ids: the function
-// that holds the call and the function it calls. The scan walks the game's
+// game version. A hook point is named by two addresses (Address Library ids, or
+// VR offsets where VR's library lacks the id): the function that holds the call
+// and the function it calls. The scan walks the game's
 // .text for every `call rel32` (E8) to the callee and keeps the ones inside the
 // caller. "Inside" uses the exe's own unwind table (.pdata): a call in a
 // split-off cold chunk still belongs to its parent function.
@@ -34,10 +34,10 @@ namespace SpellReflect::CallScan {
         std::ptrdiff_t offset;
     };
 
-    // The single call of a_callee inside a_caller, from a_calls (FindCalls of that
-    // callee). Logs what it found under a_tag; nullopt when there is none or more
-    // than one.
-    std::optional<std::uintptr_t> FindCallIn(std::string_view a_tag, std::uint64_t a_callerId,
+    // The single call of a_callee inside the function at a_caller, from a_calls
+    // (FindCalls of that callee). Logs what it found under a_tag, naming the caller
+    // a_callerName; nullopt when there is none or more than one.
+    std::optional<std::uintptr_t> FindCallIn(std::string_view a_tag, std::string_view a_callerName, std::uintptr_t a_caller,
                                              std::uintptr_t a_callee, const std::vector<Call>& a_calls,
                                              std::span<const Hint> a_hints);
 

@@ -1,21 +1,13 @@
 #include "ScrollCastXP.h"
+#include "Platform/IniFile.h"
+#include "Platform/Text.h"
 
 #include <algorithm>
-#include <cctype>
-#include <fstream>
 #include <string>
 
 namespace ScrollCraft {
 
 	namespace {
-		std::string Trim(std::string a_text)
-		{
-			const auto notSpace = [](unsigned char c) { return !std::isspace(c); };
-			a_text.erase(a_text.begin(), std::find_if(a_text.begin(), a_text.end(), notSpace));
-			a_text.erase(std::find_if(a_text.rbegin(), a_text.rend(), notSpace).base(), a_text.end());
-			return a_text;
-		}
-
 		//1 + the highest Minimum Skill Level of the item's effects / 25, clamped 1..5 (Novice 0 .. Master 100)
 		int Tier(const RE::MagicItem* a_item)
 		{
@@ -48,45 +40,25 @@ namespace ScrollCraft {
 		float scrollScale = 0.02f;
 		float staffScale = 0.02f;
 		bool log = true;
-		std::ifstream file(IniFile);
-		if (!file) {
-			Log::WARN("ScrollCastXP: {} not found; defaults (Enabled 1, ScrollScale 0.02, StaffScale 0.02)", IniFile);
-		} else {
-			std::string line;
-			std::string section;
-			while (std::getline(file, line)) {
-				line = Trim(line);
-				if (line.empty() || line[0] == ';' || line[0] == '#') {
-					continue;
-				}
-				if (line.front() == '[' && line.back() == ']') {
-					section = line.substr(1, line.size() - 2);
-					continue;
-				}
-				const auto eq = line.find('=');
-				if (section != "CastingXP" || eq == std::string::npos) {
-					continue;
-				}
-				const auto key = Trim(line.substr(0, eq));
-				auto value = Trim(line.substr(eq + 1));
-				const auto comment = value.find(';');
-				if (comment != std::string::npos) {
-					value = Trim(value.substr(0, comment));
-				}
-				try {
-					if (key == "Enabled") {
-						enabled = std::stof(value) != 0.0f;
-					} else if (key == "ScrollScale") {
-						scrollScale = std::clamp(std::stof(value), 0.0f, 10.0f);
-					} else if (key == "StaffScale") {
-						staffScale = std::clamp(std::stof(value), 0.0f, 10.0f);
-					} else if (key == "LogCasts") {
-						log = std::stof(value) != 0.0f;
-					}
-				} catch (...) {
-					Log::WARN("ScrollCastXP: {}: '{}' is not a number for {}; kept the default", IniFile, value, key);
-				}
+		const bool read = IniFile::Read(kIniPath, "ScrollCastXP", [&](const IniFile::Entry& a_entry) {
+			if (a_entry.section != "CastingXP") {
+				return;
 			}
+			float number = 0.0f;
+			if (!Text::Parse(a_entry.value, number)) {
+				Log::WARN("ScrollCastXP: {}: '{}' is not a number for {}; kept the default", kIniPath, a_entry.value, a_entry.key);
+			} else if (a_entry.key == "Enabled") {
+				enabled = number != 0.0f;
+			} else if (a_entry.key == "ScrollScale") {
+				scrollScale = std::clamp(number, 0.0f, 10.0f);
+			} else if (a_entry.key == "StaffScale") {
+				staffScale = std::clamp(number, 0.0f, 10.0f);
+			} else if (a_entry.key == "LogCasts") {
+				log = number != 0.0f;
+			}
+		});
+		if (!read) {
+			Log::WARN("ScrollCastXP: {} not found; defaults (Enabled 1, ScrollScale 0.02, StaffScale 0.02)", kIniPath);
 		}
 		m_enabled = enabled;
 		m_scrollScale = scrollScale;

@@ -1,9 +1,9 @@
 #include "AlchemyMenuFeed.h"
 #include "AlchemyMenuContract.h"
 #include "Platform/FormCache.h"
+#include "Platform/Text.h"
 
 #include <algorithm>
-#include <cctype>
 #include <cmath>
 #include <filesystem>
 #include <fstream>
@@ -17,20 +17,7 @@ namespace Alchemy {
 		namespace C = AlchemyMenuContract;
 		using json = nlohmann::json;
 
-		bool EndsWithNoCase(std::string_view text, std::string_view tail) {
-			if (text.size() < tail.size()) {
-				return false;
-			}
-			const auto start = text.size() - tail.size();
-			for (std::size_t i = 0; i < tail.size(); ++i) {
-				if (std::tolower(static_cast<unsigned char>(text[start + i])) != std::tolower(static_cast<unsigned char>(tail[i]))) {
-					return false;
-				}
-			}
-			return true;
-		}
-
-		//"0003EB15:Skyrim.esm": the local FormID in the defining file, as the analysis workspace writes it.
+		//"03EB15:Skyrim.esm": the local FormID in the defining file, as the baseline table writes it.
 		std::string RecordKey(const RE::TESForm* form) {
 			auto* file = form ? form->GetFile(0) : nullptr;
 			if (!file) {
@@ -51,7 +38,6 @@ namespace Alchemy {
 	class FetchHandler : public RE::GFxFunctionHandler {
 	public:
 		void Call(Params& a_params) override {
-			Log::INFO("[AlchemyMenu] Fetch called by the movie (retVal {}, movie {}).", a_params.retVal != nullptr, a_params.movie != nullptr);
 			if (!a_params.retVal || !a_params.movie) {
 				return;
 			}
@@ -90,8 +76,8 @@ namespace Alchemy {
 			return true;
 		}
 		auto* def = a_view->GetMovieDef();
-		const char* url = def ? def->GetFileURL() : nullptr;
-		if (!url || !EndsWithNoCase(url, C::MovieFile)) {
+		const std::string_view url = def && def->GetFileURL() ? def->GetFileURL() : "";
+		if (!Text::IEndsWith(url, C::MovieFile)) {
 			return true;
 		}
 		static RE::GPtr<FetchHandler> fetch = RE::make_gptr<FetchHandler>();
@@ -100,10 +86,8 @@ namespace Alchemy {
 		RE::GFxValue rememberFn;
 		a_view->CreateFunction(&fetchFn, fetch.get());
 		a_view->CreateFunction(&rememberFn, remember.get());
-		//Round 2 (L-0231): round 1 set the two only on the object SKSE hands over, which is the plugin's
-		//own slot (_global.skse.plugins.SKYBAlchemy), not the movie's _root as the ActionScript assumed, so
-		//the menu never found them. They now sit in three places and the movie looks in all three:
-		//SKSE's slot, the movie's _root, and _global.
+		//The object SKSE hands over is the plugin's own slot (_global.skse.plugins.SKYBAlchemy), not the movie's
+		//_root. The two functions go on the slot, on _root and on _global; the movie looks in all three.
 		const bool onSlot = a_root->SetMember(C::Function::Fetch, fetchFn) && a_root->SetMember(C::Function::Remember, rememberFn);
 		RE::GFxValue root;
 		const bool onRoot = a_view->GetVariable(&root, "_root") && root.IsDisplayObject() &&
@@ -111,9 +95,8 @@ namespace Alchemy {
 		RE::GFxValue globals;
 		const bool onGlobal = a_view->GetVariable(&globals, "_global") && globals.IsObject() &&
 		                      globals.SetMember(C::Function::Fetch, fetchFn) && globals.SetMember(C::Function::Remember, rememberFn);
-		Log::INFO("[AlchemyMenu] {} loaded ({}): {} and {} set on SKSE's slot={} (slot is {}), _root={}, _global={}.",
-			C::MovieFile, url, C::Function::Fetch, C::Function::Remember, onSlot,
-			a_root->IsDisplayObject() ? "a display object" : a_root->IsObject() ? "an object" : "not an object", onRoot, onGlobal);
+		Log::INFO("[AlchemyMenu] {} loaded: {} and {} set on SKSE's slot={}, _root={}, _global={}.",
+			url, C::Function::Fetch, C::Function::Remember, onSlot, onRoot, onGlobal);
 		return true;
 	}
 
@@ -317,15 +300,7 @@ namespace Alchemy {
 			auto menu = ui->GetMenu<RE::CraftingMenu>();
 			auto* subMenu = menu ? menu->GetCraftingSubMenu() : nullptr;
 			RE::TESFurniture* furniture = subMenu ? subMenu->furniture : nullptr;
-			auto* wanted = FormCache::Get<RE::TESFurniture>("SKYBCraftingAlchemyPortable", "AlchemyMenu");
-			portable = furniture && wanted && furniture == wanted;
-			if (!wanted && furniture) {
-				//No editor-ID map: fall back on the quest's globals, which only the portable path sets.
-				portable = std::any_of(s_tools.begin(), s_tools.end(), [](const Tool& t) {
-					auto* g = FormCache::Get<RE::TESGlobal>(t.globalEditorID, "AlchemyMenu");
-					return g && g->value >= 1.0f;
-				});
-			}
+			portable = furniture && furniture == FormCache::Get<RE::TESFurniture>("SKYBCraftingAlchemyPortable", "AlchemyMenu");
 		}
 		a_out.SetMember(C::Field::Station, RE::GFxValue(portable));
 		a_out.SetMember(C::Field::Preview, RE::GFxValue(s_preview));
@@ -333,11 +308,12 @@ namespace Alchemy {
 		//The tools.
 		RE::GFxValue tools;
 		a_view.CreateArray(&tools);
-		auto* player = RE::PlayerCharacter::GetSingleton();
+		std::string tiers;
 		for (const auto& tool : s_tools) {
 			RE::GFxValue t;
 			a_view.CreateObject(&t);
 			const int tier = CarriedTier(tool);
+			tiers += std::format("{}{}", tiers.empty() ? "" : "/", tier);
 			std::string name;
 			if (tier > 0) {
 				auto* list = FormCache::Get<RE::BGSListForm>(tool.listEditorID, "AlchemyMenu");
@@ -421,9 +397,7 @@ namespace Alchemy {
 		thresholds.SetMember("weak", RE::GFxValue(static_cast<double>(C::WeakRatio)));
 		a_out.SetMember(C::Field::Thresholds, thresholds);
 
-		(void)player;
-		Log::INFO("[AlchemyMenu] Fetch: station {}, preview {}, {} ingredient(s), tiers {}/{}/{}/{}.",
-			portable ? "portable" : "fixed", s_preview ? "on" : "off", ingredients,
-			CarriedTier(s_tools[0]), CarriedTier(s_tools[1]), CarriedTier(s_tools[2]), CarriedTier(s_tools[3]));
+		Log::INFO("[AlchemyMenu] Fetch: station {}, preview {}, {} ingredient(s), tiers {}.",
+			portable ? "portable" : "fixed", s_preview ? "on" : "off", ingredients, tiers);
 	}
 }

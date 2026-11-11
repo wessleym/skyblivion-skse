@@ -6,8 +6,6 @@
 
 //The perk tree definitions as loaded from the JSON files (schemaVersion 1).
 //Icon and art references stay raw strings: the SWF resolves them.
-//Form references keep both the parsed pieces, for TESDataHandler::LookupForm,
-//and the raw "HEX|Plugin" string, which is pushed to the SWF verbatim as rankId.
 namespace PerksView {
 
 	enum class CurrencyType {
@@ -30,15 +28,6 @@ namespace PerksView {
 		kUnknown
 	};
 
-	struct FormRef {
-		//Plugin-relative, without the load-order prefix.
-		std::uint32_t formID{ 0 };
-		//Plugin file name, such as "Skyblivion.esm".
-		std::string plugin;
-		//The original "HEX|Plugin" string.
-		std::string raw;
-	};
-
 	struct Requirement {
 		RequirementType type{ RequirementType::kUnknown };
 		//The authored type string; the canonical name for known types.
@@ -54,8 +43,8 @@ namespace PerksView {
 	};
 
 	struct Rank {
-		//The perk record this rank adds.
-		FormRef rankId;
+		//The perk record this rank adds, as "HEX|Plugin" (pushed to the SWF verbatim).
+		std::string rankId;
 		//Translation key.
 		std::string description;
 		//All must be met; may be empty.

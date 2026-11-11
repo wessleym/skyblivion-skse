@@ -3,8 +3,10 @@
 #include <string_view>
 
 //SKYBSettings.ini, in the SKSE log folder beside the plugin logs:
-//	[NewGame]
-//	difficulty=2            index into the difficulty ladder (engine setting)
+//	[NewGame]               the title screen's new-game options it does not know otherwise (recorded only)
+//	[SettingsMenu]          the settings menu's rows that apply to every character (SettingsStore)
+//	[SettingsMenuNewGame]   the settings menu's defaults for a new character (SettingsStore)
+//	[Hotkeys]               HotkeyService's bindings;  [AudioMenu]  SoundService's volumes
 //	[Achievements]
 //	toastNotifications=1    0 = no HUD toast on unlock (the unlock itself is unaffected)
 //	shared=0                1 = the achievements menu opens on every character's unlocks (SKYBAchievements.json)

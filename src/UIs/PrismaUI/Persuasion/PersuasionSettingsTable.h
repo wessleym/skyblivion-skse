@@ -1,4 +1,4 @@
-// Generated from Settings.csv by gen_settings.py - do not edit by hand.
+// Generated from Settings.csv by gen_settings.py (not in this repository). Do not edit by hand.
 #pragma once
 
 #include <array>

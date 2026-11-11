@@ -69,13 +69,6 @@ namespace SKYBSettingsMenu
 			return n && *n ? n : nullptr;
 		}
 
-		bool InGame()
-		{
-			auto* ui = RE::UI::GetSingleton();
-			auto* player = RE::PlayerCharacter::GetSingleton();
-			return player && player->GetParentCell() && !(ui && ui->IsMenuOpen(RE::MainMenu::MENU_NAME));
-		}
-
 		bool Within(const RE::BGSSoundCategory* a_cat, const RE::BGSSoundCategory* a_root)
 		{
 			for (int depth = 0; a_cat && depth < 16; ++depth, a_cat = a_cat->parentCategory) {
@@ -121,14 +114,6 @@ namespace SKYBSettingsMenu
 	void SoundService::Register()
 	{
 		auto* dh = RE::TESDataHandler::GetSingleton();
-		if (dh) {
-			for (auto* cat : dh->GetFormArray<RE::BGSSoundCategory>()) {
-				if (cat && cat->flags.all(RE::BGSSoundCategory::Flag::kShouldAppearOnMenu)) {
-					Log::INFO("settings menu: the game's audio list has {:08X} '{}' (menu volume {})",
-							  cat->GetFormID(), NameOf(cat) ? NameOf(cat) : "", cat->volumeMult);
-				}
-			}
-		}
 		for (const auto& r : kRows) {
 			if (r.applier != Applier::kSound || std::string_view(r.key) == kMasterTarget) {
 				continue;
@@ -185,12 +170,8 @@ namespace SKYBSettingsMenu
 			}
 			if (pick) {
 				_demo[r.key] = pick;  // the record itself: a form cannot change mid-session
-				std::string chain;
-				for (auto* c = pick->soundDescriptor->category; c && chain.size() < 400; c = c->parentCategory) {
-					chain += std::format(" {:08X}", c->GetFormID());
-				}
-				Log::INFO("settings menu: {} sample {:08X} {} (categories{})", r.id, pick->GetFormID(),
-						  pick->GetFormEditorID() ? pick->GetFormEditorID() : "", chain);
+				Log::INFO("settings menu: {} sample {:08X} {}", r.id, pick->GetFormID(),
+						  pick->GetFormEditorID() ? pick->GetFormEditorID() : "");
 			} else {
 				Log::INFO("settings menu: {} has no short sample to play", r.id);
 			}
@@ -334,11 +315,6 @@ namespace SKYBSettingsMenu
 			}
 		}
 		handle.Play();
-	}
-
-	const char* SoundService::Label(std::string_view a_target) const
-	{
-		return NameOf(Find(a_target));
 	}
 
 	std::optional<float> SoundService::Default(std::string_view a_target) const

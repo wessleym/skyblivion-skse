@@ -3,26 +3,35 @@
 #include "Degradation/Breakage.h"
 #include "Degradation/Condition.h"
 #include "Degradation/Settings.h"
+#include "Platform/Text.h"
 #include <algorithm>
-#include <array>
-#include <charconv>
-#include <cmath>
-#include <cstdint>
-#include <cstring>
-#include <filesystem>
 #include <format>
-#include <fstream>
-#include <optional>
-#include <random>
 #include <string>
-#include <string_view>
-#include <unordered_map>
-#include <vector>
 
 namespace SKYBDeg
 {
 	using Condition::Kind;
 	using Flag = RE::TESHitEvent::Flag;
+
+	namespace
+	{
+		//Whether the player's current attack is the left hand's, for when both hands hold the same weapon.
+		//Left-hand attack events end in "LeftHand" ("attackStartLeftHand"); "attackPowerStartLeft" is a right-hand
+		//sideways power attack. A dual-wield attack strikes with both, so its hits alternate between the copies.
+		bool StruckWithLeft(RE::PlayerCharacter* a_player)
+		{
+			auto* process = a_player->GetActorRuntimeData().currentProcess;
+			auto* high = process ? process->high : nullptr;
+			auto* attack = high ? high->attackData.get() : nullptr;
+			const std::string event = Text::Lower(attack && attack->event.c_str() ? attack->event.c_str() : "");
+			if (event.find("dual") != std::string::npos) {
+				static bool s_left = false;  //hit events never run concurrently (measured on AE and VR)
+				s_left = !s_left;
+				return s_left;
+			}
+			return event.find("lefthand") != std::string::npos;
+		}
+	}
 
 	void DecayService::Register()
 	{
@@ -76,15 +85,19 @@ namespace SKYBDeg
 			return;
 		}
 		auto weap = source->As<RE::TESBoundObject>();
-		RE::ExtraDataList* list = nullptr;
-		if (a_player->GetEquippedObject(false) == source) {
-			list = Condition::FindWornList(weap, false);
+		const bool inRight = a_player->GetEquippedObject(false) == source;
+		const bool inLeft = a_player->GetEquippedObject(true) == source;
+		//Both hands holding the same weapon: the hit names only the weapon, so the striking hand comes from the attack.
+		if (!inRight && !inLeft) {
+			return;  // thrown/unequipped mid-swing: nothing to wear
 		}
-		if (!list && a_player->GetEquippedObject(true) == source) {
-			list = Condition::FindWornList(weap, true);
+		const bool left = inLeft && (!inRight || StruckWithLeft(a_player));
+		RE::ExtraDataList* list = Condition::FindWornList(weap, left);
+		if (!list && inRight && inLeft) {
+			list = Condition::FindWornList(weap, !left);
 		}
 		if (!list) {
-			return;  // thrown/unequipped mid-swing: nothing to wear
+			return;  // no worn instance of it found
 		}
 		const float rate = Settings::Get(G::WeapRate) * Settings::Get(G::WeapRateMult) * EventMult(a_event);
 		Degrade(weap, list, rate, "attack");
@@ -155,16 +168,16 @@ namespace SKYBDeg
 			return q;
 		}
 		const float nq = std::max(floor, q - loss);
-		Condition::SetHealth(a_list, nq);
+		Condition::SetHealth(a_obj, a_list, nq);
 		Log::DEBUG("decay {}: '{}' {:.2f}% -> {:.2f}% (x{:.2f} material, x{:.2f} curve)", a_why, a_obj->GetName(),
 					  q * 100.0f, nq * 100.0f, Condition::MaterialMult(a_obj), Condition::CurveMult(q));
 
 		const float warn = Settings::Get(G::WarnAt);
 		if (Settings::On(G::Notify) && q >= warn && nq < warn) {
-			const char* name = a_list->GetDisplayName(a_obj);
+			const char* name = REBridge::DisplayName(a_list, a_obj);
 			RE::SendHUDMessage::ShowHUDMessage(std::format("{} is badly worn ({:.0f}%).", name ? name : a_obj->GetName(), nq * 100.0f).c_str());
 		} else if (Settings::On(G::Notify) && nq <= floor && q > floor) {
-			const char* name = a_list->GetDisplayName(a_obj);
+			const char* name = REBridge::DisplayName(a_list, a_obj);
 			RE::SendHUDMessage::ShowHUDMessage(std::format("{} can wear no further ({:.0f}%).", name ? name : a_obj->GetName(), nq * 100.0f).c_str());
 		}
 		return nq;

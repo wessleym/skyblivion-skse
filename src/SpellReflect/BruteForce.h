@@ -23,7 +23,6 @@
 //    "HitFrame"; when the high process's attack data is a power attack, the crosshair reference
 //    (SKSE CrosshairRefEvent) within fReach is the target. The graph sink is added again whenever
 //    a loading screen or the race menu closes (the graphs are rebuilt with the player's 3D).
-// bTrace logs every player hit on a non-actor and every player hit frame with the gate that drops it.
 
 namespace SpellReflect::BruteForce {
     // Resolve the rank perks and register the sinks. Call at SKSE kDataLoaded.

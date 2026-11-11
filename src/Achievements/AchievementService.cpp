@@ -30,7 +30,7 @@ namespace Achievements {
 		};
 
 		//This save's unlocks by the definition's id. Unlocks come from the Papyrus VM,
-		//the co-save callbacks from the main thread and the menu's answer from a UI task.
+		//the co-save callbacks from the main thread and the menu's answer from a main-thread task (MainThread::Post).
 		std::mutex g_lock;
 		std::map<std::string, Earned> g_unlocks;
 
@@ -254,8 +254,8 @@ namespace Achievements {
 			if (tab < 0) {
 				return;
 			}
-			ScaleformUtility::RetryOnUIThread(20, std::chrono::milliseconds(50), [tab] {
-				auto movie = ScaleformUtility::OpenMenuMovie(AchievementContract::JournalMenuName);
+			ScaleformUtility::RetryOnMainThread(20, std::chrono::milliseconds(50), [tab] {
+				auto movie = ScaleformUtility::OpenMenuMovie(RE::JournalMenu::MENU_NAME);
 				if (!movie) {
 					return true;  //closed again: nothing to do
 				}
@@ -271,9 +271,7 @@ namespace Achievements {
 		//The two addresses are the game's (Address Library ids, SE / AE); on VR the plain message is used.
 		void OpenJournalAt(int tab) {
 			if (REL::Module::IsVR()) {
-				if (auto* queue = RE::UIMessageQueue::GetSingleton()) {
-					queue->AddMessage(AchievementContract::JournalMenuName, RE::UI_MESSAGE_TYPE::kShow, nullptr);
-				}
+				ScaleformUtility::ShowMenu(RE::JournalMenu::MENU_NAME);
 				return;
 			}
 			static REL::Relocation<std::uint32_t*> savedPage{ RELOCATION_ID(520167, 406697) };
@@ -290,11 +288,7 @@ namespace Achievements {
 			void Call(Params&) override {
 				Log::INFO("AchievementService: ACHIEVEMENTS chosen in the quest menu.");
 				ModEvents::Send(AchievementContract::QuestMenu::MenuSwitch, AchievementContract::QuestMenu::MenuSwitchTab);
-				SKSE::GetTaskInterface()->AddUITask([] {
-					if (auto* queue = RE::UIMessageQueue::GetSingleton()) {
-						queue->AddMessage(AchievementContract::QuestMenu::Name, RE::UI_MESSAGE_TYPE::kHide, nullptr);
-					}
-				});
+				SKSE::GetTaskInterface()->AddUITask([] { ScaleformUtility::HideMenu(AchievementContract::QuestMenu::Name); });
 			}
 		};
 		class QuestMenuLog : public RE::GFxFunctionHandler {
@@ -309,7 +303,7 @@ namespace Achievements {
 		//Adds the ACHIEVEMENTS item to the quest menu's tab row once the menu's root clip exists.
 		void InjectQuestTabItem() {
 			namespace QM = AchievementContract::QuestMenu;
-			ScaleformUtility::RetryOnUIThread(20, std::chrono::milliseconds(50), [] {
+			ScaleformUtility::RetryOnMainThread(20, std::chrono::milliseconds(50), [] {
 				auto movie = ScaleformUtility::OpenMenuMovie(QM::Name);
 				if (!movie) {
 					return true;  //closed again
@@ -362,7 +356,7 @@ namespace Achievements {
 
 			RE::BSEventNotifyControl ProcessEvent(const RE::MenuOpenCloseEvent* a_event,
 				RE::BSTEventSource<RE::MenuOpenCloseEvent>*) override {
-				if (a_event && a_event->opening && a_event->menuName == AchievementContract::JournalMenuName) {
+				if (a_event && a_event->opening && a_event->menuName == RE::JournalMenu::MENU_NAME) {
 					ShowPendingJournalTab();
 				}
 				else if (a_event && a_event->opening && a_event->menuName == AchievementContract::QuestMenu::Name) {

@@ -69,7 +69,6 @@ namespace Skills::SkillData {
 			perk->GetDescription(description, nullptr);
 			const char* fullName = perk->GetFullName();
 			perks.push_back(MasteryPerk{
-				perk,
 				fullName ? fullName : "",
 				description.c_str() ? description.c_str() : "",
 				player && player->HasPerk(perk)

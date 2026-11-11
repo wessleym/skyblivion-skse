@@ -12,18 +12,15 @@
 #include <chrono>
 #include <cmath>
 #include <cstdint>
-#include <cstring>
 #include <format>
+#include <functional>
 #include <mutex>
 #include <optional>
 #include <random>
 #include <span>
-#include <string>
 #include <string_view>
-#include <thread>
 #include <unordered_map>
 #include <utility>
-#include <vector>
 
 using namespace std::literals;
 
@@ -39,10 +36,11 @@ namespace SpellReflect::Reflect {
 
         // ---- engine addresses (AE 1.6.1170, checked against the runtime dump) ----
         constexpr REL::RelocationID kAddTargetImpl{ 37832, 38786 };  // Actor's MagicTarget::AddTarget
-        constexpr REL::RelocationID kHitHandler{ 43014, 44205 };     // projectile hit handler
-        constexpr REL::RelocationID kLookupAVByName{ 26570, 27203 };  // the lookup Papyrus GetActorValue uses
+        // Projectile hit handler. VR's address library has no 43014: the VR offset was
+        // matched against SE 1.5.97 in the decrypted exes (identical code, 2026-11-05).
+        constexpr REL::VariantID    kHitHandler{ 43014, 44205, 0x77D940 };
 
-        struct CallSite {
+        struct AeCallSite {
             std::uint64_t  callerId;  // AE id of the function holding the call
             std::ptrdiff_t offset16;  // offset of the E8 inside it on 1.6.1170 (runtime dump)
             std::ptrdiff_t offset17;  // ... on 1.7.104 (exe, checked offline 2026-10-24)
@@ -51,13 +49,29 @@ namespace SpellReflect::Reflect {
         // Projectile::HandleHits (arrow/missile/beam/flame/grenade/barrier), 43802 =
         // ConeProjectile's. The calls are found at run time (CallScan); the offsets
         // are only for chaining onto another plugin's hook there.
-        constexpr std::array kHitCallSites{
-            CallSite{ 43716, 0x192, 0x192 },
-            CallSite{ 43731, 0x17E, 0x17E },
-            CallSite{ 43802, 0x6FF, 0x721 },
-            CallSite{ 44166, 0x4DE, 0x4DE },
-            CallSite{ 44204, 0x21F, 0x239 },
+        constexpr std::array kAeHitCallSites{
+            AeCallSite{ 43716, 0x192, 0x192 },
+            AeCallSite{ 43731, 0x17E, 0x17E },
+            AeCallSite{ 43802, 0x6FF, 0x721 },
+            AeCallSite{ 44166, 0x4DE, 0x4DE },
+            AeCallSite{ 44204, 0x21F, 0x239 },
         };
+
+        struct SeCallSite {
+            std::uint64_t  callerId;  // SE id of the function holding the call
+            std::uint64_t  vrOffset;  // that function on VR 1.4.15 (most are not in VR's address library)
+            std::ptrdiff_t offset;    // offset of the E8 inside it, the same on 1.5.97 and VR 1.4.15
+        };
+        // Every direct call of 43014 on SE 1.5.97 and VR 1.4.15: four, not AE's five (AE
+        // split 42567 in two). Read from the decrypted exes 2026-11-05; VR's code matches SE's.
+        // 43013 = Projectile::HandleHits, 42634 = ConeProjectile's.
+        constexpr std::array kSeHitCallSites{
+            SeCallSite{ 42567, 0x75DF30, 0x13A },
+            SeCallSite{ 42634, 0x760670, 0x727 },
+            SeCallSite{ 42983, 0x77A970, 0x395 },
+            SeCallSite{ 43013, 0x77D510, 0x251 },
+        };
+        constexpr std::size_t kMaxHitCallSites = std::max(kAeHitCallSites.size(), kSeHitCallSites.size());
 
         constexpr auto  kDecisionLife = 250ms;  // one cast's effects arrive within this
         constexpr auto  kRedirectLife = 10s;    // how long a turned projectile is remembered
@@ -69,41 +83,6 @@ namespace SpellReflect::Reflect {
         RE::BGSPerk*   g_arrowShieldPerk = nullptr;  // second Reflect Arrows rank: a shield block reflects too
         RE::BGSPerk*   g_parryPerk = nullptr;        // Reflect Spells: spell projectiles under the arrow rules
         std::atomic<Clock::rep> g_lastArrowReflect{ 0 };  // clock ticks; 0 = never
-        std::atomic<std::uint32_t> g_returnedLogged{ 0 };
-
-        // Diagnostic: every hit the engine credits to the player with a projectile
-        // within 5 s of an arrow reflect - shows whether a returned arrow lands and
-        // what it does. (TESHitEvent names the projectile BASE, not the reference.)
-        class ReturnedHitSink final : public RE::BSTEventSink<RE::TESHitEvent> {
-        public:
-            static ReturnedHitSink* GetSingleton() {
-                static ReturnedHitSink singleton;
-                return &singleton;
-            }
-
-            RE::BSEventNotifyControl ProcessEvent(const RE::TESHitEvent* a_event,
-                                                  RE::BSTEventSource<RE::TESHitEvent>*) override {
-                const auto player = RE::PlayerCharacter::GetSingleton();
-                const auto last = g_lastArrowReflect.load(std::memory_order_relaxed);
-                // any hit on an actor other than the player, whoever the cause
-                const auto hitActor = a_event && a_event->target ? a_event->target->As<RE::Actor>() : nullptr;
-                if (!a_event || !player || !hitActor || hitActor == player || last == 0 ||
-                    Clock::now() - Clock::time_point(Clock::duration(last)) > 5s || logged >= 200) {
-                    return RE::BSEventNotifyControl::kContinue;
-                }
-                ++logged;
-                const auto target = a_event->target ? a_event->target->As<RE::Actor>() : nullptr;
-                Log::INFO("SpellReflect: hit event (after a reflect): {} hit by {} source {:08X} projectile {:08X} flags {:#x} health now {:.1f}",
-                             target ? target->GetDisplayFullName() : "<not an actor>",
-                             a_event->cause ? a_event->cause->GetDisplayFullName() : "<no cause>", a_event->source,
-                             a_event->projectile, a_event->flags.underlying(),
-                             target ? target->AsActorValueOwner()->GetActorValue(RE::ActorValue::kHealth) : 0.0f);
-                return RE::BSEventNotifyControl::kContinue;
-            }
-
-        private:
-            std::uint32_t logged = 0;
-        };
         RE::BGSKeyword* g_blockingKeyword = nullptr;
         bool           g_hitHookActive = false;
 
@@ -129,12 +108,6 @@ namespace SpellReflect::Reflect {
             }
             const auto name = a_ref->GetDisplayFullName();
             return name && *name ? name : "<unnamed>";
-        }
-
-        RE::ActorValue LookupActorValue(const std::string& a_name) {
-            using Fn = RE::ActorValue(const char*);
-            static REL::Relocation<Fn> lookup{ kLookupAVByName };
-            return lookup(a_name.c_str());
         }
 
         float Roll() {
@@ -241,23 +214,12 @@ namespace SpellReflect::Reflect {
             }
             const auto& s = Settings::Get();
             Chance c{};
-            c.av = a_actor->AsActorValueOwner()->GetActorValue(g_reflectAV);
+            c.av = REBridge::AVOwner(a_actor)->GetActorValue(g_reflectAV);
             c.worn = WornEnchantmentReflect(a_actor);
             c.blocking = BlockingBonus(a_actor);
             const float always = std::clamp(c.av + c.worn, 0.0f, s.maxChance);
             c.value = c.blocking > 0.0f ? std::min(always + c.blocking, s.maxBlockingChance) : always;
             return c;
-        }
-
-        // Hostile spells that hit the player with no reflect chance: a few log lines, so a
-        // test can tell "no chance" from "not rolled".
-        std::atomic<std::uint32_t> g_zeroLogged{ 0 };
-        void LogZeroChance(RE::Actor* a_target, const char* a_what, const RE::MagicItem* a_spell, const Chance& a_chance) {
-            if (a_target != RE::PlayerCharacter::GetSingleton() || g_zeroLogged.fetch_add(1, std::memory_order_relaxed) >= 20) {
-                return;
-            }
-            Log::INFO("SpellReflect: {}: -> player '{}' chance 0 ({} {:.1f}, worn enchantments {:.1f}, blocking {:.1f}): not rolled",
-                      a_what, NameOf(a_spell), Settings::Get().actorValue, a_chance.av, a_chance.worn, a_chance.blocking);
         }
 
         // ---- decisions: one roll per spell cast per target ----
@@ -324,7 +286,7 @@ namespace SpellReflect::Reflect {
         // so the entry only counts while the projectile's shooter is still the
         // reflector; a new arrow wearing an old ID drops the stale entry.
         std::optional<RE::FormID> RedirectedBy(RE::Projectile* a_proj) {
-            const auto shooterRef = a_proj->GetProjectileRuntimeData().shooter.get();
+            const auto shooterRef = REBridge::Lookup(a_proj->GetProjectileRuntimeData().shooter);
             const auto shooter = shooterRef ? shooterRef->GetFormID() : 0;
             std::scoped_lock lock{ g_lock };
             const auto it = g_redirected.find(a_proj->GetFormID());
@@ -369,6 +331,18 @@ namespace SpellReflect::Reflect {
             return std::ranges::any_of(a_item->effects, [](const RE::Effect* a_effect) {
                 return a_effect && a_effect->effectItem.area > 0;
             });
+        }
+
+        // 570 of Skyblivion's 608 missile projectiles have an explosion, but
+        // the plain single-target bolts do not; area spells often have none.
+        bool IsExplosive(RE::Projectile* a_proj, const RE::BGSProjectile* a_base, const RE::MagicItem* a_spell) {
+            return a_proj->GetProjectileRuntimeData().explosion || (a_base && a_base->data.explosionType) || HasArea(a_spell);
+        }
+
+        // Beams, flames and cones cannot be turned around.
+        bool CanTurn(RE::Projectile* a_proj, const RE::BGSProjectile* a_base) {
+            return a_base && !a_base->IsBeam() && !a_base->IsFlamethrower() && !a_base->IsCone() &&
+                   !a_proj->IsBeamProjectile() && !a_proj->IsFlameProjectile();
         }
 
         // Round 5: returned arrows flew THROUGH the archer. Projectile::InitHavok
@@ -468,8 +442,7 @@ namespace SpellReflect::Reflect {
 
         enum class HitResult {
             kPass,  // let the engine process the hit
-            kSkip,    // the projectile was turned around: ignore this collision
-            kObserve  // pass, and log what the engine does (returned projectiles)
+            kSkip   // the projectile was turned around: ignore this collision
         };
 
         HitResult OnSpellHit(RE::Projectile* a_proj, RE::Actor* a_shooter, RE::Actor* a_target, std::uint32_t a_layer) {
@@ -481,24 +454,21 @@ namespace SpellReflect::Reflect {
             }
             const auto baseObject = a_proj->GetBaseObject();
             const auto base = baseObject ? baseObject->As<RE::BGSProjectile>() : nullptr;
-            // 570 of Skyblivion's 608 missile projectiles have an explosion, but
-            // the plain single-target bolts do not; area spells often have none.
-            const bool explosive = rd.explosion || (base && base->data.explosionType) || HasArea(spell);
-            if (explosive && !s.reflectExplosive) {
+            if (IsExplosive(a_proj, base, spell) && !s.reflectExplosive) {
                 return HitResult::kPass;  // explosions and area spells are never reflected
             }
+            // Every hit's own decision is kept, a "no" included: a beam or flame hits several times
+            // a second, and an earlier "yes" must not carry over to a hit whose roll failed.
+            const Key   key{ a_shooter->GetFormID(), a_target->GetFormID(), spell };
             const auto  c = ReflectChance(a_target);
             const float chance = c.value;
             if (chance <= 0.0f) {
-                LogZeroChance(a_target, "spell hit", spell, c);
+                Remember(key, false);
                 return HitResult::kPass;
             }
             const float roll = Roll();
             const bool  reflect = roll < chance;
-
-            const bool canTurn = base && !base->IsBeam() && !base->IsFlamethrower() && !base->IsCone() &&
-                                 !a_proj->IsBeamProjectile() && !a_proj->IsFlameProjectile();
-            const bool turn = reflect && s.mode == Settings::Mode::kBounce && canTurn;
+            const bool  turn = reflect && s.mode == Settings::Mode::kBounce && CanTurn(a_proj, base);
 
             if (ShouldLog()) {
                 Log::INFO("SpellReflect: spell hit: {} -> {} '{}' layer {} chance {:.0f}% (av {:.1f} worn {:.1f} blocking {:.1f}) roll {:.1f} -> {}{}",
@@ -507,6 +477,7 @@ namespace SpellReflect::Reflect {
                              s.observeOnly ? " (observe only)" : "");
             }
             if (!reflect || s.observeOnly) {
+                Remember(key, false);
                 return HitResult::kPass;
             }
             Feedback::Play(Feedback::Event::kSpellReflect, a_target);
@@ -515,7 +486,7 @@ namespace SpellReflect::Reflect {
                 return HitResult::kSkip;
             }
             // Swap: the hit goes ahead and AddTarget re-routes its effects.
-            Remember({ a_shooter->GetFormID(), a_target->GetFormID(), spell }, true);
+            Remember(key, true);
             return HitResult::kPass;
         }
 
@@ -623,13 +594,11 @@ namespace SpellReflect::Reflect {
             }
             const auto baseObject = a_proj->GetBaseObject();
             const auto base = baseObject ? baseObject->As<RE::BGSProjectile>() : nullptr;
-            const bool explosive = rd.explosion || (base && base->data.explosionType) || HasArea(spell);
-            if (explosive && !s.parryExplosive) {
+            if (IsExplosive(a_proj, base, spell) && !s.parryExplosive) {
                 return std::nullopt;
             }
             const auto p = CheckParry(player, a_proj, a_shooter);
-            const bool canTurn = base && !base->IsBeam() && !base->IsFlamethrower() && !base->IsCone() &&
-                                 !a_proj->IsBeamProjectile() && !a_proj->IsFlameProjectile();
+            const bool canTurn = CanTurn(a_proj, base);
 
             if (ShouldLog()) {
                 Log::INFO("SpellReflect: spell parry: {} -> player '{}' layer {} blocking={} shield={} (shield rank {}) pressed {:.3f}s ago window {:.3f}s ({} {:.0f}) angle {:.0f}{} -> {}{}",
@@ -658,15 +627,7 @@ namespace SpellReflect::Reflect {
             // A projectile we turned around is never reflected again; it just
             // ignores its reflector while it leaves.
             if (const auto reflector = RedirectedBy(a_proj)) {
-                if (*reflector == a_hit->GetFormID()) {
-                    return HitResult::kSkip;
-                }
-                if (Settings::Get().traceReturns && g_returnedLogged.fetch_add(1, std::memory_order_relaxed) < 200) {
-                    Log::INFO("SpellReflect: returned projectile {:08X} hit {} ({:08X}) layer {} -> engine processes it",
-                                 a_proj->GetFormID(), NameOf(a_hit), a_hit->GetFormID(), a_layer);
-                    return HitResult::kObserve;
-                }
-                return HitResult::kPass;
+                return *reflector == a_hit->GetFormID() ? HitResult::kSkip : HitResult::kPass;
             }
             const auto target = a_hit->As<RE::Actor>();
             if (!target || target->IsDead()) {
@@ -676,11 +637,12 @@ namespace SpellReflect::Reflect {
             // collision: the shield's while-blocking visual (MGEF 0D27C0 via 200193's PerkToApply) and the
             // reflect feedback put it on the actor with no ward power behind it. The engine stops spells at
             // that ward: the actor takes nothing, and a reflect decided here never reaches AddTarget, so the
-            // caster takes nothing either. A ward without power stops nothing: the projectile goes on to the
-            // body, where the normal hit (and the reflect roll) happens. A real ward (Ward spells,
-            // Spellbreaker: WardPower above 0) is the engine's, and the roll waits for a body hit.
+            // caster takes nothing either. The skip below is meant to let the projectile on to the body, but it
+            // only partly can (see HitHook::thunk): beams and flames still stop at such a ward. The full fix is
+            // an art without the ward collision. A real ward (Ward spells, Spellbreaker: WardPower above 0) is
+            // the engine's, and the roll waits for a body hit.
             if (a_layer == static_cast<std::uint32_t>(RE::COL_LAYER::kWard)) {
-                const float wardPower = target->AsActorValueOwner()->GetActorValue(RE::ActorValue::kWardPower);
+                const float wardPower = REBridge::AVOwner(target)->GetActorValue(RE::ActorValue::kWardPower);
                 if (wardPower <= 0.0f) {
                     if (g_wardLogged.fetch_add(1, std::memory_order_relaxed) < 20) {
                         Log::INFO("SpellReflect: ward hit on {} with no ward power: projectile {:08X} goes on to the body",
@@ -691,7 +653,7 @@ namespace SpellReflect::Reflect {
                 return HitResult::kPass;
             }
             auto&      rd = a_proj->GetProjectileRuntimeData();
-            const auto shooterRef = rd.shooter.get();
+            const auto shooterRef = REBridge::Lookup(rd.shooter);
             const auto shooter = shooterRef ? shooterRef->As<RE::Actor>() : nullptr;
             if (!shooter || shooter == target) {
                 return HitResult::kPass;
@@ -708,29 +670,6 @@ namespace SpellReflect::Reflect {
             return HitResult::kPass;
         }
 
-        // Diagnostic: projectile damage lands after the handler returns (impact
-        // processing), so re-read the target's health ~0.5 s later. A short-lived
-        // thread waits, then ONE task reads it on the main thread (re-queueing a
-        // task from a task could spin inside one frame if SKSE drains new tasks).
-        void CheckHealthLater(RE::ActorHandle a_target, RE::FormID a_projectile, float a_before) {
-            std::thread([a_target, a_projectile, a_before]() {
-                std::this_thread::sleep_for(500ms);
-                const auto tasks = SKSE::GetTaskInterface();
-                if (!tasks) {
-                    return;
-                }
-                tasks->AddTask([a_target, a_projectile, a_before]() {
-                    const auto actorPtr = a_target.get();
-                    if (const auto actor = actorPtr.get()) {
-                        const float now = actor->AsActorValueOwner()->GetActorValue(RE::ActorValue::kHealth);
-                        Log::INFO("SpellReflect: returned projectile {:08X}: {} health {:.1f} -> {:.1f} after 0.5 s ({:+.1f}){}",
-                                     a_projectile, actor->GetDisplayFullName(), a_before, now, now - a_before,
-                                     actor->IsDead() ? " DEAD" : "");
-                    }
-                });
-            }).detach();
-        }
-
         // ---- hit handler call sites ----
         using HitFn = bool(RE::Projectile*, RE::TESObjectREFR*, RE::NiPoint3*, void*, std::uint32_t, std::uint32_t, bool*);
 
@@ -740,31 +679,23 @@ namespace SpellReflect::Reflect {
                               void* a_unk, std::uint32_t a_layer, std::uint32_t a_material, bool* a_handled) {
                 const auto result = OnHit(a_proj, a_hit, a_layer);
                 if (result == HitResult::kSkip) {
-                    return true;  // HandleHits: true = go on to the next hit, no impact here
-                }
-                if (result == HitResult::kObserve) {
-                    // Diagnostic: what the engine does with a returned projectile's hit.
-                    const auto  actor = a_hit ? a_hit->As<RE::Actor>() : nullptr;
-                    const float before = actor ? actor->AsActorValueOwner()->GetActorValue(RE::ActorValue::kHealth) : 0.0f;
-                    const bool  ret = func(a_proj, a_hit, a_location, a_unk, a_layer, a_material, a_handled);
-                    const float after = actor ? actor->AsActorValueOwner()->GetActorValue(RE::ActorValue::kHealth) : 0.0f;
-                    Log::INFO("SpellReflect: returned projectile {:08X}: handler returned {} ({}), handled flag {}, health {:.1f} -> {:.1f}",
-                                 a_proj->GetFormID(), ret, ret ? "no impact" : "impact", a_handled ? *a_handled : false,
-                                 before, after);
-                    if (actor) {
-                        CheckHealthLater(actor->GetHandle(), a_proj->GetFormID(), before);
-                    }
-                    return ret;
+                    // true does not move on to the next contact. In HandleHits (missiles, arrows) it ends this
+                    // frame's contacts, the body behind the ward included; the beam/flame target pick ignores the
+                    // value and impacts the ward anyway; barriers have already impacted. So a powerless ward
+                    // (the reflect feedback art, the shield's blocking art) still stops beams and flames.
+                    return true;
                 }
                 return func(a_proj, a_hit, a_location, a_unk, a_layer, a_material, a_handled);
             }
             static inline REL::Relocation<HitFn> func;
         };
 
+        using HitSites = std::array<std::uintptr_t, kMaxHitCallSites>;  // 0 = no site at that slot on this runtime
+
         template <std::size_t... I>
-        void WriteHitHooks(const std::array<std::uintptr_t, kHitCallSites.size()>& a_sites, std::index_sequence<I...>) {
+        void WriteHitHooks(const HitSites& a_sites, std::index_sequence<I...>) {
             auto& trampoline = SKSE::GetTrampoline();
-            ((HitHook<I>::func = trampoline.write_call<5>(a_sites[I], HitHook<I>::thunk)), ...);
+            ((a_sites[I] ? (void)(HitHook<I>::func = trampoline.write_call<5>(a_sites[I], HitHook<I>::thunk)) : (void)0), ...);
         }
 
         void InstallHitHook() {
@@ -773,20 +704,40 @@ namespace SpellReflect::Reflect {
             const auto  calls = CallScan::FindCalls(target);
             Log::INFO("SpellReflect: hit hook: {} direct calls of the hit handler", calls.size());
 
-            std::array<std::uintptr_t, kHitCallSites.size()> sites{};
-            bool ok = true;
-            for (std::size_t i = 0; i < kHitCallSites.size(); ++i) {
-                const auto& site = kHitCallSites[i];
-                const std::array hints{
-                    CallScan::Hint{ { 1, 6, 1170, 0 }, site.offset16 },
-                    CallScan::Hint{ { 1, 7, 104, 0 }, site.offset17 },
-                };
-                const auto found = CallScan::FindCallIn(std::format("hit hook: site {}", i), site.callerId, target, calls, hints);
+            HitSites    sites{};
+            std::size_t count = 0;
+            bool        ok = true;
+            auto        resolve = [&](std::size_t a_index, std::string_view a_caller, std::uintptr_t a_callerAddress,
+                               std::span<const CallScan::Hint> a_hints) {
+                const auto found = CallScan::FindCallIn(std::format("hit hook: site {}", a_index), a_caller, a_callerAddress,
+                                                        target, calls, a_hints);
                 if (!found) {
                     ok = false;
-                    continue;
+                    return;
                 }
-                sites[i] = *found;
+                sites[a_index] = *found;
+            };
+            if (REL::Module::IsAE()) {
+                count = kAeHitCallSites.size();
+                for (std::size_t i = 0; i < count; ++i) {
+                    const auto& site = kAeHitCallSites[i];
+                    const std::array hints{
+                        CallScan::Hint{ { 1, 6, 1170, 0 }, site.offset16 },
+                        CallScan::Hint{ { 1, 7, 104, 0 }, site.offset17 },
+                    };
+                    resolve(i, std::format("{}", site.callerId), REL::ID(site.callerId).address(), hints);
+                }
+            } else {
+                count = kSeHitCallSites.size();
+                for (std::size_t i = 0; i < count; ++i) {
+                    const auto& site = kSeHitCallSites[i];
+                    const std::array hints{
+                        CallScan::Hint{ { 1, 5, 97, 0 }, site.offset },
+                        CallScan::Hint{ { 1, 4, 15, 0 }, site.offset },
+                    };
+                    const auto caller = REL::Module::IsVR() ? REL::Offset(site.vrOffset).address() : REL::ID(site.callerId).address();
+                    resolve(i, std::format("{}", site.callerId), caller, hints);
+                }
             }
             // A caller this plugin does not know would keep engine behaviour: say so.
             for (const auto& call : calls) {
@@ -799,9 +750,9 @@ namespace SpellReflect::Reflect {
                 Log::ERROR("SpellReflect: hit hook: NOT installed (all or nothing); projectile reflection OFF");
                 return;
             }
-            WriteHitHooks(sites, std::make_index_sequence<kHitCallSites.size()>{});
+            WriteHitHooks(sites, std::make_index_sequence<kMaxHitCallSites>{});
             g_hitHookActive = true;
-            Log::INFO("SpellReflect: hit hook: installed at {} call sites", kHitCallSites.size());
+            Log::INFO("SpellReflect: hit hook: installed at {} call sites", count);
         }
 
         // ---- MagicTarget::AddTarget ----
@@ -832,7 +783,6 @@ namespace SpellReflect::Reflect {
             const auto  c = ReflectChance(target);
             const float chance = c.value;
             if (chance <= 0.0f) {
-                LogZeroChance(target, "touch", a_data.magicItem, c);
                 return nullptr;
             }
             const float roll = Roll();
@@ -892,33 +842,12 @@ namespace SpellReflect::Reflect {
 
         // The engine's own name lookup (what Papyrus uses), so an INI name
         // resolves exactly as it would in a script.
-        g_reflectAV = LookupActorValue(s.actorValue);
+        g_reflectAV = REBridge::ActorValueByName(s.actorValue.c_str());
         if (g_reflectAV == RE::ActorValue::kNone) {
             Log::ERROR("SpellReflect: reflect actor value '{}' not found; spell reflection OFF", s.actorValue);
         } else {
             Log::INFO("SpellReflect: reflect actor value: {} ({}), cap {}% ({}% with a while-blocking bonus)", s.actorValue,
                          std::to_underlying(g_reflectAV), s.maxChance, s.maxBlockingChance);
-            // Constant-effect enchantments whose reflect effect is not Constant Effect: the engine
-            // does not keep those on the wearer, so the worn item is read instead (WornEnchantmentReflect).
-            std::size_t constant = 0;
-            std::size_t mismatched = 0;
-            for (const auto ench : RE::TESDataHandler::GetSingleton()->GetFormArray<RE::EnchantmentItem>()) {
-                if (!ench || ench->GetCastingType() != RE::MagicSystem::CastingType::kConstantEffect) {
-                    continue;
-                }
-                bool reflect = false;
-                bool wrong = false;
-                for (const auto effect : ench->effects) {
-                    if (effect && IsReflectEffect(effect->baseEffect)) {
-                        reflect = true;
-                        wrong = wrong || effect->baseEffect->data.castingType != RE::MagicSystem::CastingType::kConstantEffect;
-                    }
-                }
-                constant += reflect ? 1 : 0;
-                mismatched += wrong ? 1 : 0;
-            }
-            Log::INFO("SpellReflect: {} constant-effect enchantments carry a reflect effect, {} of them a non-constant one "
-                      "(read from the worn item)", constant, mismatched);
         }
 
         g_blockingKeyword = RE::TESForm::LookupByEditorID<RE::BGSKeyword>(s.blockingKeyword);
@@ -932,10 +861,6 @@ namespace SpellReflect::Reflect {
             g_arrowPerk = Forms::Resolve<RE::BGSPerk>(s.arrowPerk, "arrow perk");
             if (!g_arrowPerk) {
                 Log::WARN("SpellReflect: arrow reflection OFF (no perk)");
-            } else if (const auto events = RE::ScriptEventSourceHolder::GetSingleton()) {
-                if (s.traceReturns) {
-                    events->AddEventSink<RE::TESHitEvent>(ReturnedHitSink::GetSingleton());
-                }
             }
             // The second rank only widens the first: without it, a shield block never reflects.
             g_arrowShieldPerk = Forms::Resolve<RE::BGSPerk>(s.arrowShieldPerk, "arrow shield perk");

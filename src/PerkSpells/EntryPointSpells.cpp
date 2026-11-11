@@ -7,7 +7,6 @@
 #include <atomic>
 #include <cstring>
 #include <format>
-#include <intrin.h>
 #include <optional>
 #include <string>
 #include <utility>
@@ -18,7 +17,6 @@ namespace PerkSpells::EntryPointSpells {
         using Kind = Settings::Kind;
         using Stacking = Settings::Stacking;
         using EntryPoint = RE::BGSEntryPoint::ENTRY_POINT;
-        // CommonLib v12 name for the visitor's result (was PerkEntryVisitor::ReturnType, kBreak = kStop = 0).
         using ReturnType = RE::BSContainer::ForEachResult;
 
         constexpr std::size_t kKinds = std::to_underlying(Kind::kTotal);
@@ -61,15 +59,6 @@ namespace PerkSpells::EntryPointSpells {
             return a_kind == Kind::kWeaponSwing || a_kind == Kind::kSneaking;
         }
 
-        // ---- diagnostics ---------------------------------------------------
-
-        std::array<std::atomic<std::uint32_t>, kKinds> g_logged{};
-
-        bool LogBudgetLeft(Kind a_kind) {
-            return g_logged[std::to_underlying(a_kind)].load(std::memory_order_relaxed) <
-                   Settings::Get().logCallsPerEntryPoint;
-        }
-
         std::string Describe(const RE::TESForm* a_form) {
             if (!a_form) {
                 return "none";
@@ -81,13 +70,6 @@ namespace PerkSpells::EntryPointSpells {
                                std::to_underlying(a_form->GetFormType()));
         }
 
-        bool OnThisStack(const void* a_address) {
-            const auto p = reinterpret_cast<std::uintptr_t>(a_address);
-            const auto stackBase = static_cast<std::uintptr_t>(__readgsqword(0x08));
-            const auto stackLimit = static_cast<std::uintptr_t>(__readgsqword(0x10));
-            return p >= stackLimit && p < stackBase;
-        }
-
         // ---- per-call context ----------------------------------------------
 
         struct Armed {
@@ -97,11 +79,8 @@ namespace PerkSpells::EntryPointSpells {
             Stacking                        stacking = Stacking::kPerPerk;
             bool                            reached = false;
             bool                            inside = false;
-            std::uint32_t                   matches = 0;     // entries whose conditions passed
-            std::uint32_t                   innerStops = 0;  // engine visitor asked to stop
             std::vector<RE::SpellItem*>     spells;
             std::vector<const RE::BGSPerk*> contributors;  // parallel to spells (PerPerk)
-            std::vector<RE::SpellItem*>     seen;          // every match, in visit order
         };
 
         thread_local Armed* t_armed = nullptr;
@@ -148,16 +127,12 @@ namespace PerkSpells::EntryPointSpells {
                 _engine(a_engine), _armed(a_armed) {}
 
             ReturnType Visit(RE::BGSPerkEntry* a_entry) override {
-                if (_engine.Visit(a_entry) == ReturnType::kStop) {
-                    ++_armed.innerStops;
-                }
+                _engine.Visit(a_entry);
                 RE::SpellItem* picked = *_armed.slot;
                 if (!picked) {
                     return ReturnType::kContinue;
                 }
                 *_armed.slot = nullptr;
-                ++_armed.matches;
-                _armed.seen.push_back(picked);
 
                 const RE::BGSPerk* perk = nullptr;
                 if (a_entry && a_entry->GetType() == RE::PERK_ENTRY_TYPE::kEntryPoint) {
@@ -165,9 +140,9 @@ namespace PerkSpells::EntryPointSpells {
                 }
 
                 // PerPerk: within one perk the later match replaces the earlier
-                // one. The engine never stops the walk (engineStops=0 in the
-                // 09-28 log) and overwrites its result slot per match, so its
-                // own single pick is the last match - we keep that per perk.
+                // one. The engine never stops the walk (seen in the 09-28 log)
+                // and overwrites its result slot per match, so its own single
+                // pick is the last match - we keep that per perk.
                 if (_armed.stacking == Stacking::kPerPerk && perk) {
                     const auto it = std::ranges::find(_armed.contributors, perk);
                     if (it != _armed.contributors.end()) {
@@ -191,6 +166,8 @@ namespace PerkSpells::EntryPointSpells {
             Armed&                _armed;
         };
 
+        // One per vtable (N), each with its own original: another plugin may already have hooked the slot in
+        // one of them.
         template <std::size_t N>
         struct ForEachPerkEntryHook {
             static void Thunk(const RE::Actor* a_this, EntryPoint a_entryPoint, RE::PerkEntryVisitor& a_visitor) {
@@ -208,9 +185,11 @@ namespace PerkSpells::EntryPointSpells {
             }
 
             static void Install(REL::VariantID a_vtable, std::string_view a_name) {
-                REL::Relocation<std::uintptr_t> vtable{ a_vtable };
-                original = vtable.write_vfunc(0x100, Thunk);
-                Log::INFO("PerkSpells: hooked {}::ForEachPerkEntry", a_name);
+                // VR's Actor vtable has two more entries before it: 0x100 there is RemoveTemporaryPerk
+                // (CommonLib's own Actor::ForEachPerkEntry uses RelocateVirtual(0x100, 0x102)).
+                const std::size_t slot = REL::Module::IsVR() ? 0x102 : 0x100;
+                original = REL::Relocation<std::uintptr_t>{ a_vtable }.write_vfunc(slot, Thunk);
+                Log::INFO("PerkSpells: hooked {}::ForEachPerkEntry (vtable slot {:X})", a_name, slot);
             }
 
             static inline REL::Relocation<decltype(Thunk)> original;
@@ -232,16 +211,6 @@ namespace PerkSpells::EntryPointSpells {
                 sameAsOwner = actor;
             }
             return sameAsOwner;
-        }
-
-        // Any effect flagged Hostile makes the whole spell hostile.
-        bool IsHostileSpell(const RE::SpellItem* a_spell) {
-            for (const auto* effect : a_spell->effects) {
-                if (effect && effect->baseEffect && effect->baseEffect->IsHostile()) {
-                    return true;
-                }
-            }
-            return false;
         }
 
         void Deliver(RE::Actor* a_caster, RE::Actor* a_target, RE::SpellItem* a_spell, RE::Actor* a_blame, Kind a_kind) {
@@ -294,9 +263,7 @@ namespace PerkSpells::EntryPointSpells {
             const bool  toOwner = DeliversToOwner(*kind);
             const bool  stack = cfg.stacking != Stacking::kOff;
             const bool  swingRoute = *kind == Kind::kWeaponSwing && cfg.swingHostileToAttacker;
-            const bool  work = cfg.enabled[k] && (stack || (cfg.ownerCasts && !toOwner) || swingRoute);
-            const bool  observe = LogBudgetLeft(*kind);
-            if (!work && !observe) {
+            if (!cfg.enabled[k] || !(stack || (cfg.ownerCasts && !toOwner) || swingRoute)) {
                 return forward();
             }
 
@@ -334,11 +301,10 @@ namespace PerkSpells::EntryPointSpells {
                 return forward();
             }
 
-            // Run the engine, collecting (work) or just watching (observe).
+            // Run the engine, collecting every match (stacking) or only its single pick.
             std::vector<RE::SpellItem*> spells;
-            Armed                       armed;
-            bool                        lateWrite = false;
-            if (work && stack) {
+            if (stack) {
+                Armed armed;
                 armed.owner = a_owner;
                 armed.entryPoint = a_entryPoint;
                 armed.slot = slot;
@@ -350,29 +316,30 @@ namespace PerkSpells::EntryPointSpells {
                 spells = std::move(armed.spells);
                 if (*slot) {
                     // Written after the visit (or the visit never reached us).
-                    lateWrite = true;
                     if (std::ranges::find(spells, *slot) == spells.end()) {
                         spells.insert(spells.begin(), *slot);
                     }
                     *slot = nullptr;
                 }
+                if (!armed.reached) {
+                    static std::array<std::atomic<bool>, kKinds> warned{};
+                    if (!warned[k].exchange(true)) {
+                        Log::WARN("PerkSpells: {}: engine did not visit entries through ForEachPerkEntry; only its single pick is available",
+                                     Settings::Name(*kind));
+                    }
+                }
             } else {
                 forward();
                 if (*slot) {
                     spells.push_back(*slot);
-                    if (work) {
-                        *slot = nullptr;
-                    }
+                    *slot = nullptr;
                 }
             }
+            if (spells.empty()) {
+                return;
+            }
 
-            // Decide delivery.
-            std::string action;
-            if (!work) {
-                action = "observed only";
-            } else if (spells.empty()) {
-                action = "nothing matched";
-            } else if (swingRoute) {
+            if (swingRoute) {
                 // Weapon Swing: the owner is the actor being swung at. Hostile
                 // spells go from the owner to the attacker (tab 1); everything
                 // else stays a self spell. A beneficial first pick is still
@@ -382,71 +349,31 @@ namespace PerkSpells::EntryPointSpells {
                     attacker = nullptr;
                 }
                 std::size_t first = 0;
-                if (!IsHostileSpell(spells.front())) {
+                if (!spells.front()->IsHostile()) {
                     *slot = spells.front();
                     first = 1;
                 }
-                std::size_t toSelf = 0;
-                std::size_t toAttacker = 0;
                 for (std::size_t i = first; i < spells.size(); ++i) {
-                    if (IsHostileSpell(spells[i]) && attacker) {
-                        Deliver(a_owner, attacker, spells[i], a_owner, *kind);
-                        ++toAttacker;
-                    } else {
-                        Deliver(a_owner, a_owner, spells[i], a_owner, *kind);
-                        ++toSelf;
-                    }
+                    Deliver(a_owner, spells[i]->IsHostile() && attacker ? attacker : a_owner, spells[i], a_owner, *kind);
                 }
-                action = std::format("engine applies {}, plugin delivers {} to owner and {} to attacker {}",
-                                     first, toSelf, toAttacker, Describe(attacker));
-            } else {
-                RE::Actor* target = toOwner ? a_owner : OtherActor(a_owner, args, subjectCount);
-                if (!target) {
-                    *slot = spells.front();
-                    action = "no actor subject - engine applies its first pick, extras dropped";
-                    static std::array<std::atomic<bool>, kKinds> warned{};
-                    if (!warned[k].exchange(true)) {
-                        Log::WARN("PerkSpells: {}: no actor among the condition subjects; engine behaviour kept", Settings::Name(*kind));
-                    }
-                } else if (cfg.ownerCasts && !toOwner) {
-                    for (auto* spell : spells) {
-                        Deliver(a_owner, target, spell, a_owner, *kind);
-                    }
-                    action = std::format("owner casts {} on {}", spells.size(), Describe(target));
-                } else {
-                    *slot = spells.front();
-                    for (std::size_t i = 1; i < spells.size(); ++i) {
-                        Deliver(toOwner ? a_owner : target, target, spells[i], a_owner, *kind);
-                    }
-                    action = std::format("engine applies 1, plugin delivers {} more to {}", spells.size() - 1, Describe(target));
-                }
+                return;
             }
-
-            if (armed.slot && !armed.reached) {
+            RE::Actor* target = toOwner ? a_owner : OtherActor(a_owner, args, subjectCount);
+            if (!target) {
+                *slot = spells.front();
                 static std::array<std::atomic<bool>, kKinds> warned{};
                 if (!warned[k].exchange(true)) {
-                    Log::WARN("PerkSpells: {}: engine did not visit entries through ForEachPerkEntry; only its single pick is available",
-                                 Settings::Name(*kind));
+                    Log::WARN("PerkSpells: {}: no actor among the condition subjects; engine behaviour kept", Settings::Name(*kind));
                 }
-            }
-
-            const auto n = g_logged[k].fetch_add(1, std::memory_order_relaxed);
-            if (n < cfg.logCallsPerEntryPoint) {
-                std::string subjects;
-                for (std::size_t i = 0; i < subjectCount; ++i) {
-                    subjects += (i ? ", " : "") + Describe(static_cast<RE::TESForm*>(args[i]));
+            } else if (cfg.ownerCasts && !toOwner) {
+                for (auto* spell : spells) {
+                    Deliver(a_owner, target, spell, a_owner, *kind);
                 }
-                const auto join = [](const std::vector<RE::SpellItem*>& a_list) {
-                    std::string out;
-                    for (std::size_t i = 0; i < a_list.size(); ++i) {
-                        out += (i ? ", " : "") + Describe(a_list[i]);
-                    }
-                    return out;
-                };
-                Log::INFO("PerkSpells: {} #{} owner={} tabs={} subjects=[{}] slotOnStack={} reached={} matches={} engineStops={} lateWrite={} sneaking={} seen=[{}] spells=[{}] -> {}",
-                             Settings::Name(*kind), n + 1, Describe(a_owner), probe.tabCount, subjects, OnThisStack(slot),
-                             armed.reached, armed.matches, armed.innerStops, lateWrite, a_owner->IsSneaking(),
-                             join(armed.seen), join(spells), action);
+            } else {
+                *slot = spells.front();
+                for (std::size_t i = 1; i < spells.size(); ++i) {
+                    Deliver(toOwner ? a_owner : target, target, spells[i], a_owner, *kind);
+                }
             }
         }
 
@@ -455,26 +382,34 @@ namespace PerkSpells::EntryPointSpells {
         struct CallSite {
             std::uintptr_t address;
             bool           isJump;
-            std::uint32_t  entryPoint;  // UINT32_MAX = not identified
+            std::uint32_t  entryPoint;
         };
 
-        // Nearest preceding "mov ecx, imm32" (B9 id 00 00 00) naming one of our
-        // entry points. Over-inclusion is harmless: the thunk checks the real
-        // entry point on every call.
-        std::uint32_t IdentifyEntryPoint(const std::uint8_t* a_code, std::size_t a_offset) {
+        // Nearest preceding "mov ecx, imm32" (B9 id 00 00 00), or "lea ecx, [reg + disp8]"
+        // ([REX] 8D, ModRM mod 01 reg ecx, disp8), naming one of our entry points. SE and VR load
+        // Combat Hit the second way in Character::ApplyAllCombatSpellsFromAttack (id 37799:
+        // lea ecx,[r14+33h] with r14 zero). Over-inclusion is harmless: the thunk checks the real
+        // entry point on every call. On SE 1.5.97, AE 1.6.1170 / 1.7.104 and VR 1.4.15 this finds
+        // all five entry points (Combat Hit at two sites).
+        std::optional<std::uint32_t> IdentifyEntryPoint(const std::uint8_t* a_code, std::size_t a_offset) {
             constexpr std::size_t kWindow = 64;
             for (std::size_t back = 5; back <= kWindow && back <= a_offset; ++back) {
                 const auto* p = a_code + a_offset - back;
                 if (p[0] == 0xB9 && p[2] == 0 && p[3] == 0 && p[4] == 0 && KindOf(p[1])) {
                     return p[1];
                 }
+                const std::size_t rex = (p[0] & 0xF0) == 0x40 ? 1 : 0;
+                const std::uint8_t modrm = p[rex + 1];
+                if (p[rex] == 0x8D && (modrm & 0xF8) == 0x48 && (modrm & 7) != 4 && KindOf(p[rex + 2])) {
+                    return p[rex + 2];
+                }
             }
-            return UINT32_MAX;
+            return std::nullopt;
         }
     }
 
     void Install() {
-        const auto& cfg = Settings::Get();
+        Settings::Load();
 
         REL::Relocation<std::uintptr_t> handle{ RELOCATION_ID(23073, 23526) };
         const std::uintptr_t            target = handle.address();
@@ -485,6 +420,7 @@ namespace PerkSpells::EntryPointSpells {
         const auto* code = text.pointer<std::uint8_t>();
         const auto  size = text.size();
         const auto  base = text.address();
+        const auto  moduleBase = REL::Module::get().base();
 
         std::vector<CallSite> sites;
         std::size_t           totalCallers = 0;
@@ -499,24 +435,20 @@ namespace PerkSpells::EntryPointSpells {
                 continue;
             }
             ++totalCallers;
-            const auto ep = IdentifyEntryPoint(code, i);
-            if (ep != UINT32_MAX || cfg.patchEveryCallSite) {
-                sites.push_back({ base + i, op == 0xE9, ep });
+            if (const auto ep = IdentifyEntryPoint(code, i)) {
+                sites.push_back({ base + i, op == 0xE9, *ep });
             }
         }
 
         std::array<std::size_t, kKinds> perKind{};
         for (const auto& site : sites) {
-            if (const auto kind = KindOf(site.entryPoint)) {
-                ++perKind[std::to_underlying(*kind)];
-            }
+            ++perKind[std::to_underlying(*KindOf(site.entryPoint))];
         }
         Log::INFO("PerkSpells: {} direct callers of HandleEntryPoint, patching {} (CombatHit {} Bashing {} Reanimate {} WeaponSwing {} Sneaking {})",
                      totalCallers, sites.size(), perKind[0], perKind[1], perKind[2], perKind[3], perKind[4]);
         for (std::size_t k = 0; k < kKinds; ++k) {
-            if (perKind[k] == 0 && !cfg.patchEveryCallSite) {
-                Log::WARN("PerkSpells: {}: no call site identified - it keeps engine behaviour (another plugin may already hook it; try bPatchEveryCallSite=1)",
-                             Settings::Name(static_cast<Kind>(k)));
+            if (perKind[k] == 0) {
+                Log::WARN("PerkSpells: {}: no call site identified - it keeps engine behaviour", Settings::Name(static_cast<Kind>(k)));
             }
         }
         if (sites.empty()) {
@@ -538,12 +470,9 @@ namespace PerkSpells::EntryPointSpells {
             const auto previous = site.isJump ? trampoline.write_branch<5>(site.address, HandleEntryPointThunk)
                                               : trampoline.write_call<5>(site.address, HandleEntryPointThunk);
             if (previous != target) {
-                Log::ERROR("PerkSpells: call site {:X}: previous target {:X} != HandleEntryPoint", site.address - base, previous);
+                Log::ERROR("PerkSpells: call site +{:X}: previous target {:X} != HandleEntryPoint", site.address - moduleBase, previous);
             }
-            if (!cfg.patchEveryCallSite) {
-                Log::INFO("PerkSpells: patched {} at +{:X} (ep {})", site.isJump ? "jmp" : "call", site.address - REL::Module::get().base(),
-                             site.entryPoint == UINT32_MAX ? -1 : static_cast<int>(site.entryPoint));
-            }
+            Log::INFO("PerkSpells: patched {} at +{:X} (ep {})", site.isJump ? "jmp" : "call", site.address - moduleBase, site.entryPoint);
         }
 
         ForEachPerkEntryHook<0>::Install(RE::VTABLE_Actor[0], "Actor");

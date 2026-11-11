@@ -41,7 +41,7 @@ namespace Persuasion {
 			return nullptr;
 		}
 
-		RE::ActorPtr actor = s_currentTarget.get();
+		RE::ActorPtr actor = REBridge::Lookup(s_currentTarget);
 
 		if (!actor) {
 			Log::WARN("{}: actor was null for handle {:08X}.", context, s_currentTarget.native_handle());
@@ -77,7 +77,7 @@ namespace Persuasion {
 			{ "rules", Rules::ToJson(s_effective) }
 		};
 
-		DialogueSession::Start(target);
+		DialogueSession::Start(target, CloseForDeath);
 
 		s_handle.InvokeByFunctionName(PersuasionContract::JsFunc::PersuasionInit, payload);
 		s_handle.Show();
@@ -93,13 +93,30 @@ namespace Persuasion {
 			return;
 		}
 
-		if (RE::ActorPtr actor = s_currentTarget.get()) {
+		if (RE::ActorPtr actor = REBridge::Lookup(s_currentTarget)) {
 			ActorExpression::Reset(actor.get());
 		}
 
 		DialogueSession::End(s_currentTarget);
 
 		s_currentTarget = RE::ActorHandle{};
+	}
+
+	void PersuasionView::CloseForDeath() {
+		s_handle.InvokeByFunctionName(PersuasionContract::JsFunc::PersuasionAbort);
+		Close();
+	}
+
+	void PersuasionView::OnPreLoadGame() {
+		if (!s_currentTarget) {
+			return;
+		}
+		s_currentTarget = RE::ActorHandle{};
+		if (s_handle.IsValid()) {
+			//The script stops too: hidden but still "active", it would follow the gamepad and keep decaying.
+			s_handle.InvokeByFunctionName(PersuasionContract::JsFunc::PersuasionAbort);
+			s_handle.UnfocusAndHide();
+		}
 	}
 
 	//When argument is an empty string, the user has moved away from the wedge.
@@ -144,29 +161,33 @@ namespace Persuasion {
 			Log::WARN("PersuasionView::OnBribe: disposition was null.");
 			return;
 		}
-		auto* actor = GetCurrentActorOrWarn("PersuasionView::OnBribe");
-		if (!actor) {
-			return;
-		}
-
 		//One bribe under the conversation's rules, shared with the Scaleform menu (it checks the player).
+		//PrismaUI calls back from its own thread: the gold and the actor values are read and changed on the main thread.
 		const float before = std::strtof(disposition, nullptr);
-		const BribeAttempt attempt = Bribery::Attempt(actor, before, s_effective);
-		if (attempt.success) {
-			SendBribeResult(true, attempt.price, attempt.gain, attempt.disposition, "");
-			return;
-		}
-		switch (attempt.reason) {
-		case BribeAttempt::Reason::kDisabled:
-			SendBribeResult(false, 0, 0, before, "No bribes");
-			break;
-		case BribeAttempt::Reason::kNoGold:
-			SendBribeResult(false, attempt.price, 0, before, "Not Enough Gold");
-			break;
-		default:
-			SendBribeResult(false, attempt.price, 0, before, "Bribe failed");
-			break;
-		}
+		SKSE::GetTaskInterface()->AddTask([handle = s_currentTarget, before]() {
+			const RE::ActorPtr actor = REBridge::Lookup(handle);
+			if (!actor) {
+				Log::WARN("PersuasionView::OnBribe: no persuasion target.");
+				SendBribeResult(false, 0, 0, before, "Bribe failed");
+				return;
+			}
+			const BribeAttempt attempt = Bribery::Attempt(actor.get(), before, s_effective);
+			if (attempt.success) {
+				SendBribeResult(true, attempt.price, attempt.gain, attempt.disposition, "");
+				return;
+			}
+			switch (attempt.reason) {
+			case BribeAttempt::Reason::kDisabled:
+				SendBribeResult(false, 0, 0, before, "No bribes");
+				break;
+			case BribeAttempt::Reason::kNoGold:
+				SendBribeResult(false, attempt.price, 0, before, "Not Enough Gold");
+				break;
+			default:
+				SendBribeResult(false, attempt.price, 0, before, "Bribe failed");
+				break;
+			}
+		});
 	}
 
 	void PersuasionView::SendBribeResult(bool success, int price, int gain, float disposition, const char* reason) {
@@ -186,7 +207,7 @@ namespace Persuasion {
 		assert(taskInterface);
 		RE::ActorHandle handle = actor->GetHandle();
 		taskInterface->AddTask([handle, value]() {
-			if (RE::ActorPtr actor = handle.get()) {
+			if (RE::ActorPtr actor = REBridge::Lookup(handle)) {
 				DispositionSystem::SetDispositionActorValue(actor.get(), value, true);
 			}
 			});

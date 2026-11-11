@@ -1,19 +1,5 @@
 #pragma once
-#include <algorithm>
-#include <array>
-#include <charconv>
-#include <cmath>
-#include <cstdint>
-#include <cstring>
-#include <filesystem>
-#include <format>
-#include <fstream>
-#include <optional>
-#include <random>
-#include <string>
 #include <string_view>
-#include <unordered_map>
-#include <vector>
 
 // The repair menu: a native IMenu around Interface\Skyblivion\SKYBGearService.swf.
 //

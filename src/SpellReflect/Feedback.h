@@ -1,11 +1,6 @@
 #pragma once
 
 #include <cstdint>
-#include <optional>
-#include <span>
-#include <string>
-#include <string_view>
-#include <vector>
 
 // Sound + visual when a spell is reflected, an arrow is reflected or a timed
 // block lands. Records come from the [Feedback] INI section (editor IDs); the

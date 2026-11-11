@@ -83,7 +83,9 @@ namespace Sigil {
 				if (!out.empty()) {
 					out += '~';
 				}
-				out += std::format("{}^{}^{}^{}", scrub(effect->baseEffect->GetFullName()), magnitude, duration,
+				const char* name = effect->baseEffect->GetFullName();
+				const std::string field = name && *name ? scrub(name) : std::string(" ");
+				out += std::format("{}^{}^{}^{}", field, magnitude, duration,
 					description.empty() ? std::string(" ") : scrub(description));
 			}
 			return out.empty() ? " " : out;

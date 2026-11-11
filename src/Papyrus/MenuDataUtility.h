@@ -1,5 +1,6 @@
 #pragma once
 #include "SKSEScriptRegistrar.h"
+#include "Platform/FormCache.h"
 
 #include <cstdint>
 #include <vector>
@@ -19,14 +20,16 @@ private:
     //0 for a name the game does not know. Empty with no actor.
     static std::vector<std::int32_t> BaseValues(RE::StaticFunctionTag*, RE::Actor* actor, std::vector<RE::BSFixedString> names) {
         std::vector<std::int32_t> out;
-        auto* list = RE::ActorValueList::GetSingleton();
-        if (!actor || !list) {
+        if (!actor) {
             return out;
         }
         out.resize(names.size(), 0);
-        auto* owner = actor->AsActorValueOwner();
+        auto* owner = REBridge::AVOwner(actor);
+        if (!owner) {
+            return out;
+        }
         for (std::size_t i = 0; i < names.size(); ++i) {
-            const auto av = names[i].empty() ? RE::ActorValue::kNone : list->LookupActorValueByName(names[i].c_str());
+            const auto av = REBridge::ActorValueByName(names[i].c_str());
             if (av != RE::ActorValue::kNone) {
                 out[i] = static_cast<std::int32_t>(owner->GetBaseActorValue(av));
             }
@@ -38,9 +41,9 @@ private:
     //an entry past the list's end, or not a global, is 0; empty when the list is missing or one of its first
     //fourteen entries is not a global.
     static std::vector<float> TuningValues(RE::StaticFunctionTag*, RE::BSFixedString listEditorID, std::int32_t count) {
-        auto* list = listEditorID.empty() ? nullptr : RE::TESForm::LookupByEditorID<RE::BGSListForm>(listEditorID.c_str());
+        //A list that does not resolve is logged once by the form table.
+        auto* list = FormCache::Get<RE::BGSListForm>(listEditorID.c_str(), "SKYBMenuData.TuningValues");
         if (!list || count <= 0) {
-            Log::WARN("SKYBMenuData.TuningValues: list '{}' not found", listEditorID.c_str() ? listEditorID.c_str() : "");
             return {};
         }
         std::vector<float> out(static_cast<std::size_t>(count), 0.0f);

@@ -3,9 +3,9 @@
 #include "PerksContract.h"
 #include "Platform/FormCache.h"
 #include "Papyrus/ModEvents.h"
+#include "Platform/MainThread.h"
 
 #include <algorithm>
-#include <charconv>
 
 namespace PerksView {
 
@@ -19,17 +19,7 @@ namespace PerksView {
 
 	//"HEX|Plugin" names a BGSPerk that is loaded.
 	bool PerkCurrency::RankExists(const std::string& rankRef) {
-		const auto bar = rankRef.find('|');
-		if (bar == std::string::npos || bar == 0 || bar + 1 >= rankRef.size()) {
-			return false;
-		}
-		RE::FormID localId = 0;
-		const auto* begin = rankRef.data();
-		const auto [end, error] = std::from_chars(begin, begin + bar, localId, 16);
-		if (error != std::errc{} || end != begin + bar) {
-			return false;
-		}
-		return FormCache::GetLocal<RE::BGSPerk>(localId, rankRef.substr(bar + 1), "PerkCurrency (rank)") != nullptr;
+		return FormCache::GetRef<RE::BGSPerk>(rankRef, "PerkCurrency (rank)") != nullptr;
 	}
 
 	//Payload: "treeId^perkId^HEX|Plugin^currencyType[^globalEditorId]".
@@ -94,9 +84,10 @@ namespace PerksView {
 
 	RE::BSEventNotifyControl PerkCurrency::Sink::ProcessEvent(const SKSE::ModCallbackEvent* a_event,
 		RE::BSTEventSource<SKSE::ModCallbackEvent>*) {
-		//Game state belongs on the main thread.
+		//Game state belongs on the main thread. The same queue as PerksFeed's state request, so a request
+		//sent after a purchase sees the deducted balance.
 		if (a_event && a_event->eventName == PerksContract::ModEvent::Acquire) {
-			SKSE::GetTaskInterface()->AddTask([payload = ModEvents::StrArg(*a_event)] { Deduct(payload); });
+			MainThread::Post([payload = ModEvents::StrArg(*a_event)] { Deduct(payload); });
 		}
 		return RE::BSEventNotifyControl::kContinue;
 	}

@@ -102,10 +102,10 @@ namespace SleepWait {
 	void WeatherArt::Push() {
 		std::string why;
 		const Art art = CurrentArt(why);
-		ScaleformUtility::RetryOnUIThread(
+		ScaleformUtility::RetryOnMainThread(
 			kAttempts, kRetryInterval,
 			[art, why] {
-				auto movie = ScaleformUtility::OpenMenuMovie(SleepWaitContract::MenuName);
+				auto movie = ScaleformUtility::OpenMenuMovie(RE::SleepWaitMenu::MENU_NAME);
 				if (!movie) {
 					return true;  //closed already: nothing to do
 				}
@@ -123,7 +123,7 @@ namespace SleepWait {
 
 	RE::BSEventNotifyControl WeatherArt::Sink::ProcessEvent(const RE::MenuOpenCloseEvent* a_event,
 		RE::BSTEventSource<RE::MenuOpenCloseEvent>*) {
-		if (a_event && a_event->opening && a_event->menuName == SleepWaitContract::MenuName) {
+		if (a_event && a_event->opening && a_event->menuName == RE::SleepWaitMenu::MENU_NAME) {
 			Push();
 		}
 		return RE::BSEventNotifyControl::kContinue;

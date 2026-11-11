@@ -35,7 +35,7 @@ namespace SpellMaking {
 			return;
 		}
 
-		const int playerGold = player->GetGoldAmount();
+		const int playerGold = Resources::PlayerGold();
 		if (playerGold < goldPrice) {
 			Log::INFO("SpellMakingView::OnBuy: Insufficient gold (have {}, need {}). {} not created.", playerGold, goldPrice, recipe.name);
 			Close();

@@ -3,24 +3,13 @@
 #include "SpellReflect/Forms.h"
 #include "SpellReflect/Settings.h"
 
-#include <algorithm>
 #include <array>
-#include <atomic>
 #include <chrono>
-#include <cmath>
 #include <cstdint>
-#include <cstring>
-#include <format>
-#include <mutex>
-#include <optional>
-#include <random>
-#include <span>
 #include <string>
 #include <string_view>
-#include <thread>
 #include <unordered_map>
 #include <utility>
-#include <vector>
 
 using namespace std::literals;
 
@@ -85,7 +74,7 @@ namespace SpellReflect::Feedback {
         }
 
         void PlayNow(Event a_event, RE::ActorHandle a_handle) {
-            const auto actorPtr = a_handle.get();
+            const auto actorPtr = REBridge::Lookup(a_handle);
             const auto actor = actorPtr.get();
             if (!actor) {
                 return;

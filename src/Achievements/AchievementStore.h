@@ -16,7 +16,7 @@ namespace Achievements {
 	//The file is never overwritten unread. An unreadable file is renamed to SKYBAchievements.unreadable-<time>.json,
 	//and if that fails, saving is off for the session. Saves go through a temporary file, so a failed write leaves the old one intact.
 	//
-	//Locked: unlocks arrive on the Papyrus VM's thread, the menu reads from UI tasks.
+	//Locked: unlocks arrive on the Papyrus VM's thread, the menu reads from main-thread tasks (MainThread::Post).
 	class AchievementStore {
 	public:
 		struct Entry {

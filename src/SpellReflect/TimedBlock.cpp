@@ -8,22 +8,10 @@
 
 #include <algorithm>
 #include <array>
-#include <atomic>
 #include <chrono>
-#include <cmath>
 #include <cstdint>
-#include <cstring>
 #include <format>
-#include <mutex>
-#include <optional>
-#include <random>
-#include <span>
 #include <string>
-#include <string_view>
-#include <thread>
-#include <unordered_map>
-#include <utility>
-#include <vector>
 
 using namespace std::literals;
 
@@ -40,11 +28,16 @@ namespace SpellReflect::TimedBlock {
         // leaf that computes it (id 26430: percentBlocked x physicalDamage x fStaminaBlockDmgMult
         // + stagger term) is at 38586+0xB39 (exe read offline, 2026-11-04). So a hit that is not
         // applied costs no stamina, and a reduced hit's cost can be given back right after.
-        constexpr std::uint64_t kMeleeHitId = 38627;
-        constexpr std::uint64_t kApplyHitId = 38586;
-        constexpr std::array    kApplyHitHints{
+        //
+        // SE/VR ids: 37673 / 37633, both in VR's address library; the call is at +0x3C0 on
+        // 1.5.97 and VR 1.4.15, same arguments (decrypted exes, 2026-11-05).
+        constexpr REL::RelocationID kMeleeHit{ 37673, 38627 };
+        constexpr REL::RelocationID kApplyHit{ 37633, 38586 };
+        constexpr std::array        kApplyHitHints{
             CallScan::Hint{ { 1, 6, 1170, 0 }, 0x4A8 },  // runtime dump
             CallScan::Hint{ { 1, 7, 104, 0 }, 0x4A8 },   // exe, checked offline 2026-10-24
+            CallScan::Hint{ { 1, 5, 97, 0 }, 0x3C0 },    // SE exe, 2026-11-05
+            CallScan::Hint{ { 1, 4, 15, 0 }, 0x3C0 },    // VR exe, 2026-11-05
         };
 
         constexpr std::array<const char*, Settings::kBlockRanks> kRankNames{ "Apprentice", "Journeyman", "Expert", "Master" };
@@ -75,8 +68,8 @@ namespace SpellReflect::TimedBlock {
             const auto playerHandle = a_player->GetHandle();
             const auto targetHandle = a_aggressor->GetHandle();
             tasks->AddTask([playerHandle, targetHandle]() {
-                const auto playerPtr = playerHandle.get();
-                const auto targetPtr = targetHandle.get();
+                const auto playerPtr = REBridge::Lookup(playerHandle);
+                const auto targetPtr = REBridge::Lookup(targetHandle);
                 const auto player = playerPtr.get();
                 const auto target = targetPtr.get();
                 if (!player || !target || target->IsDead()) {
@@ -104,11 +97,16 @@ namespace SpellReflect::TimedBlock {
             if (!player || a_target != player || a_hit.flags.none(RE::HitData::Flag::kBlocked)) {
                 return {};
             }
+            //The hooked function also applies arrow and bolt hits; a blocked one is not a timed block
+            //(the arrow parry, with its own perk and window, covers those). A bash with a bow is melee.
+            if (a_hit.weapon && (a_hit.weapon->IsBow() || a_hit.weapon->IsCrossbow()) && a_hit.flags.none(RE::HitData::Flag::kBash)) {
+                return {};
+            }
             const int rankIndex = RankOf(player);
             if (rankIndex < 0) {
                 return {};
             }
-            const auto aggressorPtr = a_hit.aggressor.get();
+            const auto aggressorPtr = REBridge::Lookup(a_hit.aggressor);
             const auto aggressor = aggressorPtr.get();
             if (!aggressor || aggressor == player) {
                 return {};
@@ -133,7 +131,7 @@ namespace SpellReflect::TimedBlock {
                     a_hit.totalDamage = damage * (1.0f - rank.damageReduction / 100.0f);
                 }
                 if (rank.staminaRestorePercent > 0.0f) {
-                    const auto  av = player->AsActorValueOwner();
+                    const auto  av = REBridge::AVOwner(player);
                     const float maxStamina = av->GetPermanentActorValue(RE::ActorValue::kStamina);
                     restored = maxStamina * rank.staminaRestorePercent / 100.0f;
                     av->ModActorValue(RE::ACTOR_VALUE_MODIFIER::kDamage, RE::ActorValue::kStamina, restored);  // vfunc 06 (v12 name)
@@ -164,7 +162,9 @@ namespace SpellReflect::TimedBlock {
             static void thunk(RE::Actor* a_target, RE::HitData& a_hit) {
                 const auto decision = Decide(a_target, a_hit);
                 if (decision.outcome == Outcome::kNegated) {
-                    return;  // negated: the hit is never applied (no damage, stagger, hit effects or block stamina cost)
+                    return;  // negated: the hit is never applied (no damage, stagger or block stamina cost); the
+                             // attacker's enchantment, poison and combat-hit spells were applied before this call
+
                 }
                 if (!decision.keepStamina) {
                     func(a_target, a_hit);
@@ -172,7 +172,7 @@ namespace SpellReflect::TimedBlock {
                 }
                 // A reduced timed block costs no stamina: the block's cost is charged inside the
                 // hit-apply function, so whatever stamina it takes is given back at once.
-                const auto  av = a_target->AsActorValueOwner();
+                const auto  av = REBridge::AVOwner(a_target);
                 const float before = av->GetActorValue(RE::ActorValue::kStamina);
                 func(a_target, a_hit);
                 const float after = av->GetActorValue(RE::ActorValue::kStamina);
@@ -193,10 +193,10 @@ namespace SpellReflect::TimedBlock {
             Log::INFO("SpellReflect: timed block: disabled in the INI");
             return;
         }
-        const auto applyHit = REL::ID(kApplyHitId).address();
+        const auto applyHit = kApplyHit.address();
         const auto calls = CallScan::FindCalls(applyHit);
         Log::INFO("SpellReflect: timed block: {} direct calls of the hit-apply function", calls.size());
-        const auto site = CallScan::FindCallIn("timed block", kMeleeHitId, applyHit, calls, kApplyHitHints);
+        const auto site = CallScan::FindCallIn("timed block", "melee hit", kMeleeHit.address(), applyHit, calls, kApplyHitHints);
         if (!site) {
             Log::ERROR("SpellReflect: timed block: OFF (melee hit call not found)");
             return;

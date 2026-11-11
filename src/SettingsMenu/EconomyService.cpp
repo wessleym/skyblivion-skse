@@ -1,24 +1,22 @@
 #include "SettingsMenu/EconomyService.h"
 
 #include "Platform/FormCache.h"
+#include "Platform/Text.h"
+#include "Resources.h"
 #include "SettingsMenu/SettingsMenuTable.h"
 
 namespace {
-	constexpr RE::FormID       kGold001 = 0x0000000F;
 	//by editor ID: the perk may ship in SKYBEconomy.esp, SKYBCombined.esp or the ESM
 	constexpr const char*      kPerk = "SKYBEconomyPerk";
-
-	bool StartsWith(std::string_view a, std::string_view b) { return a.substr(0, b.size()) == b; }
-	bool Contains(std::string_view a, std::string_view b) { return a.find(b) != std::string_view::npos; }
 
 	enum class GoldClass { kLoot, kMerchant, kSkip };
 
 	GoldClass Classify(std::string_view a_edid) {
-		if (StartsWith(a_edid, "SKYBLLVendorGold") || StartsWith(a_edid, "VendorGold")) {
+		if (a_edid.starts_with("SKYBLLVendorGold") || a_edid.starts_with("VendorGold")) {
 			return GoldClass::kMerchant;
 		}
 		for (auto word : {"Invest", "Reward", "PerkMasterTrader", "BelovedLaborer", "MasterGold", "GoldBonus"}) {
-			if (Contains(a_edid, word)) {
+			if (a_edid.find(word) != std::string_view::npos) {
 				return GoldClass::kSkip;
 			}
 		}
@@ -38,21 +36,6 @@ namespace {
 			}
 		}
 		return names;
-	}
-
-	template <class F>
-	void ForEachWord(std::string_view a_list, F&& a_fn) {
-		std::size_t start = 0;
-		while (start < a_list.size()) {
-			auto end = a_list.find(' ', start);
-			if (end == std::string_view::npos) {
-				end = a_list.size();
-			}
-			if (end > start) {
-				a_fn(a_list.substr(start, end - start));
-			}
-			start = end + 1;
-		}
 	}
 }
 
@@ -79,7 +62,7 @@ void EconomyService::Register() {
 		}
 		bool hasGold = false;
 		for (auto& e : list->entries) {
-			if (e.form && e.form->GetFormID() == kGold001) {
+			if (e.form == Resources::gold) {
 				hasGold = true;
 				break;
 			}
@@ -98,7 +81,7 @@ void EconomyService::Register() {
 			continue;
 		}
 		for (auto& e : list->entries) {
-			if (e.form && e.form->GetFormID() == kGold001) {
+			if (e.form == Resources::gold) {
 				(cls == GoldClass::kMerchant ? _merchant : _loot).push_back({&e, e.count});
 			}
 		}
@@ -112,13 +95,13 @@ void EconomyService::Register() {
 		if (r.applier != SKYBSettingsMenu::Applier::kChanceNone) {
 			continue;
 		}
-		ForEachWord(r.key, [this](std::string_view a_edid) {
+		for (const auto& edid : Text::Split(r.key, ' ')) {
 			//into the form table here; SetChanceNone reads the same entries (a miss is logged there)
-			if (auto* g = FormCache::Get<RE::TESGlobal>(a_edid, "economy")) {
-				_chanceBase.emplace(std::string(a_edid), g->value);
-				Log::INFO("economy: {} = {} at data load", a_edid, g->value);
+			if (auto* g = FormCache::Get<RE::TESGlobal>(edid, "economy")) {
+				_chanceBase.emplace(edid, g->value);
+				Log::INFO("economy: {} = {} at data load", edid, g->value);
 			}
-		});
+		}
 	}
 
 	// ---- the player's price perk
@@ -188,15 +171,15 @@ void EconomyService::Set(std::string_view a_section, std::string_view a_key, flo
 }
 
 void EconomyService::SetChanceNone(std::string_view a_globals, float a_mult) {
-	ForEachWord(a_globals, [this, a_mult](std::string_view a_edid) {
-		const auto it = _chanceBase.find(std::string(a_edid));
-		auto*      g = FormCache::Get<RE::TESGlobal>(a_edid, "economy");
+	for (const auto& edid : Text::Split(a_globals, ' ')) {
+		const auto it = _chanceBase.find(edid);
+		auto*      g = FormCache::Get<RE::TESGlobal>(edid, "economy");
 		if (it == _chanceBase.end() || !g) {
-			return;
+			continue;
 		}
 		// scale the chance to DROP (100 - chance none)
 		const float drop = std::clamp((100.0f - it->second) * a_mult, 0.0f, 100.0f);
 		g->value = std::round(100.0f - drop);
-		Log::INFO("economy: {} = {} (drop chance {}% -> {}%)", a_edid, g->value, 100.0f - it->second, drop);
-	});
+		Log::INFO("economy: {} = {} (drop chance {}% -> {}%)", edid, g->value, 100.0f - it->second, drop);
+	}
 }

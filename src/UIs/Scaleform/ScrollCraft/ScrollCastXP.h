@@ -21,7 +21,7 @@ namespace ScrollCraft {
 
 	class ScrollCastXP : public RE::BSTEventSink<RE::TESSpellCastEvent> {
 	public:
-		static constexpr const char* IniFile = "Data/SKSE/Plugins/SKYBScrollCrafting.ini";
+		static constexpr const char* kIniPath = "Data/SKSE/Plugins/SKYBScrollCrafting.ini";
 
 		static ScrollCastXP* GetSingleton()
 		{

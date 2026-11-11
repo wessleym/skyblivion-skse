@@ -23,7 +23,7 @@ static bool RegisterFuncs(RE::BSScript::Internal::VirtualMachine* vm) {
     QuestUtility::Register(vm);
     SkillUtility::Register(vm);
     UILauncher::Register(vm);
-    //SKYBAchievements.Unlock and the rest (Source\Scripts\SKYBAchievements.psc).
+    //SKYBAchievements.Unlock, its only native (Source\Scripts\SKYBAchievements.psc).
     Achievements::AchievementService::RegisterPapyrus(vm);
     //SKYBScrollCraftData.GetStatus and the rest: the scroll recipes from recipes.json (Source\Scripts\SKYBScrollCraftData.psc).
     ScrollCraft::ScrollRecipeStore::RegisterPapyrus(vm);

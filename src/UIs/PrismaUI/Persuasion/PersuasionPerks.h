@@ -15,8 +15,8 @@
 // Keys are the names of SKYBPersuasion.ini (PersuasionSettingsTable.h). The file is re-read when
 // its write time changes, checked with the settings INI each time the wheel opens. Without the
 // file, the built-in rules apply (kDefaultRules in PersuasionPerks.cpp).
-#include <array>
 #include <filesystem>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -64,8 +64,7 @@ namespace Persuasion
 		static bool ParseHeader(std::string_view a_text, Rule& a_rule, std::size_t a_lineNo);
 		static bool Holds(const Rule& a_rule, RE::PlayerCharacter* a_player);
 
-		static inline std::vector<Rule>                 s_rules;
-		static inline std::filesystem::file_time_type   s_time{};
-		static inline bool                              s_seen = false;
+		static inline std::vector<Rule>                               s_rules;
+		static inline std::optional<std::filesystem::file_time_type>  s_time;  // nullopt: the file was missing
 	};
 }

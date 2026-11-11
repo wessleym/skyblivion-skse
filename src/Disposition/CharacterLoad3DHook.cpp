@@ -20,7 +20,7 @@ RE::NiAVObject* CharacterLoad3DHook::thunk(RE::Actor* actor, bool a_backgroundLo
     RE::ActorHandle handle = actor->GetHandle();
 
     taskInterface->AddTask([handle]() {
-        RE::ActorPtr actor = handle.get();
+        RE::ActorPtr actor = REBridge::Lookup(handle);
         if (!actor || actor->IsPlayerRef()) {
             return;
         }

@@ -1,7 +1,7 @@
 #pragma once
 
-//The alchemy side of the vanilla Crafting Menu (Interface\craftingmenu.swf, SkyUI's code, patched in the
-//UI integration workspace, work\AlchemyMenu): the apparatus strip and the ingredient effect colours.
+//The alchemy side of the vanilla Crafting Menu (Interface\craftingmenu.swf, SkyUI's code, patched): the
+//apparatus strip and the ingredient effect colours.
 //
 //The movie has no skse object of its own that could ask for data, so the plugin registers with SKSE's
 //Scaleform interface and, every time craftingmenu.swf is loaded, puts two functions on its _root.
@@ -46,13 +46,13 @@ namespace Alchemy::AlchemyMenuContract {
 		inline constexpr const char* Thresholds = "thresholds";
 	}
 
-	//Where the baseline table ships (the analysis workspace's report\alchemy_effect_map.csv as JSON):
+	//Where the baseline table ships:
 	//{ "effects": { "03EB15:Skyrim.esm": { "axis": "mag"|"dur"|"none", "mag": 5.0, "dur": 0 }, ... } }
 	//The key is the effect's six-digit local FormID (hex, upper case) and the file that defines it.
 	inline constexpr const char* BaselineFile = "Data/Interface/Skyblivion/Data/SKYBAlchemyEffectBaselines.json";
 
-	//The colours and thresholds the movie uses (the concept doc's rule: x2 green, x1.5 pale green,
-	//x0.5 amber; 1.9 / 1.4 / 0.6 so rounding cannot move a tier).
+	//The colours and thresholds the movie uses (x2 green, x1.5 pale green, x0.5 amber; 1.9 / 1.4 / 0.6 so
+	//rounding cannot move a tier).
 	inline constexpr std::uint32_t PotentColour = 0x7DDC6E;
 	inline constexpr std::uint32_t StrongColour = 0xC2E8A8;
 	inline constexpr std::uint32_t WeakColour = 0xD7925F;

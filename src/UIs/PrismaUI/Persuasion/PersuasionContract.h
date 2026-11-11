@@ -13,6 +13,7 @@ namespace Persuasion::PersuasionContract {
 	namespace JsFunc {
 		inline constexpr const char* PersuasionInit = "PersuasionBridges.init";
 		inline constexpr const char* PersuasionBribeResult = "PersuasionBridges.bribeResult";
+		inline constexpr const char* PersuasionAbort = "PersuasionBridges.abort";
 		inline constexpr const char* PersuasionVerifyBridges = "PersuasionBridges.verify";
 	}
 }

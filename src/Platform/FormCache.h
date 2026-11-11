@@ -1,5 +1,7 @@
 #pragma once
 
+#include <optional>
+#include <string>
 #include <string_view>
 
 // The forms this plugin reads from plugin files by name (globals, perks, form lists, keywords, sound
@@ -16,17 +18,14 @@
 // settings rows) resolve on first use into the same table. Before OnDataLoaded a lookup is answered
 // but not kept, so an early miss cannot pin a null.
 //
-// Thread safe: achievement progress is read from the Papyrus VM thread, the menus from UI tasks.
+// Thread safe: achievement progress is read from the Papyrus VM thread, the menus from main-thread and SKSE tasks.
 namespace FormCache
 {
 	// kDataLoaded, before the services register: resolves the fixed set and marks the table ready.
 	void OnDataLoaded();
 
-	// By editor ID; with a (local ID, plugin) fallback for a load order without po3 Tweaks; by (local ID,
-	// plugin). a_type is checked (kNone: any form). a_source names the caller in the log.
+	// By editor ID; by (local ID, plugin). a_type is checked (kNone: any form). a_source names the caller in the log.
 	RE::TESForm* Resolve(std::string_view a_editorID, RE::FormType a_type, std::string_view a_source);
-	RE::TESForm* Resolve(std::string_view a_editorID, RE::FormID a_localID, std::string_view a_plugin,
-						 RE::FormType a_type, std::string_view a_source);
 	RE::TESForm* ResolveLocal(RE::FormID a_localID, std::string_view a_plugin, RE::FormType a_type, std::string_view a_source);
 
 	// A form found some other way (a script property), kept under an editor ID so later calls find it.
@@ -39,14 +38,25 @@ namespace FormCache
 	}
 
 	template <class T>
-	T* Get(std::string_view a_editorID, RE::FormID a_localID, std::string_view a_plugin, std::string_view a_source)
-	{
-		return static_cast<T*>(Resolve(a_editorID, a_localID, a_plugin, T::FORMTYPE, a_source));
-	}
-
-	template <class T>
 	T* GetLocal(RE::FormID a_localID, std::string_view a_plugin, std::string_view a_source)
 	{
 		return static_cast<T*>(ResolveLocal(a_localID, a_plugin, T::FORMTYPE, a_source));
+	}
+
+	// The data files' form reference "HEX|Plugin": a local form ID in hex, then the plugin's file name.
+	struct Ref
+	{
+		RE::FormID  localID{ 0 };
+		std::string plugin;
+	};
+	// nullopt when a_text is not HEX|Plugin.
+	[[nodiscard]] std::optional<Ref> ParseRef(std::string_view a_text);
+
+	// The form a_text names: null when it is not HEX|Plugin, or when it does not resolve (logged once).
+	template <class T>
+	T* GetRef(std::string_view a_text, std::string_view a_source)
+	{
+		const auto ref = ParseRef(a_text);
+		return ref ? GetLocal<T>(ref->localID, ref->plugin, a_source) : nullptr;
 	}
 }

@@ -10,13 +10,6 @@
 
 namespace Skills {
 
-	namespace {
-		bool GamepadActive() {
-			auto* input = RE::BSInputDeviceManager::GetSingleton();
-			return input && input->IsGamepadEnabled();
-		}
-	}
-
 	void SkillSheetFeed::Register() {
 		if (!ModEvents::AddSink(&s_sink)) {
 			Log::WARN("SkillSheetFeed: No mod-event source. Skill sheet requests will not be heard.");
@@ -50,7 +43,7 @@ namespace Skills {
 			skills.PushBack(row);
 		}
 
-		const bool gamepad = GamepadActive();
+		const bool gamepad = ScaleformUtility::GamepadActive();
 		RE::GFxValue sheet;
 		movie->CreateObject(&sheet);
 		sheet.SetMember("gamepad", RE::GFxValue(gamepad));

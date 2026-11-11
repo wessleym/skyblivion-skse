@@ -6,14 +6,32 @@
 #include <string>
 #include <string_view>
 
+#include <nlohmann/json_fwd.hpp>
+
 class ScaleformUtility {
 public:
 	//The movie of an open menu, or null when the menu is closed.
 	//Every feed pushes through this: a menu can close between a request and the task that answers it.
 	[[nodiscard]] static RE::GPtr<RE::GFxMovieView> OpenMenuMovie(std::string_view menuName);
 
-	//Whether Interface/<a_name>.swf exists, loose or in an archive.
-	[[nodiscard]] static bool MovieExists(std::string_view a_name);
+	//The plugin's own menus: an IMenu around Interface\<a_file>.swf whose callbacks come through GameDelegate.
+	//For its constructor: loads the movie with an FxDelegate and sets what these menus share (menu-mode input,
+	//modal, topmost, the cursor unless a gamepad is in use) at a_depth, pausing the game when a_pausesGame.
+	//A movie that does not load is closed at once with a_close: a menu without its movie would sit invisible and modal.
+	static void LoadMenuMovie(RE::IMenu& a_menu, std::string_view a_file, std::int8_t a_depth, bool a_pausesGame, void (*a_close)());
+	//Whether the menu can be shown: the UI is up, the menu is not open already, and Interface\<a_file>.swf
+	//exists, loose or in an archive (a missing movie is logged).
+	[[nodiscard]] static bool CanShowMenu(std::string_view a_menu, std::string_view a_file);
+	//Queue the menu's show / hide message.
+	static void ShowMenu(std::string_view a_menu);
+	static void HideMenu(std::string_view a_menu);
+
+	//A JSON value built in a_movie: objects and arrays as Scaleform objects and arrays, strings owned by the movie,
+	//numbers, booleans, anything else as null.
+	[[nodiscard]] static RE::GFxValue ToGFx(RE::GFxMovieView& a_movie, const nlohmann::json& a_json);
+
+	//A gamepad is the active input device.
+	[[nodiscard]] static bool GamepadActive();
 
 	//For the feeds' timing log lines.
 	[[nodiscard]] static long long MicrosecondsSince(std::chrono::steady_clock::time_point start);
@@ -21,7 +39,7 @@ public:
 	//Runs attempt on the main thread (MainThread::Post) until it returns true, at most attempts times,
 	//waiting interval between tries. onGiveUp then runs there too if every attempt returned false.
 	//The wait is a sleeping thread, so that the interval is real time, not a count of frames.
-	static void RetryOnUIThread(int attempts, std::chrono::milliseconds interval,
+	static void RetryOnMainThread(int attempts, std::chrono::milliseconds interval,
 		std::function<bool()> attempt, std::function<void()> onGiveUp);
 };
 

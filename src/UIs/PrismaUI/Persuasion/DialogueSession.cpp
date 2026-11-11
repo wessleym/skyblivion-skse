@@ -14,8 +14,11 @@ namespace Persuasion {
 	// (Actor handles are complete.)
 
 	namespace {
-		std::atomic<bool>          s_keepAliveActive{ false };
-		std::atomic<std::uint32_t> s_keepAliveGeneration{ 0 };
+		//Bumped by Start, End and Abort: a keep-alive thread or a dialogue reopen started under an older value stops.
+		std::atomic<std::uint32_t> s_generation{ 0 };
+		//The NPC whose death closes the wheel (0: none), and the wheel's close.
+		std::atomic<RE::FormID> s_watched{ 0 };
+		std::atomic<void (*)()> s_closeWheel{ nullptr };
 
 		//Into the movie: on the main thread, next frame.
 		void SetDialogueMenuVisible(bool visible) {
@@ -51,7 +54,7 @@ namespace Persuasion {
 					assert(taskInterface);
 
 					taskInterface->AddTask([handle, heldSamples, lastValue]() {
-						RE::ActorPtr actor = handle.get();
+						RE::ActorPtr actor = REBridge::Lookup(handle);
 						RE::BSFaceGenAnimationData* faceGen = actor ? actor->GetFaceGenAnimationData() : nullptr;
 						if (!faceGen) {
 							return;
@@ -70,13 +73,11 @@ namespace Persuasion {
 				}).detach();
 		}
 
-		void StartConversationKeepAlive(RE::ActorHandle handle) {
-			s_keepAliveActive.store(true);
-			const std::uint32_t myGen = s_keepAliveGeneration.fetch_add(1) + 1;
+		void StartConversationKeepAlive(RE::ActorHandle handle, std::uint32_t myGen) {
 			std::thread([myGen, handle]() {
-				while (s_keepAliveActive.load() && s_keepAliveGeneration.load() == myGen) {
+				while (s_generation.load() == myGen) {
 					std::this_thread::sleep_for(std::chrono::seconds(30));
-					if (!s_keepAliveActive.load() || s_keepAliveGeneration.load() != myGen) {
+					if (s_generation.load() != myGen) {
 						break;
 					}
 					auto* taskInterface = SKSE::GetTaskInterface();
@@ -84,10 +85,10 @@ namespace Persuasion {
 					assert(taskInterface);
 
 					taskInterface->AddTask([handle, myGen]() {
-						if (!s_keepAliveActive.load() || s_keepAliveGeneration.load() != myGen) {
+						if (s_generation.load() != myGen) {
 							return;
 						}
-						if (RE::ActorPtr actor = handle.get()) {
+						if (RE::ActorPtr actor = REBridge::Lookup(handle)) {
 							SetActorDialogueWithPlayer(actor.get(), true);
 						}
 						});
@@ -95,39 +96,45 @@ namespace Persuasion {
 				}).detach();
 		}
 
-		void StopConversationKeepAlive() {
-			s_keepAliveActive.store(false);
-			s_keepAliveGeneration.fetch_add(1);//retire the running thread
-		}
-
 		// Reopens the dialogue menu. Allows refreshing of topics.
-		void ReopenDialogueWhenClosed(RE::ActorHandle handle, int attemptsLeft) {
+		void ReopenDialogueWhenClosed(RE::ActorHandle handle, int attemptsLeft, std::uint32_t gen) {
 			auto* taskInterface = SKSE::GetTaskInterface();
 
 			assert(taskInterface);
 
-			taskInterface->AddTask([handle, attemptsLeft]() {
+			taskInterface->AddTask([handle, attemptsLeft, gen]() {
 				auto* ui = RE::UI::GetSingleton();
-				RE::ActorPtr actor = handle.get();
+				RE::ActorPtr actor = REBridge::Lookup(handle);
+				//An Abort since the End that started this one: a game is loading.
+				const bool aborted = s_generation.load() != gen;
 				const bool menuClosed = !(ui && ui->IsMenuOpen(RE::DialogueMenu::MENU_NAME));
 				// If the menu is not closed or the actor is not found, sleep and try again.
-				if ((!menuClosed || !actor) && attemptsLeft > 0) {
-					std::thread([handle, attemptsLeft]() {
+				if (!aborted && (!menuClosed || !actor) && attemptsLeft > 0) {
+					std::thread([handle, attemptsLeft, gen]() {
 						std::this_thread::sleep_for(std::chrono::milliseconds(50));
-						ReopenDialogueWhenClosed(handle, attemptsLeft - 1);
+						ReopenDialogueWhenClosed(handle, attemptsLeft - 1, gen);
 						}).detach();
 					return;
 				}
 				if (auto* mtm = RE::MenuTopicManager::GetSingleton()) {
-					// Set forceGoodbye to false in case it was set to true earlier.
+					// Clear both goodbye flags: if the dialogue had already closed (combat), nothing consumed them,
+					// and the next conversation would shut at once.
 					mtm->forceGoodbye = false;
+					mtm->shutMenu = false;
 				}
-				if (actor) {
+				if (actor && (aborted || actor->IsDead())) {
+					//Killed while the wheel was up (activating a corpse would open its inventory, not a conversation),
+					//or a game is loading: no conversation is opened. Its AI (switched off for the goodbye) is still
+					//given back.
+					actor->EnableAI(true);
+					Log::INFO("DialogueSession: {:08X}: {}; the dialogue is not reopened.", actor->GetFormID(),
+						aborted ? "a game is loading" : "died during persuasion");
+				}
+				else if (actor) {
 					actor->EnableAI(true);
 					// The wheel's last expression is gone for certain before the new conversation's
-					// greeting: a hover's Set queued behind the close's Reset (both are tasks, and
-					// the task queue runs on several threads) could otherwise leave the override on,
-					// and an override holds the mouth still through every line that follows.
+					// greeting: a hover's Set that arrives after the close's Reset could otherwise leave
+					// the override on, and an override holds the mouth still through every line that follows.
 					ActorExpression::ResetNow(actor.get());
 					if (auto* player = RE::PlayerCharacter::GetSingleton()) {
 						// Activate NPC to start conversation (same frame as EnableAI -- no gap to turn).
@@ -139,17 +146,21 @@ namespace Persuasion {
 				});
 		}
 
-		void ExitToRefreshedDialogue(RE::ActorHandle handle) {
+		void ExitToRefreshedDialogue(RE::ActorHandle handle, std::uint32_t gen) {
 			// Marshal onto the game thread.
 			// Otherwise, calls like forceGoodbye and shutMenu are ignored, and the conversation never closes.
 			auto* taskInterface = SKSE::GetTaskInterface();
 
 			assert(taskInterface);
 
-			taskInterface->AddTask([handle]() {
+			taskInterface->AddTask([handle, gen]() {
+				//Aborted before this ran (a load): nothing was changed yet, so nothing is.
+				if (s_generation.load() != gen) {
+					return;
+				}
 				// Make dialogue menu visible in case it was hidden earlier.
 				SetDialogueMenuVisible(true);
-				if (RE::ActorPtr actor = handle.get()) {
+				if (RE::ActorPtr actor = REBridge::Lookup(handle)) {
 					// The face is the engine's again before the goodbye (see ReopenDialogueWhenClosed).
 					ActorExpression::ResetNow(actor.get());
 					// Freeze the NPC before the close releases the NPC so the NPC can't start walking away.
@@ -161,12 +172,38 @@ namespace Persuasion {
 					mtm->forceGoodbye = true;
 					mtm->shutMenu = true;
 				}
-				ReopenDialogueWhenClosed(handle, 40);
+				ReopenDialogueWhenClosed(handle, 40, gen);
 				});
+		}
+
+		//The world runs under the wheel (it does not pause the game), so its NPC can be killed: the wheel closes,
+		//once, on the main thread.
+		class DeathSink : public RE::BSTEventSink<RE::TESDeathEvent> {
+		public:
+			RE::BSEventNotifyControl ProcessEvent(const RE::TESDeathEvent* a_event, RE::BSTEventSource<RE::TESDeathEvent>*) override {
+				RE::FormID dying = a_event && a_event->actorDying ? a_event->actorDying->GetFormID() : 0;
+				if (dying != 0 && s_watched.compare_exchange_strong(dying, 0)) {
+					Log::INFO("DialogueSession: {:08X} died during persuasion; closing the wheel.", dying);
+					if (auto* close = s_closeWheel.load()) {
+						MainThread::Post(close);
+					}
+				}
+				return RE::BSEventNotifyControl::kContinue;
+			}
+		};
+		DeathSink g_deathSink;
+	}
+
+	void DialogueSession::Register() {
+		if (auto* events = RE::ScriptEventSourceHolder::GetSingleton()) {
+			events->AddEventSink<RE::TESDeathEvent>(&g_deathSink);
 		}
 	}
 
-	void DialogueSession::Start(RE::Actor* target) {
+	void DialogueSession::Start(RE::Actor* target, void (*a_closeWheel)()) {
+		s_closeWheel = a_closeWheel;
+		s_watched = target->GetFormID();
+		const std::uint32_t gen = s_generation.fetch_add(1) + 1;
 		// Start dialogue, hide menu, and keep it alive.
 		SetActorDialogueWithPlayer(target, true);
 		SetDialogueMenuVisible(false);
@@ -175,18 +212,25 @@ namespace Persuasion {
 		{
 			RE::ActorHandle handle = target->GetHandle();
 			SKSE::GetTaskInterface()->AddTask([handle] {
-				if (RE::ActorPtr actor = handle.get()) {
+				if (RE::ActorPtr actor = REBridge::Lookup(handle)) {
 					ActorExpression::CloseMouthNow(actor.get());
 				}
 			});
 		}
-		StartConversationKeepAlive(target->GetHandle());
+		StartConversationKeepAlive(target->GetHandle(), gen);
 		WatchForFrozenMouth(target->GetHandle());
 	}
 
 	void DialogueSession::End(RE::ActorHandle handle) {
-		StopConversationKeepAlive();
-		ExitToRefreshedDialogue(handle);
+		s_watched = 0;
+		ExitToRefreshedDialogue(handle, s_generation.fetch_add(1) + 1);
+	}
+
+	void DialogueSession::Abort() {
+		s_watched = 0;
+		s_generation.fetch_add(1);
+		// The dialogue menu Start hid, should it still be open.
+		SetDialogueMenuVisible(true);
 	}
 
 }

@@ -32,8 +32,6 @@ namespace SKYBSettingsMenu
 
 		[[nodiscard]] std::optional<float> Get(std::string_view a_target) const;
 		void                               Set(std::string_view a_target, float a_value);
-		// the category's own name (often a translation key such as "$Effects"); nullptr when unresolved
-		[[nodiscard]] const char*          Label(std::string_view a_target) const;
 		// the category's default menu volume, when resolved
 		[[nodiscard]] std::optional<float> Default(std::string_view a_target) const;
 

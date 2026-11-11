@@ -7,79 +7,48 @@
 #include "UIs/PrismaUI/Persuasion/PersuasionBribery.h"
 #include "UIs/PrismaUI/Persuasion/PersuasionPreferences.h"
 #include "UIs/PrismaUI/Persuasion/PersuasionRules.h"
-
-#include <nlohmann/json.hpp>
-#include <string>
 #include "UIs/Scaleform/ScaleformUtility.h"
 
-// <Windows.h>, which this plugin's CommonLib build includes, maps PlaySound to PlaySoundA.
-#ifdef PlaySound
-#	undef PlaySound
-#endif
+#include <atomic>
+#include <string>
+
+#include <nlohmann/json.hpp>
 
 namespace Persuasion
 {
 	namespace
 	{
-		//The NPC being persuaded, as a handle: null once the reference is gone, and it keeps the actor from
-		//being unloaded under the menu. Main thread only (the callbacks run as tasks).
+		//The NPC being persuaded, as a handle: it resolves to null once the reference is gone (it does not keep
+		//the actor loaded). Set by Open, cleared by kHide. Each movie callback copies it when it fires, so a task
+		//that runs after the close still reaches the NPC the wheel was showing (the closing disposition).
 		RE::ActorHandle s_target;
 		Effective       s_effective{};  // the conversation's rules, resolved on Ready
+		//Set by Close: the next hide is the wheel's own. Any other hide is the engine tearing the menu down
+		//(a load, a 'coc', a reload after death; seen in game as a plain kHide).
+		std::atomic<bool> s_hideRequested{ false };
 
-		RE::Actor* TargetOrWarn(const char* a_context)
+		RE::ActorPtr TargetOrWarn(RE::ActorHandle a_target, const char* a_context)
 		{
-			if (!s_target) {
+			if (!a_target) {
 				Log::WARN("{}: no persuasion target", a_context);
-				return nullptr;
+				return {};
 			}
-			RE::ActorPtr actor = s_target.get();
+			RE::ActorPtr actor = REBridge::Lookup(a_target);
 			if (!actor) {
 				Log::WARN("{}: the persuasion target is gone", a_context);
 			}
-			return actor.get();
-		}
-
-		// nlohmann::json -> GFxValue, strings owned by the movie.
-		void ToGFx(RE::GFxMovieView* a_movie, const nlohmann::json& a_json, RE::GFxValue& a_out)
-		{
-			if (a_json.is_object()) {
-				a_movie->CreateObject(&a_out);
-				for (const auto& [key, value] : a_json.items()) {
-					RE::GFxValue member;
-					ToGFx(a_movie, value, member);
-					a_out.SetMember(key.c_str(), member);
-				}
-			} else if (a_json.is_array()) {
-				a_movie->CreateArray(&a_out);
-				for (const auto& value : a_json) {
-					RE::GFxValue element;
-					ToGFx(a_movie, value, element);
-					a_out.PushBack(element);
-				}
-			} else if (a_json.is_boolean()) {
-				a_out = RE::GFxValue(a_json.get<bool>());
-			} else if (a_json.is_number()) {
-				a_out = RE::GFxValue(a_json.get<double>());
-			} else if (a_json.is_string()) {
-				const std::string text = a_json.get<std::string>();
-				a_movie->CreateString(&a_out, text.c_str());
-			} else {
-				a_out = RE::GFxValue();
-			}
+			return actor;
 		}
 
 		// Into the movie: on the main thread, next frame.
 		void Invoke(const char* a_function, nlohmann::json a_payload)
 		{
 			MainThread::Post([function = std::string(a_function), payload = std::move(a_payload)]() {
-				auto* ui = RE::UI::GetSingleton();
-				auto menu = ui ? ui->GetMenu(PersuasionMenu::MENU_NAME) : nullptr;
-				auto movie = menu ? menu->uiMovie : nullptr;
+				auto movie = ScaleformUtility::OpenMenuMovie(PersuasionMenu::MENU_NAME);
 				if (!movie) {
 					return;
 				}
-				RE::GFxValue value;
-				ToGFx(movie.get(), payload, value);
+				const RE::GFxValue value = ScaleformUtility::ToGFx(*movie, payload);
 				movie->Invoke(function.c_str(), nullptr, &value, 1);
 			});
 		}
@@ -99,32 +68,9 @@ namespace Persuasion
 	// ============================================================== menu =====
 	PersuasionMenu::PersuasionMenu()
 	{
-		auto scaleform = RE::BSScaleformManager::GetSingleton();
-		const bool loaded = scaleform->LoadMovieEx(this, FILE_NAME, [this](RE::GFxMovieDef* a_def) {
-			fxDelegate.reset(new RE::FxDelegate());
-			fxDelegate->RegisterHandler(this);
-			a_def->SetState(RE::GFxState::StateType::kExternalInterface, fxDelegate.get());
-			fxDelegate->Release();
-		});
-		if (!loaded) {
-			//Closed at once: a menu without its movie would sit invisible and modal.
-			Log::ERROR("persuasion menu: Interface\\{}.swf failed to load - closing", FILE_NAME);
-			if (auto queue = RE::UIMessageQueue::GetSingleton()) {
-				queue->AddMessage(MENU_NAME, RE::UI_MESSAGE_TYPE::kHide, nullptr);
-			}
-		}
-
-		depthPriority = 5;
-		inputContext = Context::kMenuMode;
-		//No kPausesGame: the world runs so the NPC's face answers the wedge under the cursor,
+		//Not paused: the world runs so the NPC's face answers the wedge under the cursor,
 		//as with the PrismaUI view. Over the dialogue menu, which DialogueSession hides meanwhile.
-		menuFlags.set(RE::UI_MENU_FLAGS::kDisablePauseMenu, RE::UI_MENU_FLAGS::kModal,
-					  RE::UI_MENU_FLAGS::kUsesMenuContext, RE::UI_MENU_FLAGS::kTopmostRenderedMenu,
-					  RE::UI_MENU_FLAGS::kRequiresUpdate, RE::UI_MENU_FLAGS::kUpdateUsesCursor);
-		auto input = RE::BSInputDeviceManager::GetSingleton();
-		if (!input || !input->IsGamepadEnabled()) {
-			menuFlags.set(RE::UI_MENU_FLAGS::kUsesCursor);
-		}
+		ScaleformUtility::LoadMenuMovie(*this, FILE_NAME, 5, false, Close);
 	}
 
 	void PersuasionMenu::Register()
@@ -137,32 +83,25 @@ namespace Persuasion
 
 	void PersuasionMenu::Open(RE::Actor* a_target)
 	{
-		auto queue = RE::UIMessageQueue::GetSingleton();
-		auto ui = RE::UI::GetSingleton();
-		if (!queue || !ui || !a_target) {
-			Log::WARN("PersuasionMenu::Open: no target or no UI");
+		if (!a_target) {
+			Log::WARN("PersuasionMenu::Open: no target");
 			return;
 		}
-		if (ui->IsMenuOpen(MENU_NAME)) {
-			Log::WARN("PersuasionMenu::Open: already open");
-			return;
-		}
-		if (!ScaleformUtility::MovieExists(FILE_NAME)) {
-			Log::ERROR("persuasion menu: Interface\\{}.swf not found - not opened", FILE_NAME);
+		if (!ScaleformUtility::CanShowMenu(MENU_NAME, FILE_NAME)) {
 			return;
 		}
 		s_target = a_target->GetHandle();
+		s_hideRequested = false;
 		//Holds the NPC in conversation and hides the dialogue menu while the wheel is up.
-		DialogueSession::Start(a_target);
-		queue->AddMessage(MENU_NAME, RE::UI_MESSAGE_TYPE::kShow, nullptr);
+		DialogueSession::Start(a_target, Close);
+		ScaleformUtility::ShowMenu(MENU_NAME);
 		Log::INFO("persuasion menu: opening for {:08X}", a_target->GetFormID());
 	}
 
 	void PersuasionMenu::Close()
 	{
-		if (auto queue = RE::UIMessageQueue::GetSingleton()) {
-			queue->AddMessage(MENU_NAME, RE::UI_MESSAGE_TYPE::kHide, nullptr);
-		}
+		s_hideRequested = true;
+		ScaleformUtility::HideMenu(MENU_NAME);
 	}
 
 	void PersuasionMenu::Accept(RE::FxDelegateHandler::CallbackProcessor* a_cbReg)
@@ -178,16 +117,23 @@ namespace Persuasion
 
 	RE::UI_MESSAGE_RESULTS PersuasionMenu::ProcessMessage(RE::UIMessage& a_message)
 	{
-		if (a_message.type == RE::UI_MESSAGE_TYPE::kHide) {
+		if (a_message.type == RE::UI_MESSAGE_TYPE::kHide || a_message.type == RE::UI_MESSAGE_TYPE::kForceHide) {
+			//The wheel's own close (Close) reopens the dialogue so its topics refresh. A hide the engine sends
+			//(a load, a 'coc', a reload after death) lets the NPC go without reopening anything.
+			const bool ours = a_message.type == RE::UI_MESSAGE_TYPE::kHide && s_hideRequested.exchange(false);
 			const RE::ActorHandle target = s_target;
 			s_target.reset();
+			if (!ours) {
+				DialogueSession::Abort();
+			}
 			if (target) {
-				SKSE::GetTaskInterface()->AddTask([target] {
-					if (RE::ActorPtr actor = target.get()) {
+				SKSE::GetTaskInterface()->AddTask([target, ours] {
+					if (RE::ActorPtr actor = REBridge::Lookup(target)) {
 						ActorExpression::Reset(actor.get());
 					}
-					//Reopens the dialogue so its topics refresh.
-					DialogueSession::End(target);
+					if (ours) {
+						DialogueSession::End(target);
+					}
 				});
 			}
 		}
@@ -196,8 +142,9 @@ namespace Persuasion
 
 	void PersuasionMenu::OnReady(const RE::FxDelegateArgs&)
 	{
-		SKSE::GetTaskInterface()->AddTask([] {
-			auto* actor = TargetOrWarn("PersuasionMenu::OnReady");
+		SKSE::GetTaskInterface()->AddTask([target = s_target] {
+			const RE::ActorPtr actorPtr = TargetOrWarn(target, "PersuasionMenu::OnReady");
+			auto* actor = actorPtr.get();
 			if (!actor) {
 				Close();
 				return;
@@ -212,13 +159,12 @@ namespace Persuasion
 			for (const auto& [action, pref] : PersuasionPreferences::GetRandomPreferences(actor)) {
 				preferences[std::string(action)] = std::string(pref);
 			}
-			auto input = RE::BSInputDeviceManager::GetSingleton();
 			nlohmann::json payload = {
 				{ "name", name },
 				{ "disposition", disposition },
 				{ "preferences", preferences },
 				{ "rules", Rules::ToJson(s_effective) },
-				{ "gamepad", input && input->IsGamepadEnabled() }
+				{ "gamepad", ScaleformUtility::GamepadActive() }
 			};
 			Invoke("_root.wheel.SetPersuasion", std::move(payload));
 		});
@@ -228,8 +174,9 @@ namespace Persuasion
 	void PersuasionMenu::OnHover(const RE::FxDelegateArgs& a_params)
 	{
 		const std::string preference = a_params.GetArgCount() > 0 && a_params[0].IsString() ? a_params[0].GetString() : "";
-		SKSE::GetTaskInterface()->AddTask([preference] {
-			auto* actor = TargetOrWarn("PersuasionMenu::OnHover");
+		SKSE::GetTaskInterface()->AddTask([target = s_target, preference] {
+			const RE::ActorPtr actorPtr = TargetOrWarn(target, "PersuasionMenu::OnHover");
+			auto* actor = actorPtr.get();
 			if (!actor) {
 				return;
 			}
@@ -247,9 +194,9 @@ namespace Persuasion
 			return;
 		}
 		const float value = static_cast<float>(a_params[0].GetNumber());
-		SKSE::GetTaskInterface()->AddTask([value] {
-			if (auto* actor = TargetOrWarn("PersuasionMenu::OnDisposition")) {
-				DispositionSystem::SetDispositionActorValue(actor, value, true);
+		SKSE::GetTaskInterface()->AddTask([target = s_target, value] {
+			if (const RE::ActorPtr actor = TargetOrWarn(target, "PersuasionMenu::OnDisposition"); actor && !actor->IsDead()) {
+				DispositionSystem::SetDispositionActorValue(actor.get(), value, true);
 			}
 		});
 	}
@@ -260,8 +207,9 @@ namespace Persuasion
 			return;
 		}
 		const float disposition = static_cast<float>(a_params[0].GetNumber());
-		SKSE::GetTaskInterface()->AddTask([disposition] {
-			auto* actor = TargetOrWarn("PersuasionMenu::OnBribe");
+		SKSE::GetTaskInterface()->AddTask([target = s_target, disposition] {
+			const RE::ActorPtr actorPtr = TargetOrWarn(target, "PersuasionMenu::OnBribe");
+			auto* actor = actorPtr.get();
 			if (!actor) {
 				return;
 			}
@@ -283,8 +231,9 @@ namespace Persuasion
 			return;
 		}
 		const float disposition = static_cast<float>(a_params[0].GetNumber());
-		SKSE::GetTaskInterface()->AddTask([disposition] {
-			auto* actor = TargetOrWarn("PersuasionMenu::OnBribeQuote");
+		SKSE::GetTaskInterface()->AddTask([target = s_target, disposition] {
+			const RE::ActorPtr actorPtr = TargetOrWarn(target, "PersuasionMenu::OnBribeQuote");
+			auto* actor = actorPtr.get();
 			if (!actor) {
 				return;
 			}

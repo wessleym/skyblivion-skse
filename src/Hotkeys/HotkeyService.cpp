@@ -1,10 +1,11 @@
 #include "Hotkeys/HotkeyService.h"
 
-#include <charconv>
-
+#include "Papyrus/ModEvents.h"
 #include "Platform/MainThread.h"
-#include "SettingsMenu/InterfaceAdapters.h"
+#include "Platform/Text.h"
 #include "Settings/SettingsService.h"
+#include "SettingsMenu/InterfaceAdapters.h"
+#include "UIs/Scaleform/ScaleformUtility.h"
 
 using namespace SKYBSettingsMenu;
 
@@ -72,12 +73,6 @@ namespace {
 			default: return -1;
 		}
 	}
-
-	int ParseInt(std::string_view a_s, int a_fallback) {
-		int v = 0;
-		const auto [ptr, err] = std::from_chars(a_s.data(), a_s.data() + a_s.size(), v);
-		return err == std::errc{} && ptr == a_s.data() + a_s.size() ? v : a_fallback;
-	}
 }
 
 HotkeyService* HotkeyService::GetSingleton() {
@@ -86,8 +81,8 @@ HotkeyService* HotkeyService::GetSingleton() {
 }
 
 void HotkeyService::Register() {
-	if (auto src = SKSE::GetModCallbackEventSource()) {
-		src->AddEventSink<SKSE::ModCallbackEvent>(this);
+	if (!ModEvents::AddSink(this)) {
+		Log::WARN("hotkeys: no mod-event source; menus keep their built-in keys");
 	}
 	if (auto input = RE::BSInputDeviceManager::GetSingleton()) {
 		input->AddEventSink<RE::InputEvent*>(this);
@@ -206,8 +201,8 @@ HotkeyService::Binding HotkeyService::Get(const HotkeyDef& a_def) const {
 	Binding b{a_def.pc, a_def.pad};
 	const auto s = Settings::SettingsService::GetString(kSection, a_def.id, "");
 	if (const auto comma = s.find(','); comma != std::string::npos) {
-		const int pc = ParseInt(std::string_view(s).substr(0, comma), -2);
-		const int pad = ParseInt(std::string_view(s).substr(comma + 1), -2);
+		const int pc = ModEvents::ParseInt(std::string_view(s).substr(0, comma), -2);
+		const int pad = ModEvents::ParseInt(std::string_view(s).substr(comma + 1), -2);
 		// an unreadable or unknown code keeps the default for that device
 		const bool game = IsGame(a_def);
 		if (pc == -1 || (pc >= 0 && Name(pc, game) && !Name(pc, game)->pad)) {
@@ -249,20 +244,13 @@ void HotkeyService::Store(const HotkeyDef& a_def, Binding a_binding) {
 // "quickloot:<property>" / "global:<editor id>", space-separated
 void HotkeyService::ApplyGame(const HotkeyDef& a_def, Binding a_binding) {
 	auto push = [](std::string_view a_targets, int a_code) {
-		std::size_t start = 0;
-		while (start < a_targets.size()) {
-			auto end = a_targets.find(' ', start);
-			if (end == std::string_view::npos) {
-				end = a_targets.size();
-			}
-			const auto t = a_targets.substr(start, end - start);
-			start = end + 1;
-			const auto colon = t.find(':');
-			if (colon == std::string_view::npos) {
+		for (const auto& target : Text::Split(a_targets, ' ')) {
+			const auto colon = target.find(':');
+			if (colon == std::string::npos) {
 				continue;
 			}
-			const auto kind = t.substr(0, colon);
-			const auto name = t.substr(colon + 1);
+			const std::string_view kind = std::string_view(target).substr(0, colon);
+			const std::string_view name = std::string_view(target).substr(colon + 1);
 			if (kind == "quickloot") {
 				InterfaceAdapters::GetSingleton()->SetQuickLoot(name, static_cast<float>(a_code));
 			} else if (kind == "global") {
@@ -501,32 +489,18 @@ RE::BSEventNotifyControl HotkeyService::ProcessEvent(const SKSE::ModCallbackEven
 	if (!a_event || a_event->eventName != kRequestEvent) {
 		return RE::BSEventNotifyControl::kContinue;
 	}
-	const std::string arg = a_event->strArg.c_str() ? a_event->strArg.c_str() : "";
-	const auto        bar = arg.find('|');
-	if (bar == std::string::npos) {
-		Log::WARN("hotkeys: {} needs '<menu>|<function>', got '{}'", kRequestEvent, arg);
-		return RE::BSEventNotifyControl::kContinue;
-	}
-	std::string menu = arg.substr(0, bar);
-	std::string path = arg.substr(bar + 1);
 	// Replies on the main thread at the start of the next frame, after the asking movie's
 	// script has returned. SKSE's task queues are also drained on worker threads, which
 	// would race the main thread advancing the movie.
-	auto reply = [this, menu, path] {
-		auto ui = RE::UI::GetSingleton();
-		auto m = ui ? ui->GetMenu(menu) : nullptr;
-		auto movie = m ? m->uiMovie : nullptr;
-		if (!movie) {
-			Log::INFO("hotkeys: '{}' asked for its keys but is not open any more", menu);
+	MainThread::Post([this, request = ModEvents::StrArg(*a_event)] {
+		const auto callback = MenuCallback::Open(request, "hotkeys");
+		if (!callback) {
 			return;
 		}
-		const bool paused = ui->GameIsPaused();
 		RE::GFxValue map;
-		BuildMap(movie.get(), map);
-		const bool ok = movie->Invoke(path.c_str(), nullptr, &map, 1);
-		Log::INFO("hotkeys: sent to {} ({}) -> {} [main thread, game {}]", menu, path, ok ? "delivered" : "NOT delivered",
-					 paused ? "paused" : "running");
-	};
-	MainThread::Post(reply);
+		BuildMap(callback->movie.get(), map);
+		callback->Invoke(map);
+		Log::INFO("hotkeys: sent to {}", callback->target);
+	});
 	return RE::BSEventNotifyControl::kContinue;
 }

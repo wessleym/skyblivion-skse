@@ -4,6 +4,8 @@
 
 #include <thread>
 
+#include <nlohmann/json.hpp>
+
 RE::GPtr<RE::GFxMovieView> ScaleformUtility::OpenMenuMovie(std::string_view menuName) {
 	auto* ui = RE::UI::GetSingleton();
 	if (!ui || !ui->IsMenuOpen(menuName)) {
@@ -13,16 +15,91 @@ RE::GPtr<RE::GFxMovieView> ScaleformUtility::OpenMenuMovie(std::string_view menu
 	return menu ? menu->uiMovie : nullptr;
 }
 
-bool ScaleformUtility::MovieExists(std::string_view a_name) {
-	RE::BSResourceNiBinaryStream swf{ std::format("Interface/{}.swf", a_name) };
-	return swf.good();
+void ScaleformUtility::LoadMenuMovie(RE::IMenu& a_menu, std::string_view a_file, std::int8_t a_depth, bool a_pausesGame, void (*a_close)()) {
+	auto*      menu = std::addressof(a_menu);
+	const bool loaded = RE::BSScaleformManager::GetSingleton()->LoadMovieEx(menu, a_file, [menu](RE::GFxMovieDef* a_def) {
+		menu->fxDelegate.reset(new RE::FxDelegate());
+		menu->fxDelegate->RegisterHandler(menu);
+		a_def->SetState(RE::GFxState::StateType::kExternalInterface, menu->fxDelegate.get());
+		menu->fxDelegate->Release();
+	});
+	if (!loaded) {
+		Log::ERROR("Interface\\{}.swf failed to load - its menu is closed", a_file);
+		a_close();
+	}
+
+	using Flag = RE::UI_MENU_FLAGS;
+	menu->depthPriority = a_depth;
+	menu->inputContext = RE::IMenu::Context::kMenuMode;
+	menu->menuFlags.set(Flag::kDisablePauseMenu, Flag::kModal, Flag::kUsesMenuContext, Flag::kTopmostRenderedMenu,
+		Flag::kRequiresUpdate, Flag::kUpdateUsesCursor);
+	if (a_pausesGame) {
+		menu->menuFlags.set(Flag::kPausesGame);
+	}
+	if (!GamepadActive()) {
+		menu->menuFlags.set(Flag::kUsesCursor);
+	}
+}
+
+bool ScaleformUtility::CanShowMenu(std::string_view a_menu, std::string_view a_file) {
+	auto* ui = RE::UI::GetSingleton();
+	if (!ui || !RE::UIMessageQueue::GetSingleton() || ui->IsMenuOpen(a_menu)) {
+		return false;
+	}
+	RE::BSResourceNiBinaryStream swf{ std::format("Interface/{}.swf", a_file) };
+	if (!swf.good()) {
+		Log::ERROR("Interface\\{}.swf not found - {} not opened", a_file, a_menu);
+		return false;
+	}
+	return true;
+}
+
+void ScaleformUtility::ShowMenu(std::string_view a_menu) {
+	if (auto* queue = RE::UIMessageQueue::GetSingleton()) {
+		queue->AddMessage(a_menu, RE::UI_MESSAGE_TYPE::kShow, nullptr);
+	}
+}
+
+void ScaleformUtility::HideMenu(std::string_view a_menu) {
+	if (auto* queue = RE::UIMessageQueue::GetSingleton()) {
+		queue->AddMessage(a_menu, RE::UI_MESSAGE_TYPE::kHide, nullptr);
+	}
+}
+
+RE::GFxValue ScaleformUtility::ToGFx(RE::GFxMovieView& a_movie, const nlohmann::json& a_json) {
+	RE::GFxValue out;
+	if (a_json.is_object()) {
+		a_movie.CreateObject(&out);
+		for (const auto& [key, value] : a_json.items()) {
+			out.SetMember(key.c_str(), ToGFx(a_movie, value));
+		}
+	} else if (a_json.is_array()) {
+		a_movie.CreateArray(&out);
+		for (const auto& value : a_json) {
+			out.PushBack(ToGFx(a_movie, value));
+		}
+	} else if (a_json.is_string()) {
+		a_movie.CreateString(&out, a_json.get_ref<const std::string&>().c_str());
+	} else if (a_json.is_boolean()) {
+		out.SetBoolean(a_json.get<bool>());
+	} else if (a_json.is_number()) {
+		out.SetNumber(a_json.get<double>());
+	} else {
+		out.SetNull();
+	}
+	return out;
+}
+
+bool ScaleformUtility::GamepadActive() {
+	auto* input = RE::BSInputDeviceManager::GetSingleton();
+	return input && input->IsGamepadEnabled();
 }
 
 long long ScaleformUtility::MicrosecondsSince(std::chrono::steady_clock::time_point start) {
 	return std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now() - start).count();
 }
 
-void ScaleformUtility::RetryOnUIThread(int attempts, std::chrono::milliseconds interval,
+void ScaleformUtility::RetryOnMainThread(int attempts, std::chrono::milliseconds interval,
 	std::function<bool()> attempt, std::function<void()> onGiveUp) {
 	MainThread::Post([attempts, interval, attempt, onGiveUp] {
 		if (attempt()) {
@@ -36,7 +113,7 @@ void ScaleformUtility::RetryOnUIThread(int attempts, std::chrono::milliseconds i
 		}
 		std::thread([attempts, interval, attempt, onGiveUp] {
 			std::this_thread::sleep_for(interval);
-			RetryOnUIThread(attempts - 1, interval, attempt, onGiveUp);
+			RetryOnMainThread(attempts - 1, interval, attempt, onGiveUp);
 		}).detach();
 	});
 }

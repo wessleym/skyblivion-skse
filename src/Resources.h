@@ -18,4 +18,9 @@ public:
 	static inline std::array<RE::BGSPerk*, 4> lightArmorMastery{};
 
 	static void Install();
+
+	// The player's gold, as an item count of Gold001 (0000000F). Not NG's Actor::GetGoldAmount(): it finds gold
+	// through BGSDefaultObjectManager, whose "initialized" flags NG reads at +0xB80 while AE 1.6.1170 keeps them at
+	// +0xB90 (366 default objects, not 364), so on 1.6.1170 it can see gold as unset and dereference null.
+	[[nodiscard]] static std::int32_t PlayerGold();
 };

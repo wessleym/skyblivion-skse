@@ -3,8 +3,6 @@
 #include "Platform/FormCache.h"
 #include "UIs/Scaleform/Skills/SkillData.h"
 
-#include <algorithm>
-#include <cctype>
 #include <charconv>
 #include <fstream>
 #include <sstream>
@@ -28,46 +26,11 @@ namespace Persuasion
 			"[Perk:0x1A8CDA~Skyblivion.esm]\nResponse.LoveMult+=0.1\nResponse.LikeMult+=0.1\nBribe.CostMult*=0.875\n"
 			"[Perk:0x28F5CB~Skyblivion.esm]\nResponse.LoveMult+=0.1\nResponse.LikeMult+=0.1\nBribe.CostMult*=0.857143\n";
 
-		std::string_view Trim(std::string_view a_s)
-		{
-			constexpr std::string_view ws = " \t\r\n";
-			const auto b = a_s.find_first_not_of(ws);
-			if (b == std::string_view::npos) {
-				return {};
-			}
-			return a_s.substr(b, a_s.find_last_not_of(ws) - b + 1);
-		}
-
-		bool IEquals(std::string_view a, std::string_view b)
-		{
-			return a.size() == b.size() && std::equal(a.begin(), a.end(), b.begin(), [](char x, char y) {
-					   return std::tolower(static_cast<unsigned char>(x)) == std::tolower(static_cast<unsigned char>(y));
-				   });
-		}
-
-		bool ParseFloat(std::string_view a_text, float& a_out)
-		{
-			const auto t = Trim(a_text);
-			const auto [ptr, err] = std::from_chars(t.data(), t.data() + t.size(), a_out);
-			return err == std::errc{} && ptr == t.data() + t.size();
-		}
-
-		bool ParseInt(std::string_view a_text, int& a_out)
-		{
-			const auto t = Trim(a_text);
-			const auto [ptr, err] = std::from_chars(t.data(), t.data() + t.size(), a_out);
-			return err == std::errc{} && ptr == t.data() + t.size();
-		}
-
 		RE::ActorValue ActorValueNamed(const std::string& a_name)
 		{
-			auto* list = RE::ActorValueList::GetSingleton();
-			if (!list) {
-				return RE::ActorValue::kNone;
-			}
-			const auto av = list->LookupActorValueByName(a_name.c_str());
+			const auto av = REBridge::ActorValueByName(a_name.c_str());
 			//The game spells the skill "Speechcraft" but speaks of "Speech" as often as not.
-			if (av == RE::ActorValue::kNone && IEquals(a_name, "Speech")) {
+			if (av == RE::ActorValue::kNone && Text::IEquals(a_name, "Speech")) {
 				return RE::ActorValue::kSpeech;
 			}
 			return av;
@@ -82,13 +45,13 @@ namespace Persuasion
 			Log::WARN("persuasion perks: line {}: section [{}] has no kind (Perk:, Mastery:, Skill:) - ignored", a_lineNo, a_text);
 			return false;
 		}
-		const auto kind = Trim(a_text.substr(0, colon));
-		const auto rest = Trim(a_text.substr(colon + 1));
+		const auto kind = Text::Trim(a_text.substr(0, colon));
+		const auto rest = Text::Trim(a_text.substr(colon + 1));
 		if (rest.empty()) {
 			Log::WARN("persuasion perks: line {}: section [{}] names nothing - ignored", a_lineNo, a_text);
 			return false;
 		}
-		if (IEquals(kind, "Perk")) {
+		if (Text::IEquals(kind, "Perk")) {
 			const auto tilde = rest.find('~');
 			if (tilde != std::string_view::npos && rest.size() > 2 && rest[0] == '0' && (rest[1] == 'x' || rest[1] == 'X')) {
 				const auto hex = rest.substr(2, tilde - 2);
@@ -100,26 +63,26 @@ namespace Persuasion
 				}
 				a_rule.kind = Kind::kPerkFormID;
 				a_rule.formID = id & 0x00FFFFFF;
-				a_rule.plugin = std::string(Trim(rest.substr(tilde + 1)));
+				a_rule.plugin = Text::Trim(rest.substr(tilde + 1));
 				return !a_rule.plugin.empty();
 			}
 			a_rule.kind = Kind::kPerkEditorID;
 			a_rule.name = std::string(rest);
 			return true;
 		}
-		if (IEquals(kind, "Mastery")) {
+		if (Text::IEquals(kind, "Mastery")) {
 			const auto c2 = rest.find(':');
 			int rank = 0;
-			if (c2 == std::string_view::npos || !ParseInt(rest.substr(c2 + 1), rank) || rank < 1) {
+			if (c2 == std::string_view::npos || !Text::Parse(rest.substr(c2 + 1), rank) || rank < 1) {
 				Log::WARN("persuasion perks: line {}: [{}] must be Mastery:<Skill>:<rank 1..> - ignored", a_lineNo, a_text);
 				return false;
 			}
 			a_rule.kind = Kind::kMastery;
-			a_rule.name = std::string(Trim(rest.substr(0, c2)));
+			a_rule.name = Text::Trim(rest.substr(0, c2));
 			a_rule.rank = rank;
 			return true;
 		}
-		if (IEquals(kind, "Skill")) {
+		if (Text::IEquals(kind, "Skill")) {
 			static constexpr std::array<std::string_view, 5> kCmps{ ">=", "<=", ">", "<", "=" };
 			for (const auto cmp : kCmps) {
 				const auto at = rest.find(cmp);
@@ -127,11 +90,11 @@ namespace Persuasion
 					continue;
 				}
 				float n = 0.0f;
-				if (!ParseFloat(rest.substr(at + cmp.size()), n)) {
+				if (!Text::Parse(rest.substr(at + cmp.size()), n)) {
 					break;
 				}
 				a_rule.kind = Kind::kSkill;
-				a_rule.name = std::string(Trim(rest.substr(0, at)));
+				a_rule.name = Text::Trim(rest.substr(0, at));
 				a_rule.cmp = std::string(cmp);
 				a_rule.threshold = n;
 				return !a_rule.name.empty();
@@ -147,16 +110,12 @@ namespace Persuasion
 	{
 		s_rules.clear();
 
-		const std::filesystem::path path{ kIniPath };
-		std::error_code ec;
-		const auto time = std::filesystem::last_write_time(path, ec);
-		std::ifstream file(path);
+		const auto         time = Text::WriteTime(kIniPath);
+		std::ifstream      file{ std::filesystem::path{ kIniPath } };
 		std::istringstream builtIn{ std::string(kDefaultRules) };
-		const bool fromFile = !ec && file;
-		s_seen = fromFile;
-		if (fromFile) {
-			s_time = time;
-		} else {
+		s_time = time && file ? time : std::nullopt;
+		const bool fromFile = s_time.has_value();
+		if (!fromFile) {
 			Log::INFO("persuasion perks: {} not found - using the built-in rules", kIniPath);
 		}
 		std::istream& in = fromFile ? static_cast<std::istream&>(file) : builtIn;
@@ -166,13 +125,13 @@ namespace Persuasion
 		bool sectionValid = false;
 		while (std::getline(in, line)) {
 			++lineNo;
-			auto s = Trim(line);
+			auto s = Text::Trim(line);
 			if (s.empty() || s.front() == ';' || s.front() == '#') {
 				continue;
 			}
 			if (s.front() == '[') {
 				const auto close = s.find(']');
-				const auto header = Trim(s.substr(1, close == std::string_view::npos ? std::string_view::npos : close - 1));
+				const auto header = Text::Trim(s.substr(1, close == std::string_view::npos ? std::string_view::npos : close - 1));
 				Rule rule;
 				sectionValid = ParseHeader(header, rule, lineNo);
 				if (sectionValid) {
@@ -195,7 +154,7 @@ namespace Persuasion
 				op = s[eq - 1];
 				keyEnd = eq - 1;
 			}
-			const auto target = Trim(s.substr(0, keyEnd));
+			const auto target = Text::Trim(s.substr(0, keyEnd));
 			const auto dot = target.find('.');
 			if (dot == std::string_view::npos) {
 				Log::WARN("persuasion perks: line {}: '{}' must be Section.Key", lineNo, target);
@@ -206,8 +165,8 @@ namespace Persuasion
 				value = value.substr(0, c);
 			}
 			float v = 0.0f;
-			if (!ParseFloat(value, v)) {
-				Log::WARN("persuasion perks: line {}: '{}' is not a number", lineNo, Trim(value));
+			if (!Text::Parse(value, v)) {
+				Log::WARN("persuasion perks: line {}: '{}' is not a number", lineNo, Text::Trim(value));
 				continue;
 			}
 			const int idx = Settings::Find(target.substr(0, dot), target.substr(dot + 1));
@@ -223,10 +182,7 @@ namespace Persuasion
 
 	void Perks::ReloadIfChanged()
 	{
-		std::error_code ec;
-		const auto time = std::filesystem::last_write_time(std::filesystem::path{ kIniPath }, ec);
-		const bool present = !ec;
-		if (present == s_seen && (!present || time == s_time)) {
+		if (Text::WriteTime(kIniPath) == s_time) {
 			return;
 		}
 		Log::INFO("persuasion perks: {} changed on disk - reloading", kIniPath);

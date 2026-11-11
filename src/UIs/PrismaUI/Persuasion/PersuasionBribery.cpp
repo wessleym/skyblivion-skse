@@ -9,14 +9,6 @@ namespace Persuasion
 {
 	namespace
 	{
-		// The player's gold by item count. Not Actor::GetGoldAmount(): that CommonLib helper reads a bad
-		// pointer on 1.6.1170, and the quote runs on every point of change.
-		int PlayerGold(RE::PlayerCharacter* a_player)
-		{
-			auto* gold = Resources::gold;
-			return a_player && gold ? std::max(0, a_player->GetItemCount(gold)) : 0;
-		}
-
 		struct Priced
 		{
 			BribeAttempt out;
@@ -24,10 +16,9 @@ namespace Persuasion
 			float penalty{ 1.0f };
 			float playerSpeech{ 0 }, npcSpeech{ 0 };
 			int playerLevel{ 0 }, npcLevel{ 0 };
-			bool ok{ false };
 		};
 
-		// price and gain at a_disposition under the conversation's rules
+		// price and gain at a_disposition under the conversation's rules; out.reason kNone when a bribe can buy something
 		Priced PriceOf(RE::Actor* a_actor, float a_disposition, const Effective& a_eff)
 		{
 			Priced r;
@@ -36,8 +27,14 @@ namespace Persuasion
 				r.out.reason = BribeAttempt::Reason::kDisabled;
 				return r;
 			}
+			//The world runs under the wheel, so the NPC can be killed while it is open: no gold changes hands then.
+			if (!a_actor || a_actor->IsDead()) {
+				Log::INFO("Bribery: the persuasion target is dead or gone; no bribe.");
+				r.out.reason = BribeAttempt::Reason::kError;
+				return r;
+			}
 			auto* player = RE::PlayerCharacter::GetSingleton();
-			auto* avNpc = a_actor ? REBridge::AVOwner(a_actor) : nullptr;
+			auto* avNpc = REBridge::AVOwner(a_actor);
 			auto* avPlayer = player ? REBridge::AVOwner(player) : nullptr;
 			if (!avNpc || !avPlayer) {
 				Log::WARN("Bribery: ActorValueOwner was null.");
@@ -53,7 +50,7 @@ namespace Persuasion
 			//[Penalty] OnBribe: the wheel's disposition penalty shrinks what gold buys too.
 			if (a_eff.On(P::PenaltyOnBribe)) {
 				r.penalty = Rules::PenaltyMultiplier(a_eff, a_disposition);
-				outcome.gain = std::max(r.params.minGain, static_cast<int>(static_cast<float>(outcome.gain) * r.penalty + 0.5f));
+				outcome.gain = std::max(r.params.minGain, static_cast<int>(outcome.exactGain * r.penalty + 0.5f));  //rounded once
 			}
 			r.out.price = outcome.price;
 			r.out.gain = outcome.gain;
@@ -62,69 +59,55 @@ namespace Persuasion
 			const float room = r.params.maxDisposition - a_disposition;
 			if (std::min(outcome.exactGain * r.penalty, room) < 1.0f) {
 				r.out.reason = BribeAttempt::Reason::kTooSmall;
-				return r;
 			}
-			r.ok = true;
 			return r;
 		}
 	}
 
 	BribeAttempt Bribery::Quote(RE::Actor* a_actor, float a_disposition, const Effective& a_eff)
 	{
-		Priced r = PriceOf(a_actor, a_disposition, a_eff);
-		if (r.ok && PlayerGold(RE::PlayerCharacter::GetSingleton()) < r.out.price) {
-			r.out.reason = BribeAttempt::Reason::kNoGold;
+		BribeAttempt out = PriceOf(a_actor, a_disposition, a_eff).out;
+		if (out.reason == BribeAttempt::Reason::kNone && Resources::PlayerGold() < out.price) {
+			out.reason = BribeAttempt::Reason::kNoGold;
 		}
-		return r.out;
+		return out;
 	}
 
 	BribeAttempt Bribery::Attempt(RE::Actor* a_actor, float a_disposition, const Effective& a_eff)
 	{
-		Priced r = PriceOf(a_actor, a_disposition, a_eff);
-		if (!r.ok) {
-			r.out.gain = 0;
-			return r.out;
-		}
+		const Priced r = PriceOf(a_actor, a_disposition, a_eff);
 		BribeAttempt out = r.out;
 		out.gain = 0;
-		const auto& params = r.params;
-		const float penalty = r.penalty;
-		const float playerSpeech = r.playerSpeech, npcSpeech = r.npcSpeech;
-		const int playerLevel = r.playerLevel, npcLevel = r.npcLevel;
-		auto* player = RE::PlayerCharacter::GetSingleton();
-		BribeEconomy::Outcome outcome;
-		outcome.price = r.out.price;
-		outcome.gain = r.out.gain;
-		if (PlayerGold(player) < outcome.price) {
+		if (out.reason != BribeAttempt::Reason::kNone) {
+			return out;
+		}
+		if (Resources::PlayerGold() < out.price) {
 			out.reason = BribeAttempt::Reason::kNoGold;
 			return out;
 		}
-		auto* gold = Resources::gold;
-		if (!gold) {
-			Log::ERROR("Bribery::Attempt: Resources::gold is null");
-			out.reason = BribeAttempt::Reason::kError;
-			return out;
-		}
-		player->RemoveItem(gold, outcome.price, RE::ITEM_REMOVE_REASON::kRemove, nullptr, nullptr);
+		RE::PlayerCharacter::GetSingleton()->RemoveItem(Resources::gold, out.price, RE::ITEM_REMOVE_REASON::kRemove, nullptr, nullptr);
 
-		out.gain = outcome.gain;
-		out.disposition = std::min(params.maxDisposition, a_disposition + static_cast<float>(outcome.gain));
+		out.gain = r.out.gain;
+		//A whole number: both hosts send it as one, and the actor gets the same value (else a wheel at 57.6
+		//would show 58 after a +1 bribe, and its write-back on close would drop the fraction).
+		out.disposition = std::min(r.params.maxDisposition, std::round(a_disposition + static_cast<float>(out.gain)));
 		out.success = true;
-		//The PrismaUI view calls from its own thread, so the actor value changes on the main thread
-		//(the Scaleform menu is there already). Both hosts show the returned value, not a read-back.
+		//Both hosts call this from an SKSE task. The disposition is written by a further task, so it lands after
+		//any disposition write the host queued while this task was waiting (e.g. the pre-bribe value sent on
+		//close) and is not overwritten by it. Both hosts show the returned value, not a read-back.
 		auto* taskInterface = SKSE::GetTaskInterface();
 		assert(taskInterface);
 		const RE::ActorHandle handle = a_actor->GetHandle();
 		const float newDisposition = out.disposition;
 		taskInterface->AddTask([handle, newDisposition]() {
-			if (RE::ActorPtr actor = handle.get()) {
+			if (RE::ActorPtr actor = REBridge::Lookup(handle)) {
 				DispositionSystem::SetDispositionActorValue(actor.get(), newDisposition, true);
 			}
 		});
 
 		Log::INFO("bribe: price={}, gain={}, disposition={} -> {} (playerLevel={}, npcLevel={}, playerSpeech={}, npcSpeech={}, costMult={}, gainMult={}, penalty={})",
-			out.price, out.gain, a_disposition, out.disposition, playerLevel, npcLevel, playerSpeech, npcSpeech,
-			params.costMult, params.gainMult, penalty);
+			out.price, out.gain, a_disposition, out.disposition, r.playerLevel, r.npcLevel, r.playerSpeech, r.npcSpeech,
+			r.params.costMult, r.params.gainMult, r.penalty);
 		return out;
 	}
 }

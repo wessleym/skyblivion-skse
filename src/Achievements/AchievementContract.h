@@ -29,7 +29,6 @@ namespace Achievements::AchievementContract {
 		inline constexpr const char* Earned = "SKYBAchievementEarned";
 	}
 
-	inline constexpr const char* JournalMenuName = "Journal Menu";
 	//The achievements menu's container (SKYBUIUtility opens it with UI.OpenCustomMenu).
 	inline constexpr const char* CustomMenuName = "CustomMenu";
 	//The journal's page switch, added by our quest_journal.swf.

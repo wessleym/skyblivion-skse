@@ -30,11 +30,11 @@
 //does not resolve or is not a scroll, or a tier unlike its seat count is logged with its file and scroll id and
 //skipped. A file that is missing or not JSON is logged and skipped; recipes.json missing is reported in Status().
 //
-//Papyrus (Source/Scripts/SKYBScrollCraftData.psc, all global native): GetStatus, GetScroll(index),
-//Find(scroll), Resolve(school, wheel, aspect), KnownTable(known list), PlayUISound(editor
-//ID). Adding to the known list stays in Papyrus (FormList.AddForm), the game's own binding. The wheel is five characters in seat order (top, bottom, left, right,
-//centre), "." for an empty seat. Indices are positions in this session's store: the quest keeps known recipes
-//as scroll forms (a FormList), never as indices.
+//Papyrus (Source/Scripts/SKYBScrollCraftData.psc, all global native): GetStatus, GetScroll(index), Find(scroll),
+//Resolve(school, wheel, aspect), KnownTable(known list), GetSeats, GetCosts, GetCost(index), PlayUISound(editor ID),
+//HideInventory, ShowInventory. Adding to the known list stays in Papyrus (FormList.AddForm), the game's own binding.
+//The wheel is five characters in seat order (top, bottom, left, right, centre), "." for an empty seat. Indices are
+//positions in this session's store: the quest keeps known recipes as scroll forms (a FormList), never as indices.
 //
 //Loaded on the main thread at kDataLoaded; read from the Papyrus VM thread afterwards: the vector never changes
 //after LoadOnce, so no lock.
@@ -48,7 +48,7 @@ namespace ScrollCraft {
 		int tier = 0;
 		std::string delivery;
 		std::string wheel;     //five characters in seat order, "." empty
-		int essCommon = 0;     //the essences a craft takes (round 10): Verdant, of the school, Radiant
+		int essCommon = 0;     //the essences a craft takes: Verdant, of the school, Radiant
 		int essSchool = 1;
 		int essRare = 0;
 		RE::TESForm* form = nullptr;
@@ -71,7 +71,7 @@ namespace ScrollCraft {
 		//the recipe of this school with these seats: the aspect's delivery when one has it, else the plain form
 		//(neither touch nor area), else the first; -1 when none
 		[[nodiscard]] static int Resolve(int a_school, std::string_view a_wheel, int a_aspect);
-		//round 10: the seats a tier fills ("seatsPerTier", default 2 3 4 5 5) and its essence cost ("essenceCost",
+		//the seats a tier fills ("seatsPerTier", default 2 3 4 5 5) and its essence cost ("essenceCost",
 		//default 2-1-0 1-2-0 1-3-0 0-3-1 0-2-3 as Verdant-school-Radiant), from recipes.json; a recipe's own
 		//"essences" override its tier's cost
 		[[nodiscard]] static int SeatsFor(int a_tier);

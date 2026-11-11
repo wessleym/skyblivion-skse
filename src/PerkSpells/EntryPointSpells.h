@@ -3,8 +3,9 @@
 // Perk "Apply ... Spell" entry points (Combat Hit, Bashing, Reanimate,
 // Weapon Swing, Sneaking): collect more than one matching spell per call and,
 // for the entry points that have a separate target, let the perk owner cast
-// them on that target. Folded in from the standalone SKYBPerkSpells plugin
-// (0.2.0); the mechanism and engine facts are in its README.md.
+// them on that target. Folded in from the standalone SKYBPerkSpells plugin,
+// which must not be installed alongside (both would redirect the same call
+// sites). Settings: Data\SKSE\Plugins\SKYBPerkSpells.ini.
 //
 // How it works (all engine facts below were confirmed against Skyblivion.esm
 // data or CommonLibSSE-NG declarations):
@@ -25,6 +26,6 @@
 
 namespace PerkSpells::EntryPointSpells {
     // Call from Plugin::OnLoad, after the plugin's trampoline is allocated
-    // (patches code; uses one trampoline jump for all call sites).
+    // (reads the settings, patches code; one trampoline jump for all call sites).
     void Install();
 }

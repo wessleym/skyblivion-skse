@@ -6,8 +6,6 @@
 //and nothing on frame 1. It stays hidden until SetWeather(n) is called, then shows picture n and fades it in.
 //A value outside 0..3 hides it again.
 namespace SleepWait::SleepWaitContract {
-	inline constexpr std::string_view MenuName = "Sleep/Wait Menu";
-
 	namespace AsPath {
 		inline constexpr const char* WeatherClip = "_root.SleepWaitMenu_mc.WeatherBG";
 		inline constexpr const char* SetWeather = "_root.SleepWaitMenu_mc.WeatherBG.SetWeather";

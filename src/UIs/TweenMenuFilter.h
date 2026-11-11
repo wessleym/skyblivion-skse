@@ -7,8 +7,8 @@
 //Tween Menu Overhaul reads its option files once at load and, on every TweenMenu open, pushes the
 //whole list into the team's movie (_root.TweenMenu_mc.onDataReceived), which fills its four
 //category lists at once (the right list lowest priority first: AS2 walks the array last-first).
-//It has no condition, no grouping and no filter hook. So, on the same open event, after the
-//overhaul's sink:
+//It has no condition, no grouping and no filter hook. So, at the start of the frame after the open
+//event (on the main thread, MainThread::Post), once the overhaul has filled the lists:
 //  - the three tool entries are taken out of the movie's lists and kept (text, event) as the
 //    TOOLS entry's children, in a fixed order, the absent tools dropped; with no child left,
 //    TOOLS is removed too; otherwise TOOLS is moved directly under ITEMS;
@@ -16,31 +16,30 @@
 //    looked up by name on every call, are replaced by ours. A pick of TOOLS folds the children
 //    out after it or back in; any other pick, a child's among them, goes to the
 //    original handler, which has the overhaul close the menu and send the option's event.
-//    SetEntryText draws a child as a sub-entry: the November gold (#E2CEAA, white while
+//    SetEntryText draws a child as a sub-entry: gold (#E2CEAA, white while
 //    selected), a smaller label centred like every row, and its fold progress as alpha and slide;
 //    every other entry is drawn as the movie draws it, its field put back if a child used it.
 //  - the fold is a one-shot onEnterFrame on an empty clip made for it, ~0.2 s, the children one
 //    after another; it deletes itself and its clip when done (no polling; nothing outlives it).
-//Lone options (round 9): a category column left with exactly one entry after the above (today
+//Lone options: a category column left with exactly one entry after the above (today
 //MAGIC: SPELLS; INVENTORY: ITEMS when no tool is carried) shows that entry's label in its
 //category box in place of the category name, and the one-entry list beside it is hidden. A pick
 //of the box, or Enter on that side, already presses the column's focused entry (the movie's
 //onCategoryMaskPress / PressFocusedEntry, handleInput ENTER), so it opens the option as before.
 //HighlightCategory (by name) is wrapped so the selection bar beside a lone box stays hidden.
 //
-//The sink is registered at kDataLoaded and again on kNewGame / kPostLoadGame (idempotent); should
-//the lists still be empty when it runs, it tries once more at the start of the next frame, on the main
-//thread (MainThread::Post).
+//The sink is registered at kDataLoaded. Should the lists still be empty when the pass runs, it tries
+//once more at the start of the next frame.
 //
 //What counts as a tool is what each tool itself counts: the ESM form lists SKYBSigilStonesAll
 //(the sigil quest's), SKYBDegRepairTools (the repair menu's) and SKYBAlchemyMortarPestleList
-//(the alchemy quest's mortar list), resolved once by editor ID.
+//(the alchemy quest's mortar list), through FormCache.
 namespace TweenTools {
 	class TweenMenuFilter : public RE::BSTEventSink<RE::MenuOpenCloseEvent> {
 	public:
 		static TweenMenuFilter* GetSingleton();
 
-		//Idempotent. Adds the sink the first time; later calls do nothing.
+		//Call once, at kDataLoaded.
 		static void Register();
 
 		RE::BSEventNotifyControl ProcessEvent(const RE::MenuOpenCloseEvent* a_event,
@@ -50,8 +49,6 @@ namespace TweenTools {
 		struct Tool {
 			const char* menuEvent;  //the option's papyrus_event, as the movie keeps it (entry.menuEvent)
 			const char* listEditorID;
-			RE::BGSListForm* list{ nullptr };
-			bool resolved{ false };
 		};
 		//A tool entry taken out of the list at open, re-made when TOOLS folds out.
 		struct Child {
@@ -94,23 +91,22 @@ namespace TweenTools {
 		static void EndFold(RE::GFxMovie* a_movie);
 		//Draws one entry clip as a child (a_reveal 0..1) or puts its field back.
 		static void StyleClip(RE::GFxValue& a_clip, bool a_child, bool a_lit, double a_reveal);
-		static void SetToolsLabel(RE::GFxValue& a_list);
-		//Round 9: every column with exactly one entry takes it into its category box.
+		//Every column with exactly one entry takes it into its category box.
 		static void ApplyLoneHeaders(RE::GFxMovie* a_movie);
-		static Tool* Find(const char* a_menuEvent);
-		static std::int32_t Carried(Tool& a_tool);
+		static const Tool* Find(const char* a_menuEvent);
+		static std::int32_t Carried(const Tool& a_tool);
+		//The per-open state, back to a closed menu's.
+		static void Reset();
 
-		static inline bool s_registered{ false };
-		static inline std::array<Tool, 3> s_tools{ {
+		static constexpr std::array<Tool, 3> s_tools{ {
 			{ "SKYBUIOpenSigilMenu", "SKYBSigilStonesAll" },
 			{ "SKYBUIOpenRepair", "SKYBDegRepairTools" },
 			{ "SKYBUIOpenAlchemy", "SKYBAlchemyMortarPestleList" },
 		} };
-		//Per open: the carried tools in s_tools order, the list TOOLS sits in, TOOLS' own label,
-		//whether it is folded out, and the fold under way (if any).
+		//Per open: the carried tools in s_tools order, the list TOOLS sits in, whether it is folded
+		//out, and the fold under way (if any).
 		static inline std::vector<Child> s_children;
 		static inline std::string s_toolsList;
-		static inline std::string s_toolsText;
 		static inline bool s_expanded{ false };
 		static inline bool s_folding{ false };
 		static inline bool s_foldOut{ false };

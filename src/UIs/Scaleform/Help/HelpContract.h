@@ -11,13 +11,10 @@ namespace Help::HelpContract {
 
 	//Relative to the game folder. Each subfolder holding a category.json is one category; its other *.json files
 	//are its topics, one per file:
-	//	category.json   { "id", "displayName", "priority",
-	//	                  "importFormList": "HEX|Plugin", "exclude": ["HEX|Plugin"] }
-	//	<topic>.json    { "id", "title", "priority", "body": "text" | ["paragraph", ...],
-	//	                  "message": "HEX|Plugin", "visibilityGlobal": "EditorID" }
+	//	category.json   { "id", "displayName", "priority", "importFormList": "HEX|Plugin", "visibilityGlobal": "EditorID" }
+	//	<topic>.json    { "id", "title", "priority", "body": "text" | ["paragraph", ...], "visibilityGlobal": "EditorID" }
 	//importFormList adds every message of a form list (title = the message's name, text = its description) as a
-	//topic; exclude drops messages from it. A topic's "message" takes its text (and its title, when the topic
-	//gives none) from a game message, so a vanilla topic can be moved into another category.
+	//topic. visibilityGlobal: shown only while that global is non-zero.
 	//Styles: <root>/styles.json { "styles": { "<tag>": { "size", "color", "face", "bold", "italic", "underline",
 	//	"block" } } } turns <tag>...</tag> in topic bodies into font markup ("block": a line break after it).
 	inline constexpr const char* DataRoot = "Data/Interface/Skyblivion/ConfigFiles/Help";

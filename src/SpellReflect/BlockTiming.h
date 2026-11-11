@@ -1,12 +1,5 @@
 #pragma once
 
-#include <cstdint>
-#include <optional>
-#include <span>
-#include <string>
-#include <string_view>
-#include <vector>
-
 // The parry window shared by arrow reflection and timed blocks: remembers when
 // the player last pressed Left Attack/Block (input event sink, no polling) and
 // sizes the parry window from an attribute ([Arrows] window settings: Speed since the perk

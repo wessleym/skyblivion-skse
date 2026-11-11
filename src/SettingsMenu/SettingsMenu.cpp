@@ -1,15 +1,11 @@
 #include "SettingsMenu/SettingsMenu.h"
 
 #include "Hotkeys/HotkeyService.h"
+#include "Papyrus/ModEvents.h"
 #include "Platform/MainThread.h"
 #include "SettingsMenu/SettingsStore.h"
 #include "SettingsMenu/SoundService.h"
 #include "UIs/Scaleform/ScaleformUtility.h"
-
-// <Windows.h>, which this plugin's CommonLib build includes, maps PlaySound to PlaySoundA.
-#ifdef PlaySound
-#	undef PlaySound
-#endif
 
 namespace SKYBSettingsMenu
 {
@@ -27,13 +23,6 @@ namespace SKYBSettingsMenu
 			}
 		}
 
-		RE::GPtr<RE::GFxMovieView> Movie()
-		{
-			auto ui = RE::UI::GetSingleton();
-			auto menu = ui ? ui->GetMenu(SettingsMenu::MENU_NAME) : nullptr;
-			return menu ? menu->uiMovie : nullptr;
-		}
-
 		std::string ArgString(const RE::FxDelegateArgs& a_params, std::uint32_t a_i)
 		{
 			return a_params.GetArgCount() > a_i && a_params[a_i].IsString() ? a_params[a_i].GetString() : "";
@@ -47,31 +36,8 @@ namespace SKYBSettingsMenu
 
 	SettingsMenu::SettingsMenu()
 	{
-		auto scaleform = RE::BSScaleformManager::GetSingleton();
-		const bool loaded = scaleform->LoadMovieEx(this, FILE_NAME, [this](RE::GFxMovieDef* a_def) {
-			fxDelegate.reset(new RE::FxDelegate());
-			fxDelegate->RegisterHandler(this);
-			a_def->SetState(RE::GFxState::StateType::kExternalInterface, fxDelegate.get());
-			fxDelegate->Release();
-		});
-		if (!loaded) {
-			//Closed at once: a menu without its movie would sit invisible and modal.
-			Log::ERROR("settings menu: Interface\\{}.swf failed to load - closing", FILE_NAME);
-			if (auto queue = RE::UIMessageQueue::GetSingleton()) {
-				queue->AddMessage(MENU_NAME, RE::UI_MESSAGE_TYPE::kHide, nullptr);
-			}
-		}
-
 		// above the journal and the title screen, which stay open underneath
-		depthPriority = 10;
-		inputContext = Context::kMenuMode;
-		menuFlags.set(RE::UI_MENU_FLAGS::kPausesGame, RE::UI_MENU_FLAGS::kDisablePauseMenu, RE::UI_MENU_FLAGS::kModal,
-					  RE::UI_MENU_FLAGS::kUsesMenuContext, RE::UI_MENU_FLAGS::kTopmostRenderedMenu,
-					  RE::UI_MENU_FLAGS::kRequiresUpdate, RE::UI_MENU_FLAGS::kUpdateUsesCursor);
-		auto input = RE::BSInputDeviceManager::GetSingleton();
-		if (!input || !input->IsGamepadEnabled()) {
-			menuFlags.set(RE::UI_MENU_FLAGS::kUsesCursor);
-		}
+		ScaleformUtility::LoadMenuMovie(*this, FILE_NAME, 10, true, Close);
 	}
 
 	void SettingsMenu::Register()
@@ -79,9 +45,7 @@ namespace SKYBSettingsMenu
 		if (auto ui = RE::UI::GetSingleton()) {
 			ui->Register(MENU_NAME, Creator);
 		}
-		if (auto src = SKSE::GetModCallbackEventSource()) {
-			src->AddEventSink(SettingsMenuOpener::GetSingleton());
-		}
+		ModEvents::AddSink(SettingsMenuOpener::GetSingleton());
 		// a finished capture re-pushes the menu (if it is still open)
 		HotkeyService::GetSingleton()->SetOnChange([] { Push(); });
 		Log::INFO("settings menu: registered as '{}', opened by the mod event {}", MENU_NAME, OPEN_EVENT);
@@ -89,24 +53,16 @@ namespace SKYBSettingsMenu
 
 	void SettingsMenu::Open()
 	{
-		auto queue = RE::UIMessageQueue::GetSingleton();
-		auto ui = RE::UI::GetSingleton();
-		if (!queue || !ui || ui->IsMenuOpen(MENU_NAME)) {
-			return;
-		}
-		if (!ScaleformUtility::MovieExists(FILE_NAME)) {
-			Log::ERROR("settings menu: Interface\\{}.swf not found - not opened", FILE_NAME);
+		if (!ScaleformUtility::CanShowMenu(MENU_NAME, FILE_NAME)) {
 			return;
 		}
 		Log::INFO("settings menu: opening ({})", Store::GetSingleton()->EditingDefaults() ? "new-game defaults" : "this character");
-		queue->AddMessage(MENU_NAME, RE::UI_MESSAGE_TYPE::kShow, nullptr);
+		ScaleformUtility::ShowMenu(MENU_NAME);
 	}
 
 	void SettingsMenu::Close()
 	{
-		if (auto queue = RE::UIMessageQueue::GetSingleton()) {
-			queue->AddMessage(MENU_NAME, RE::UI_MESSAGE_TYPE::kHide, nullptr);
-		}
+		ScaleformUtility::HideMenu(MENU_NAME);
 	}
 
 	void SettingsMenu::Accept(RE::FxDelegateHandler::CallbackProcessor* a_cbReg)
@@ -134,7 +90,7 @@ namespace SKYBSettingsMenu
 
 	void SettingsMenu::Push()
 	{
-		auto movie = Movie();
+		auto movie = ScaleformUtility::OpenMenuMovie(SettingsMenu::MENU_NAME);
 		if (!movie) {
 			return;
 		}
@@ -143,8 +99,7 @@ namespace SKYBSettingsMenu
 		RE::GFxValue header;
 		movie->CreateObject(&header);
 		header.SetMember("context", RE::GFxValue(store->EditingDefaults() ? "defaults" : "save"));
-		auto input = RE::BSInputDeviceManager::GetSingleton();
-		header.SetMember("gamepad", RE::GFxValue(input && input->IsGamepadEnabled()));
+		header.SetMember("gamepad", RE::GFxValue(ScaleformUtility::GamepadActive()));
 		RE::GFxValue presetLabels, presetDescs;
 		movie->CreateArray(&presetLabels);
 		movie->CreateArray(&presetDescs);

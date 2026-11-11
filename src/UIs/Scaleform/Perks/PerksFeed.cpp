@@ -29,7 +29,7 @@ namespace PerksView {
 		int OwnedRank(RE::PlayerCharacter* player, const Perk& perk) {
 			int owned = 0;
 			for (const auto& rank : perk.ranks) {
-				auto* record = FormCache::GetLocal<RE::BGSPerk>(rank.rankId.formID, rank.rankId.plugin, "PerksFeed (rank)");
+				auto* record = FormCache::GetRef<RE::BGSPerk>(rank.rankId, "PerksFeed (rank)");
 				if (!record || !player->HasPerk(record)) {
 					break;
 				}
@@ -71,7 +71,7 @@ namespace PerksView {
 			for (const auto& rank : perk.ranks) {
 				RE::GFxValue rankObject;
 				movie.CreateObject(&rankObject);
-				rankObject.SetMember("rankId", RE::GFxValue(rank.rankId.raw.c_str()));
+				rankObject.SetMember("rankId", RE::GFxValue(rank.rankId.c_str()));
 				rankObject.SetMember("description", RE::GFxValue(rank.description.c_str()));
 				RE::GFxValue requirements;
 				movie.CreateArray(&requirements);
@@ -188,11 +188,10 @@ namespace PerksView {
 		}
 		RE::GFxValue actorValues;
 		movie.CreateObject(&actorValues);
-		auto* actorValueList = RE::ActorValueList::GetSingleton();
 		auto* actorValueOwner = REBridge::AVOwner(player);
 		for (const auto& name : actorValueNames) {
 			double value = 0.0;
-			const auto actorValue = actorValueList ? actorValueList->LookupActorValueByName(name.c_str()) : RE::ActorValue::kNone;
+			const auto actorValue = REBridge::ActorValueByName(name.c_str());
 			if (actorValue != RE::ActorValue::kNone && actorValueOwner) {
 				value = static_cast<double>(actorValueOwner->GetActorValue(actorValue));
 			}

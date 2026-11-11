@@ -29,7 +29,7 @@ namespace StartMenu::StartMenuContract {
 		//Settings" only when the category's new-game values match no preset (the player changed them).
 		//Applied to the new character when it is ready (StartMenuService::OnNewGame).
 		inline constexpr const char* PresetPrefix = "preset:";
-		//Achievements/toastNotifications in SKYBSettings.ini, applied to the toast global at once.
+		//Achievements/toastNotifications in SKYBSettings.ini; the achievement service reads it on each unlock.
 		inline constexpr const char* ToastNotifications = "toastNotifications";
 		//Achievements/shared in SKYBSettings.ini: 0 per character, 1 every character's unlocks.
 		inline constexpr const char* AchievementScope = "achievementScope";

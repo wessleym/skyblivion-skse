@@ -14,7 +14,7 @@
 namespace Achievements {
 
 	namespace {
-		//Guards everything below: unlocks arrive from the Papyrus VM, the menu reads from UI tasks.
+		//Guards everything below: unlocks arrive from the Papyrus VM, the menu reads from main-thread tasks (MainThread::Post).
 		std::mutex g_lock;
 		nlohmann::json g_store;
 		bool g_loaded = false;
@@ -138,15 +138,15 @@ namespace Achievements {
 				Log::WARN("AchievementStore: Save failed ({}).", e.what());
 			}
 		}
+	}
 
-		std::string NowStamp() {
-			const auto now = std::chrono::system_clock::now();
-			try {
-				return std::format("{:%Y-%m-%d %H:%M}", std::chrono::zoned_time(std::chrono::current_zone(), now));
-			}
-			catch (const std::exception&) {
-				return std::format("{:%Y-%m-%d %H:%M} UTC", std::chrono::floor<std::chrono::minutes>(now));
-			}
+	std::string AchievementStore::Now() {
+		const auto now = std::chrono::system_clock::now();
+		try {
+			return std::format("{:%Y-%m-%d %H:%M}", std::chrono::zoned_time(std::chrono::current_zone(), now));
+		}
+		catch (const std::exception&) {
+			return std::format("{:%Y-%m-%d %H:%M} UTC", std::chrono::floor<std::chrono::minutes>(now));
 		}
 	}
 
@@ -157,7 +157,7 @@ namespace Achievements {
 		if (achievements.contains(id)) {
 			return;
 		}
-		achievements[id] = { { "first", NowStamp() }, { "character", character } };
+		achievements[id] = { { "first", Now() }, { "character", character } };
 		Log::INFO("AchievementStore: New cross-save unlock '{}' (character '{}').", id, character);
 		SaveStore();
 	}
@@ -180,10 +180,6 @@ namespace Achievements {
 			entries.emplace(key, std::move(entry));
 		}
 		return entries;
-	}
-
-	std::string AchievementStore::Now() {
-		return NowStamp();
 	}
 
 }

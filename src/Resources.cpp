@@ -23,3 +23,8 @@ void Resources::Install() {
 	assert(rightHandSlot);
 	assert(eitherHandSlot);
 }
+
+std::int32_t Resources::PlayerGold() {
+	auto* player = RE::PlayerCharacter::GetSingleton();
+	return player && gold ? std::max(0, player->GetItemCount(gold)) : 0;
+}

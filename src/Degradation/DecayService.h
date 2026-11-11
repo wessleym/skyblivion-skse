@@ -1,27 +1,13 @@
 #pragma once
-#include <algorithm>
-#include <array>
-#include <charconv>
-#include <cmath>
-#include <cstdint>
-#include <cstring>
-#include <filesystem>
-#include <format>
-#include <fstream>
-#include <optional>
-#include <random>
-#include <string>
-#include <string_view>
-#include <unordered_map>
-#include <vector>
 
-// Wears the PLAYER's gear down on combat hits (TESHitEvent, main thread):
+// Wears the PLAYER's gear down on combat hits (TESHitEvent: a worker thread, one event at a time):
 //   player lands a weapon hit      -> that weapon (the worn instance in the hand)
 //   player blocks a hit            -> the shield, else the blocking weapon
 //   player takes an unblocked hit  -> ArmorPiecesPerHit (INI) random worn armor pieces
 // Loss per event = base rate x category mult x RateMult (INI) x material
-// x curve(condition) x (power / bash / sneak / attacker-damage scaling),
-// floored at QualityMin (INI). NPC gear does not wear.
+// x curve(condition) x (power / bash / sneak / attacker-damage scaling)
+// x the player's Smithing (SkillWearReduction) x armor mastery on that armor class
+// (MasteryWearReduction), floored at QualityMin (INI). NPC gear does not wear.
 namespace SKYBDeg
 {
 	class DecayService : public RE::BSTEventSink<RE::TESHitEvent>

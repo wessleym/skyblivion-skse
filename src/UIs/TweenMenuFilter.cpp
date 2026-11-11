@@ -1,11 +1,8 @@
 #include "TweenMenuFilter.h"
 
+#include "Platform/FormCache.h"
 #include "Platform/MainThread.h"
-
-// <Windows.h>, which this plugin's CommonLib build includes, maps PlaySound to PlaySoundA.
-#ifdef PlaySound
-#	undef PlaySound
-#endif
+#include "UIs/Scaleform/ScaleformUtility.h"
 
 namespace TweenTools {
 	namespace {
@@ -45,10 +42,7 @@ namespace TweenTools {
 		constexpr const char* kFoldClip = "SKYBToolsFold";
 		constexpr const char* kExpandSound = "UIMenuFocus";
 
-		//Labels: TOOLS and the tools keep their option files' text. No state mark or child marker:
-		//in the centred field they pushed the words off the column's centre (Scott, round 6).
-
-		//The sub-entry look: the November accent at rest, white while selected (the kit's pairing).
+		//The sub-entry look: gold at rest, white while selected.
 		constexpr std::uint32_t kChildColour = 0xE2CEAA;
 		constexpr std::uint32_t kChildLitColour = 0xFFFFFF;
 		constexpr double kChildScale = 82.0;    //% of the entry's label
@@ -107,42 +101,44 @@ namespace TweenTools {
 
 	void TweenMenuFilter::Register()
 	{
-		if (s_registered) {
-			return;
-		}
 		auto ui = RE::UI::GetSingleton();
 		if (!ui) {
 			return;
 		}
 		ui->AddEventSink<RE::MenuOpenCloseEvent>(GetSingleton());
-		s_registered = true;
 		Log::INFO("TweenMenuFilter: registered; the Tween menu's TOOLS entry folds out to the tools carried and hides when none is");
 	}
 
 	RE::BSEventNotifyControl TweenMenuFilter::ProcessEvent(const RE::MenuOpenCloseEvent* a_event,
 		RE::BSTEventSource<RE::MenuOpenCloseEvent>*)
 	{
+		//Menu events arrive on worker threads: the movie's lists, and the state its handlers read, are
+		//changed on the main thread (Platform\MainThread.h). Posting both keeps an open and a close in order.
 		if (a_event && a_event->menuName == RE::TweenMenu::MENU_NAME) {
 			if (a_event->opening) {
-				Prepare(false);
+				MainThread::Post([] { Prepare(false); });
 			} else {
-				s_children.clear();
-				s_toolsList.clear();
-				s_toolsText.clear();
-				s_expanded = false;
-				s_folding = false;
-				s_lone = {};
+				MainThread::Post(Reset);
 			}
 		}
 		return RE::BSEventNotifyControl::kContinue;
 	}
 
-	TweenMenuFilter::Tool* TweenMenuFilter::Find(const char* a_menuEvent)
+	void TweenMenuFilter::Reset()
+	{
+		s_children.clear();
+		s_toolsList.clear();
+		s_expanded = false;
+		s_folding = false;
+		s_lone = {};
+	}
+
+	const TweenMenuFilter::Tool* TweenMenuFilter::Find(const char* a_menuEvent)
 	{
 		if (!a_menuEvent) {
 			return nullptr;
 		}
-		for (auto& tool : s_tools) {
+		for (const auto& tool : s_tools) {
 			if (std::strcmp(tool.menuEvent, a_menuEvent) == 0) {
 				return &tool;
 			}
@@ -150,21 +146,16 @@ namespace TweenTools {
 		return nullptr;
 	}
 
-	std::int32_t TweenMenuFilter::Carried(Tool& a_tool)
+	std::int32_t TweenMenuFilter::Carried(const Tool& a_tool)
 	{
-		if (!a_tool.resolved) {
-			a_tool.resolved = true;
-			a_tool.list = RE::TESForm::LookupByEditorID<RE::BGSListForm>(a_tool.listEditorID);
-			if (!a_tool.list) {
-				Log::WARN("TweenMenuFilter: FLST {} not found; the {} tool is left listed", a_tool.listEditorID, a_tool.menuEvent);
-			}
-		}
-		auto player = RE::PlayerCharacter::GetSingleton();
-		if (!a_tool.list || !player) {
+		//A list that does not resolve is logged once by the form table; the tool is then left listed.
+		auto* list = FormCache::Get<RE::BGSListForm>(a_tool.listEditorID, "TweenMenuFilter");
+		auto  player = RE::PlayerCharacter::GetSingleton();
+		if (!list || !player) {
 			return -1;  //unknown: keep the tool
 		}
 		std::int32_t total = 0;
-		for (auto* form : a_tool.list->forms) {
+		for (auto* form : list->forms) {
 			auto obj = form ? form->As<RE::TESBoundObject>() : nullptr;
 			if (obj) {
 				total += std::max(0, player->GetItemCount(obj));
@@ -175,22 +166,43 @@ namespace TweenTools {
 
 	void TweenMenuFilter::Prepare(bool a_retry)
 	{
-		auto ui = RE::UI::GetSingleton();
-		auto menu = ui ? ui->GetMenu(RE::TweenMenu::MENU_NAME) : nullptr;
-		if (!menu || !menu->uiMovie) {
+		const auto view = ScaleformUtility::OpenMenuMovie(RE::TweenMenu::MENU_NAME);
+		if (!view) {
 			return;
 		}
-		auto movie = menu->uiMovie.get();
-		s_children.clear();
-		s_toolsList.clear();
-		s_toolsText.clear();
-		s_expanded = false;
-		s_folding = false;
-		s_lone = {};
+		auto* movie = view.get();
+		Reset();
 		int seen = 0;
 		int dropped = 0;
 		bool toolsSeen = false;
 		std::array<std::optional<Child>, 3> found{};
+		//Whether the carried tools can go under TOOLS: the entry is in a list and its pick can be taken over.
+		//When not (tools.json missing, or an overhaul version without the handler), the carried tools stay
+		//where the overhaul put them, so they are still reachable; only the ones not carried are taken out.
+		for (const char* listPath : kLists) {
+			RE::GFxValue list;
+			if (!movie->GetVariable(&list, (std::string(listPath) + ".entryList").c_str()) || !list.IsArray()) {
+				continue;
+			}
+			for (std::uint32_t i = 0; i < list.GetArraySize() && !toolsSeen; ++i) {
+				RE::GFxValue entry;
+				if (list.GetElement(i, &entry) && IsEvent(entry, kToolsEvent)) {
+					toolsSeen = true;
+					s_toolsList = listPath;
+				}
+			}
+			if (toolsSeen) {
+				break;
+			}
+		}
+		RE::GFxValue clip;
+		RE::GFxValue pick;
+		const bool pickable = movie->GetVariable(&clip, kMenuClip) && clip.IsObject() && clip.GetMember(kPickHandler, &pick) && !pick.IsUndefined();
+		const bool canFold = toolsSeen && pickable;
+		static bool s_pickWarned = false;
+		if (toolsSeen && !pickable && !std::exchange(s_pickWarned, true)) {
+			Log::WARN("TweenMenuFilter: {}.{} not found; the carried tools stay as their own entries", kMenuClip, kPickHandler);
+		}
 		//Pass 1: the tool entries out of the lists, the carried ones kept (in s_tools order).
 		for (const char* listPath : kLists) {
 			const std::string entries = std::string(listPath) + ".entryList";
@@ -206,14 +218,7 @@ namespace TweenTools {
 				if (!list.GetElement(idx, &entry) || !EntryEvent(entry, event)) {
 					continue;
 				}
-				if (std::strcmp(event.GetString(), kToolsEvent) == 0) {
-					toolsSeen = true;
-					s_toolsList = listPath;
-					RE::GFxValue text;
-					s_toolsText = entry.GetMember("text", &text) && text.IsString() ? text.GetString() : "TOOLS";
-					continue;
-				}
-				Tool* tool = Find(event.GetString());
+				const Tool* tool = Find(event.GetString());  //null for TOOLS itself and for every other entry
 				if (!tool) {
 					continue;
 				}
@@ -221,6 +226,9 @@ namespace TweenTools {
 				RE::GFxValue text;
 				const char* label = entry.GetMember("text", &text) && text.IsString() ? text.GetString() : tool->menuEvent;
 				if (Carried(*tool) != 0) {
+					if (!canFold) {
+						continue;  //left in place: there is no TOOLS to put it under
+					}
 					found[static_cast<std::size_t>(tool - s_tools.data())] = Child{ label, tool->menuEvent };
 				} else {
 					++dropped;
@@ -238,9 +246,7 @@ namespace TweenTools {
 			}
 		}
 		if (seen == 0 && !toolsSeen && !a_retry) {
-			//The overhaul's sink has not filled the lists yet (it ran after this one): once more at the start of
-			//the next frame, on the main thread. Not SKSE's UI task queue: it can run on a worker thread while
-			//the main thread advances the movie whose lists this edits (Platform\MainThread.h).
+			//The overhaul has not filled the lists yet: once more at the start of the next frame, on the main thread.
 			MainThread::Post([] { Prepare(true); });
 			return;
 		}
@@ -279,9 +285,6 @@ namespace TweenTools {
 					ordered = rest;
 				}
 				Rebuild(list, ordered);
-				if (!s_children.empty()) {
-					SetToolsLabel(list);
-				}
 				Redraw(movie, s_toolsList);
 			}
 			if (s_children.empty()) {
@@ -363,17 +366,6 @@ namespace TweenTools {
 		}
 	}
 
-	void TweenMenuFilter::SetToolsLabel(RE::GFxValue& a_list)
-	{
-		const std::string& label = s_toolsText;
-		for (std::uint32_t i = 0; i < a_list.GetArraySize(); ++i) {
-			RE::GFxValue entry;
-			if (a_list.GetElement(i, &entry) && IsEvent(entry, kToolsEvent)) {
-				entry.SetMember("text", RE::GFxValue(label.c_str()));
-			}
-		}
-	}
-
 	void TweenMenuFilter::InstallHandlers(RE::GFxMovie* a_movie)
 	{
 		static RE::GPtr<PickHandler> pick = RE::make_gptr<PickHandler>();
@@ -381,13 +373,12 @@ namespace TweenTools {
 		//A fresh movie each open: the members found here are still the movie's own.
 		RE::GFxValue clip;
 		RE::GFxValue original;
+		//Prepare checked that the handler exists (canFold) before calling this.
 		if (a_movie->GetVariable(&clip, kMenuClip) && clip.IsObject() && clip.GetMember(kPickHandler, &original) && !original.IsUndefined()) {
 			clip.SetMember(kOriginalPick, original);
 			RE::GFxValue fn;
 			a_movie->CreateFunction(&fn, pick.get());
 			clip.SetMember(kPickHandler, fn);
-		} else {
-			Log::WARN("TweenMenuFilter: {}.{} not found; TOOLS cannot fold out", kMenuClip, kPickHandler);
 		}
 		RE::GFxValue list;
 		if (a_movie->GetVariable(&list, s_toolsList.c_str()) && list.IsObject() && list.GetMember(kEntryText, &original) && !original.IsUndefined()) {
@@ -448,8 +439,7 @@ namespace TweenTools {
 		//The field as the movie placed it, taken once per clip, before anything of ours has touched it
 		//(only this function moves a field, and it takes this first). The movie places every entry's
 		//field at 87.05 % scale (PlaceObject in the entry sprites), so the scale is part of the place:
-		//round 6 / 7 put non-child rows back at an absolute 100 %, which grew ITEMS and TOOLS from
-		//their left edge after the first redraw (a hover) and moved their centred words right.
+		//putting a row back at an absolute 100 % grows it from its left edge and moves its centred words.
 		if (!a_clip.HasMember("SKYBBaseX")) {
 			a_clip.SetMember("SKYBBaseX", RE::GFxValue(Number(field, "_x", 0.0)));
 			a_clip.SetMember("SKYBBaseY", RE::GFxValue(Number(field, "_y", 0.0)));
@@ -507,7 +497,6 @@ namespace TweenTools {
 		if (s_expanded) {
 			//Back in: the children fade out (last first), then leave the list (EndFold).
 			s_expanded = false;
-			SetToolsLabel(list);
 			Redraw(a_movie, s_toolsList);
 			StartFold(a_movie, false);
 		} else {
@@ -536,7 +525,6 @@ namespace TweenTools {
 			}
 			Rebuild(list, kept);
 			s_expanded = true;
-			SetToolsLabel(list);
 			Redraw(a_movie, s_toolsList);
 			StartFold(a_movie, true);
 		}

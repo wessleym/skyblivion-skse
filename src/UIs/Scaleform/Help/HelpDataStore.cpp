@@ -1,13 +1,13 @@
 #include "HelpDataStore.h"
 #include "HelpContract.h"
 #include "Platform/FormCache.h"
+#include "Platform/JsonFile.h"
+#include "Platform/Text.h"
 
 #include <algorithm>
 #include <array>
-#include <cctype>
 #include <filesystem>
 #include <format>
-#include <fstream>
 #include <optional>
 #include <regex>
 #include <unordered_map>
@@ -21,22 +21,13 @@ using nlohmann::json;
 namespace Help {
 
 	namespace {
-		constexpr double kDefaultPriority = 100.0;
-
 		const std::regex kIdRe{ R"(^[A-Za-z][A-Za-z0-9_]*$)" };
 		const std::regex kStyleNameRe{ R"(^[A-Za-z][A-Za-z0-9_-]*$)" };
 		const std::regex kColorRe{ R"(^#[0-9A-Fa-f]{6}$)" };
-		const std::regex kFormRefRe{ R"(^[0-9A-Fa-f]{1,8}\|\S.*$)" };
 
 		//Tags the text field already understands: a style may not take their names.
 		const std::unordered_set<std::string> kHtmlTags{ "a", "b", "br", "font", "i", "img", "li", "p", "span",
 			"tab", "textformat", "u" };
-
-		struct FormRef {
-			RE::FormID localID{ 0 };
-			std::string plugin;
-			std::string raw;
-		};
 
 		//A style tag as the two strings that replace <tag> and </tag>.
 		struct Style {
@@ -44,49 +35,15 @@ namespace Help {
 			std::string close;
 		};
 
-		struct TopicSource {
-			std::string file;
-			Topic topic;
-			bool hasTitle{ false };
-			bool hasBody{ false };
-			std::optional<FormRef> message;
-		};
-
 		struct CategorySource {
 			std::string folder;
 			Category category;
-			std::optional<FormRef> importFormList;
-			std::vector<FormRef> exclude;
-			std::vector<TopicSource> topics;
+			//"HEX|Plugin", checked when read.
+			std::optional<std::string> importFormList;
 		};
 
-		std::string Lower(std::string text) {
-			std::transform(text.begin(), text.end(), text.begin(), [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
-			return text;
-		}
-
-		std::optional<json> ReadJson(const fs::path& path) {
-			std::ifstream in(path);
-			if (!in) {
-				Log::WARN("HelpDataStore: {} cannot be opened - skipped", path.generic_string());
-				return std::nullopt;
-			}
-			try {
-				auto parsed = json::parse(in, nullptr, true, true);
-				if (!parsed.is_object()) {
-					Log::WARN("HelpDataStore: {} is not a JSON object - skipped", path.generic_string());
-					return std::nullopt;
-				}
-				return parsed;
-			}
-			catch (const std::exception& e) {
-				Log::WARN("HelpDataStore: {} does not parse ({}) - skipped", path.generic_string(), e.what());
-				return std::nullopt;
-			}
-		}
-
 		//A string field: nullopt when absent or not a string (a non-string is logged).
-		std::optional<std::string> Text(const json& object, const char* key, const std::string& file) {
+		std::optional<std::string> StringField(const json& object, const char* key, const std::string& file) {
 			auto it = object.find(key);
 			if (it == object.end() || it->is_null()) {
 				return std::nullopt;
@@ -101,15 +58,6 @@ namespace Help {
 		double Number(const json& object, const char* key, double fallback) {
 			auto it = object.find(key);
 			return it != object.end() && it->is_number() ? it->get<double>() : fallback;
-		}
-
-		std::optional<FormRef> ParseFormRef(const std::string& raw, const std::string& file, const char* key) {
-			if (!std::regex_match(raw, kFormRefRe)) {
-				Log::WARN("HelpDataStore: {}: \"{}\" value '{}' is not HEX|Plugin - ignored", file, key, raw);
-				return std::nullopt;
-			}
-			const auto separator = raw.find('|');
-			return FormRef{ static_cast<RE::FormID>(std::stoul(raw.substr(0, separator), nullptr, 16)), raw.substr(separator + 1), raw };
 		}
 
 		void ReplaceAll(std::string& text, std::string_view from, std::string_view to) {
@@ -133,21 +81,21 @@ namespace Help {
 			std::unordered_map<std::string, Style> styles;
 			std::error_code ec;
 			if (!fs::exists(path, ec)) {
-				Log::INFO("HelpDataStore: No {}. Topic bodies are used as written.", path.generic_string());
+				Log::INFO("HelpDataStore: No {}. Topic bodies are used as written.", Text::Utf8(path));
 				return styles;
 			}
-			const auto parsed = ReadJson(path);
+			const auto parsed = JsonFile::ReadObject(path, "HelpDataStore");
 			if (!parsed) {
 				return styles;
 			}
-			const auto file = path.generic_string();
+			const auto file = Text::Utf8(path);
 			auto list = parsed->find("styles");
 			if (list == parsed->end() || !list->is_object()) {
 				Log::WARN("HelpDataStore: {} has no \"styles\" object - no styles", file);
 				return styles;
 			}
 			for (const auto& [name, spec] : list->items()) {
-				if (!std::regex_match(name, kStyleNameRe) || kHtmlTags.contains(Lower(name))) {
+				if (!std::regex_match(name, kStyleNameRe) || kHtmlTags.contains(Text::Lower(name))) {
 					Log::WARN("HelpDataStore: {}: style '{}' is not a usable tag name (a letter, then letters, digits, - or _; "
 							  "not an HTML tag) - skipped", file, name);
 					continue;
@@ -157,13 +105,13 @@ namespace Help {
 					continue;
 				}
 				std::string font;
-				if (const auto face = Text(spec, "face", file)) {
+				if (const auto face = StringField(spec, "face", file)) {
 					font += std::format(" face='{}'", *face);
 				}
 				if (const double size = Number(spec, "size", 0.0); size > 0.0) {
 					font += std::format(" size='{}'", static_cast<int>(size));
 				}
-				if (const auto color = Text(spec, "color", file)) {
+				if (const auto color = StringField(spec, "color", file)) {
 					if (std::regex_match(*color, kColorRe)) {
 						font += std::format(" color='{}'", *color);
 					}
@@ -236,89 +184,64 @@ namespace Help {
 			return body;
 		}
 
+
 		std::optional<CategorySource> ParseCategory(const fs::path& path) {
-			const auto parsed = ReadJson(path);
+			const auto parsed = JsonFile::ReadObject(path, "HelpDataStore");
 			if (!parsed) {
 				return std::nullopt;
 			}
-			const auto file = path.generic_string();
+			const auto file = Text::Utf8(path);
 			CategorySource source;
-			source.folder = path.parent_path().filename().string();
-			const auto id = Text(*parsed, "id", file);
+			source.folder = Text::Utf8(path.parent_path().filename());
+			const auto id = StringField(*parsed, "id", file);
 			if (!id || !std::regex_match(*id, kIdRe)) {
 				Log::WARN("HelpDataStore: {} has no valid \"id\" (a letter, then letters, digits or _) - category skipped", file);
 				return std::nullopt;
 			}
 			source.category.id = *id;
-			const auto name = Text(*parsed, "displayName", file);
+			const auto name = StringField(*parsed, "displayName", file);
 			if (!name || name->empty()) {
 				Log::WARN("HelpDataStore: {} has no \"displayName\" - category skipped", file);
 				return std::nullopt;
 			}
 			source.category.displayName = *name;
-			source.category.priority = Number(*parsed, "priority", kDefaultPriority);
-			source.category.visibilityGlobal = Text(*parsed, "visibilityGlobal", file).value_or("");
-			if (const auto list = Text(*parsed, "importFormList", file)) {
-				source.importFormList = ParseFormRef(*list, file, "importFormList");
-			}
-			if (auto it = parsed->find("exclude"); it != parsed->end() && it->is_array()) {
-				for (const auto& entry : *it) {
-					if (entry.is_string()) {
-						if (auto ref = ParseFormRef(entry.get<std::string>(), file, "exclude")) {
-							source.exclude.push_back(std::move(*ref));
-						}
-					}
+			source.category.priority = Number(*parsed, "priority", source.category.priority);
+			source.category.visibilityGlobal = StringField(*parsed, "visibilityGlobal", file).value_or("");
+			if (const auto list = StringField(*parsed, "importFormList", file)) {
+				if (FormCache::ParseRef(*list)) {
+					source.importFormList = *list;
+				}
+				else {
+					Log::WARN("HelpDataStore: {}: \"importFormList\" value '{}' is not HEX|Plugin - ignored", file, *list);
 				}
 			}
 			return source;
 		}
 
-		std::optional<TopicSource> ParseTopic(const fs::path& path, const std::unordered_map<std::string, Style>& styles) {
-			const auto parsed = ReadJson(path);
+		std::optional<Topic> ParseTopic(const fs::path& path, const std::unordered_map<std::string, Style>& styles) {
+			const auto parsed = JsonFile::ReadObject(path, "HelpDataStore");
 			if (!parsed) {
 				return std::nullopt;
 			}
-			TopicSource source;
-			source.file = path.generic_string();
-			const auto id = Text(*parsed, "id", source.file);
+			const auto file = Text::Utf8(path);
+			Topic topic;
+			const auto id = StringField(*parsed, "id", file);
 			if (!id || !std::regex_match(*id, kIdRe)) {
-				Log::WARN("HelpDataStore: {} has no valid \"id\" (a letter, then letters, digits or _) - topic skipped", source.file);
+				Log::WARN("HelpDataStore: {} has no valid \"id\" (a letter, then letters, digits or _) - topic skipped", file);
 				return std::nullopt;
 			}
-			source.topic.id = *id;
-			source.topic.priority = Number(*parsed, "priority", kDefaultPriority);
-			source.topic.visibilityGlobal = Text(*parsed, "visibilityGlobal", source.file).value_or("");
-			if (const auto title = Text(*parsed, "title", source.file); title && !title->empty()) {
-				source.topic.title = *title;
-				source.hasTitle = true;
-			}
-			if (auto body = AuthoredBody(*parsed, source.file, styles)) {
-				source.topic.body = std::move(*body);
-				source.hasBody = true;
-			}
-			if (const auto message = Text(*parsed, "message", source.file)) {
-				source.message = ParseFormRef(*message, source.file, "message");
-			}
-			if (!source.message && (!source.hasTitle || !source.hasBody)) {
-				Log::WARN("HelpDataStore: {} needs a \"title\" and a \"body\", or a \"message\" - topic skipped", source.file);
+			topic.id = *id;
+			topic.priority = Number(*parsed, "priority", topic.priority);
+			topic.visibilityGlobal = StringField(*parsed, "visibilityGlobal", file).value_or("");
+			const auto title = StringField(*parsed, "title", file);
+			auto body = AuthoredBody(*parsed, file, styles);
+			if (!title || title->empty() || !body) {
+				Log::WARN("HelpDataStore: {} needs a \"title\" and a \"body\" - topic skipped", file);
 				return std::nullopt;
 			}
-			return source;
-		}
-
-		RE::BGSMessage* ResolveMessage(const FormRef& ref) {
-			return FormCache::GetLocal<RE::BGSMessage>(ref.localID, ref.plugin, "HelpDataStore (message)");
-		}
-
-		std::string MessageTitle(RE::BGSMessage* message) {
-			const char* name = message->GetFullName();
-			return name ? name : "";
-		}
-
-		std::string MessageBody(RE::BGSMessage* message) {
-			RE::BSString text;
-			message->GetDescription(text, message);
-			return EscapeGameText(text.c_str() ? text.c_str() : "");
+			topic.title = *title;
+			topic.body = std::move(*body);
+			return topic;
 		}
 
 		void SortTopics(std::vector<Topic>& topics) {
@@ -326,7 +249,7 @@ namespace Help {
 				if (a.priority != b.priority) {
 					return a.priority < b.priority;
 				}
-				return Lower(a.title) < Lower(b.title);
+				return Text::Lower(a.title) < Text::Lower(b.title);
 			});
 		}
 	}
@@ -340,7 +263,7 @@ namespace Help {
 		const fs::path root{ HelpContract::DataRoot };
 		std::error_code ec;
 		if (!fs::is_directory(root, ec)) {
-			Log::INFO("HelpDataStore: No {}. The help page keeps the game's own list.", root.generic_string());
+			Log::INFO("HelpDataStore: No {}. The help page keeps the game's own list.", Text::Utf8(root));
 			return;
 		}
 		const auto styles = LoadStyles(root / HelpContract::StylesFileName);
@@ -353,22 +276,23 @@ namespace Help {
 		}
 		std::sort(folders.begin(), folders.end());
 
-		std::vector<CategorySource> sources;
 		std::unordered_set<std::string> categoryIds;
+		std::size_t topicCount = 0;
 		for (const auto& folder : folders) {
 			auto source = ParseCategory(folder / HelpContract::CategoryFileName);
 			if (!source) {
 				continue;
 			}
-			if (!categoryIds.insert(Lower(source->category.id)).second) {
-				Log::WARN("HelpDataStore: {}: category id '{}' is taken by an earlier folder - skipped",
-					folder.generic_string(), source->category.id);
+			auto& category = source->category;
+			if (!categoryIds.insert(Text::Lower(category.id)).second) {
+				Log::WARN("HelpDataStore: {}: category id '{}' is taken by an earlier folder - skipped", Text::Utf8(folder), category.id);
 				continue;
 			}
+
 			std::vector<fs::path> files;
 			for (const auto& entry : fs::directory_iterator(folder, ec)) {
-				if (entry.is_regular_file(ec) && Lower(entry.path().extension().string()) == ".json" &&
-					Lower(entry.path().filename().string()) != HelpContract::CategoryFileName) {
+				if (entry.is_regular_file(ec) && Text::Lower(Text::Utf8(entry.path().extension())) == ".json" &&
+					Text::Lower(Text::Utf8(entry.path().filename())) != HelpContract::CategoryFileName) {
 					files.push_back(entry.path());
 				}
 			}
@@ -379,80 +303,38 @@ namespace Help {
 				if (!topic) {
 					continue;
 				}
-				if (!topicIds.insert(Lower(topic->topic.id)).second) {
-					Log::WARN("HelpDataStore: {}: topic id '{}' is taken in this category - skipped", topic->file, topic->topic.id);
+				if (!topicIds.insert(Text::Lower(topic->id)).second) {
+					Log::WARN("HelpDataStore: {}: topic id '{}' is taken in this category - skipped", Text::Utf8(file), topic->id);
 					continue;
 				}
-				source->topics.push_back(std::move(*topic));
-			}
-			sources.push_back(std::move(*source));
-		}
-
-		//Messages a topic claims leave every imported list.
-		std::unordered_set<RE::FormID> claimed;
-		for (auto& source : sources) {
-			for (auto& topic : source.topics) {
-				if (topic.message) {
-					if (auto* message = ResolveMessage(*topic.message)) {
-						claimed.insert(message->GetFormID());
-					}
-				}
-			}
-		}
-
-		std::size_t topicCount = 0;
-		for (auto& source : sources) {
-			auto& category = source.category;
-			for (auto& topic : source.topics) {
-				if (topic.message) {
-					auto* message = ResolveMessage(*topic.message);
-					if (!message) {
-						Log::WARN("HelpDataStore: {}: message {} does not resolve - topic skipped", topic.file, topic.message->raw);
-						continue;
-					}
-					if (!topic.hasTitle) {
-						topic.topic.title = MessageTitle(message);
-					}
-					if (!topic.hasBody) {
-						topic.topic.body = MessageBody(message);
-					}
-				}
-				category.topics.push_back(std::move(topic.topic));
+				category.topics.push_back(std::move(*topic));
 			}
 
-			if (source.importFormList) {
-				auto* list = FormCache::GetLocal<RE::BGSListForm>(source.importFormList->localID, source.importFormList->plugin,
-					"HelpDataStore (importFormList)");
+			if (source->importFormList) {
+				auto* list = FormCache::GetRef<RE::BGSListForm>(*source->importFormList, "HelpDataStore (importFormList)");
 				if (!list) {
-					Log::WARN("HelpDataStore: {}: form list {} does not resolve - nothing imported", source.folder,
-						source.importFormList->raw);
+					Log::WARN("HelpDataStore: {}: form list {} does not resolve - nothing imported", source->folder, *source->importFormList);
 				}
 				else {
-					std::unordered_set<RE::FormID> excluded;
-					for (const auto& ref : source.exclude) {
-						if (auto* message = ResolveMessage(ref)) {
-							excluded.insert(message->GetFormID());
-						}
-					}
 					for (auto* form : list->forms) {
 						auto* message = form ? form->As<RE::BGSMessage>() : nullptr;
-						if (!message || excluded.contains(message->GetFormID()) || claimed.contains(message->GetFormID())) {
+						const char* title = message ? message->GetFullName() : nullptr;
+						if (!title || !*title) {
 							continue;
 						}
+						RE::BSString text;
+						message->GetDescription(text, message);
 						Topic topic;
 						topic.id = std::format("msg{:08X}", message->GetFormID());
-						topic.title = MessageTitle(message);
-						topic.body = MessageBody(message);
-						if (topic.title.empty()) {
-							continue;
-						}
+						topic.title = title;
+						topic.body = EscapeGameText(text.c_str() ? text.c_str() : "");
 						category.topics.push_back(std::move(topic));
 					}
 				}
 			}
 
 			if (category.topics.empty()) {
-				Log::WARN("HelpDataStore: {}: category '{}' has no topics - left out", source.folder, category.id);
+				Log::WARN("HelpDataStore: {}: category '{}' has no topics - left out", source->folder, category.id);
 				continue;
 			}
 			SortTopics(category.topics);
@@ -464,9 +346,9 @@ namespace Help {
 			if (a.priority != b.priority) {
 				return a.priority < b.priority;
 			}
-			return Lower(a.id) < Lower(b.id);
+			return Text::Lower(a.id) < Text::Lower(b.id);
 		});
-		Log::INFO("HelpDataStore: {} categor(ies), {} topic(s) from {}.", s_categories.size(), topicCount, root.generic_string());
+		Log::INFO("HelpDataStore: {} categor(ies), {} topic(s) from {}.", s_categories.size(), topicCount, Text::Utf8(root));
 	}
 
 	const std::vector<Category>& HelpDataStore::Categories() {

@@ -1,13 +1,13 @@
 #include "HoverCursor.h"
 
+#include "Platform/IniFile.h"
 #include "Platform/MainThread.h"
+#include "Platform/Text.h"
 
 #include <algorithm>
 #include <array>
 #include <atomic>
-#include <cctype>
 #include <chrono>
-#include <fstream>
 #include <mutex>
 #include <string>
 #include <string_view>
@@ -69,70 +69,21 @@ namespace HoverCursor {
 			return duration_cast<milliseconds>(steady_clock::now().time_since_epoch()).count();
 		}
 
-		std::string Lower(std::string_view a_text) {
-			std::string out(a_text);
-			for (auto& c : out) {
-				c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
-			}
-			return out;
-		}
-
-		std::string Trim(std::string_view a_text) {
-			std::size_t b = 0;
-			std::size_t e = a_text.size();
-			while (b < e && std::isspace(static_cast<unsigned char>(a_text[b]))) {
-				++b;
-			}
-			while (e > b && std::isspace(static_cast<unsigned char>(a_text[e - 1]))) {
-				--e;
-			}
-			return std::string(a_text.substr(b, e - b));
-		}
-
-		bool EndsWithNoCase(std::string_view a_text, std::string_view a_tail) {
-			return a_text.size() >= a_tail.size() && Lower(a_text.substr(a_text.size() - a_tail.size())) == Lower(a_tail);
-		}
-
 		void ReadConfig() {
-			std::ifstream in(kIniPath);
-			if (!in) {
-				return;  //defaults: on, nothing excluded
-			}
-			std::string line;
-			bool inSection = false;
-			while (std::getline(in, line)) {
-				const auto t = Trim(line);
-				if (t.empty() || t[0] == ';' || t[0] == '#') {
-					continue;
+			//Without the file: on, nothing excluded.
+			IniFile::Read(kIniPath, "HoverCursor", [](const IniFile::Entry& a_entry) {
+				if (!Text::IEquals(a_entry.section, "HoverCursor")) {
+					return;
 				}
-				if (t.front() == '[') {
-					inSection = Lower(t) == "[hovercursor]";
-					continue;
-				}
-				const auto eq = t.find('=');
-				if (!inSection || eq == std::string::npos) {
-					continue;
-				}
-				const auto key = Lower(Trim(std::string_view(t).substr(0, eq)));
-				const auto value = Trim(std::string_view(t).substr(eq + 1));
+				const auto key = Text::Lower(a_entry.key);
 				if (key == "benabled") {
-					const auto v = Lower(value);
-					g_config.enabled = !(v == "0" || v == "false" || v == "no" || v == "off");
+					g_config.enabled = Text::ParseBool(a_entry.value, true);
 				} else if (key == "sexcludemenus") {
-					std::size_t start = 0;
-					while (start <= value.size()) {
-						const auto comma = value.find(',', start);
-						const auto name = Lower(Trim(std::string_view(value).substr(start, comma == std::string::npos ? std::string::npos : comma - start)));
-						if (!name.empty()) {
-							g_config.excluded.push_back(name);
-						}
-						if (comma == std::string::npos) {
-							break;
-						}
-						start = comma + 1;
+					for (const auto& name : Text::Split(a_entry.value, ',')) {
+						g_config.excluded.push_back(Text::Lower(name));
 					}
 				}
-			}
+			});
 		}
 
 		//------------------------------------------------------------------------------------------ reading a movie
@@ -171,12 +122,17 @@ namespace HoverCursor {
 			       !IsBool(a_entity, "useHandCursor", false);
 		}
 
+		//The movie's Mouse object, as _global.Mouse or Mouse.
+		bool FindMouse(RE::GFxMovie* a_movie, RE::GFxValue& a_mouse) {
+			return (a_movie->GetVariable(&a_mouse, "_global.Mouse") && a_mouse.IsObject()) ||
+			       (a_movie->GetVariable(&a_mouse, "Mouse") && a_mouse.IsObject());
+		}
+
 		Reading Read(RE::GFxMovie* a_movie) {
 			Reading r;
 			r.at = NowMs();
 			RE::GFxValue mouse;
-			if (!(a_movie->GetVariable(&mouse, "_global.Mouse") && mouse.IsObject()) &&
-				!(a_movie->GetVariable(&mouse, "Mouse") && mouse.IsObject())) {
+			if (!FindMouse(a_movie, mouse)) {
 				return r;
 			}
 			RE::GFxValue top;
@@ -323,7 +279,7 @@ namespace HoverCursor {
 				if (hand && !g_config.excluded.empty()) {
 					for (const auto& [name, entry] : ui->menuMap) {
 						if (entry.menu.get() == menu.get()) {
-							const auto lower = Lower(name.c_str());
+							const auto lower = Text::Lower(name.c_str());
 							hand = std::find(g_config.excluded.begin(), g_config.excluded.end(), lower) == g_config.excluded.end();
 							break;
 						}
@@ -410,7 +366,7 @@ namespace HoverCursor {
 			}
 			auto* def = a_view->GetMovieDef();
 			const char* url = def ? def->GetFileURL() : nullptr;
-			if (url && EndsWithNoCase(url, kCursorMovieFile)) {
+			if (url && Text::IEndsWith(url, kCursorMovieFile)) {
 				RE::GPtr<RE::GFxMovieView> cursor(a_view);
 				MainThread::Post([cursor] { PutHandIn(cursor.get()); });
 				return true;
@@ -424,8 +380,7 @@ namespace HoverCursor {
 				a_slot->SetMember("hover", hoverFn);
 			}
 			RE::GFxValue mouse;
-			if (!(a_view->GetVariable(&mouse, "_global.Mouse") && mouse.IsObject()) &&
-				!(a_view->GetVariable(&mouse, "Mouse") && mouse.IsObject())) {
+			if (!FindMouse(a_view, mouse)) {
 				return true;
 			}
 			RE::GFxValue listener;

@@ -77,7 +77,7 @@ void ActorExpression::Set(RE::Actor* actor, Expression expression, float value) 
 
 	//Run on main game thread:
 	taskInterface->AddTask([handle, expression, value]() {
-		RE::ActorPtr actor = handle.get();
+		RE::ActorPtr actor = REBridge::Lookup(handle);
 		if (!actor) {
 			return;
 		}

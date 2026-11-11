@@ -1,30 +1,19 @@
 #include "Degradation/RepairMenu.h"
 
-#include "Resources.h"
 #include "Degradation/Condition.h"
 #include "Degradation/Settings.h"
+#include "Hotkeys/HotkeyService.h"
+#include "Papyrus/ModEvents.h"
 #include "Platform/MainThread.h"
-#include <algorithm>
-#include <array>
-#include <charconv>
-#include <cmath>
-#include <cstdint>
-#include <cstring>
-#include <filesystem>
-#include <format>
-#include <fstream>
-#include <optional>
-#include <random>
-#include <string>
-#include <string_view>
-#include <unordered_map>
-#include <vector>
+#include "Resources.h"
 #include "UIs/Scaleform/ScaleformUtility.h"
 
-// <Windows.h>, which this plugin's CommonLib build includes, maps PlaySound to PlaySoundA.
-#ifdef PlaySound
-#	undef PlaySound
-#endif
+#include <algorithm>
+#include <cmath>
+#include <cstdint>
+#include <format>
+#include <string>
+#include <vector>
 
 namespace SKYBDeg
 {
@@ -95,7 +84,7 @@ namespace SKYBDeg
 		bool             g_recharge = false;    // vendor mode: the Recharge service (else Repair)
 		RE::ActorHandle  g_vendor;
 
-		RE::Actor* Vendor() { return g_vendorMode ? g_vendor.get().get() : nullptr; }
+		RE::Actor* Vendor() { return g_vendorMode ? REBridge::Lookup(g_vendor).get() : nullptr; }
 
 		// the carried hammer that breaks least (an unbreakable one first), or -1
 		int BestOwned()
@@ -148,98 +137,17 @@ namespace SKYBDeg
 			}
 		}
 
-		std::vector<Row> Census()
+		// Every copy the player carries of each item a_filter accepts, from the live inventory: a_add(obj,
+		// list, count) for each extra-data list, then once with a null list for the plain copies (no list).
+		template <class Filter, class Add>
+		void ForEachCopy(Filter a_filter, Add a_add)
 		{
-			std::vector<Row> rows;
 			auto player = RE::PlayerCharacter::GetSingleton();
 			if (!player) {
-				return rows;
+				return;
 			}
-			auto inv = player->GetInventory(
-				[](RE::TESBoundObject& a_obj) { return Condition::Classify(&a_obj) != Kind::kNone; });
+			auto inv = player->GetInventory(a_filter);
 			auto changes = player->GetInventoryChanges();
-			for (auto& [obj, data] : inv) {
-				const std::int32_t total = data.first;
-				if (total <= 0) {
-					continue;
-				}
-				const auto kind = Condition::Classify(obj);
-				std::int32_t listed = 0;
-				if (changes && changes->entryList) {
-					for (auto entry : *changes->entryList) {
-						if (!entry || entry->object != obj || !entry->extraLists) {
-							continue;
-						}
-						for (auto list : *entry->extraLists) {
-							if (!list) {
-								continue;
-							}
-							Row r;
-							r.obj = obj;
-							r.list = list;
-							r.count = std::max(1, list->GetCount());
-							r.kind = kind;
-							r.worn = list->HasType<RE::ExtraWorn>() || list->HasType<RE::ExtraWornLeft>();
-							r.q = Condition::GetHealth(list);
-							const char* name = list->GetDisplayName(obj);
-							r.name = name && *name ? name : obj->GetName();
-							r.enchanted = Condition::IsEnchanted(obj, list);
-							listed += r.count;
-							rows.push_back(std::move(r));
-						}
-					}
-				}
-				if (total > listed) {
-					Row r;
-					r.obj = obj;
-					r.count = total - listed;
-					r.kind = kind;
-					r.q = 1.0f;
-					r.enchanted = Condition::IsEnchanted(obj, nullptr);
-					r.name = obj->GetName();
-					rows.push_back(std::move(r));
-				}
-			}
-			std::stable_sort(rows.begin(), rows.end(), [](const Row& a, const Row& b) {
-				if (a.worn != b.worn) return a.worn;
-				if (KindOrder(a.kind) != KindOrder(b.kind)) return KindOrder(a.kind) < KindOrder(b.kind);
-				if (std::abs(a.q - b.q) > 1e-4f) return a.q < b.q;
-				return a.name < b.name;
-			});
-			return rows;
-		}
-
-		// Recharge mode: every weapon or staff carried that holds a charge (full ones
-		// too, so the player sees them), equipped first, emptiest first.
-		std::vector<Row> RechargeCensus()
-		{
-			std::vector<Row> rows;
-			auto player = RE::PlayerCharacter::GetSingleton();
-			if (!player) {
-				return rows;
-			}
-			auto inv = player->GetInventory([](RE::TESBoundObject& a_obj) { return a_obj.Is(RE::FormType::Weapon); });
-			auto changes = player->GetInventoryChanges();
-			auto add = [&](RE::TESBoundObject* a_obj, RE::ExtraDataList* a_list, std::int32_t a_count) {
-				const auto c = Condition::ChargeOf(a_obj, a_list);
-				if (!c.valid) {
-					return;
-				}
-				Row r;
-				r.obj = a_obj;
-				r.list = a_list;
-				r.count = a_count;
-				r.kind = Kind::kWeapon;
-				r.worn = a_list && (a_list->HasType<RE::ExtraWorn>() || a_list->HasType<RE::ExtraWornLeft>());
-				r.enchanted = true;
-				r.chargeCur = c.current;
-				r.chargeMax = c.max;
-				r.q = c.current / c.max;
-				r.enchantName = c.enchantment ? c.enchantment->GetName() : "";
-				const char* name = a_list ? a_list->GetDisplayName(a_obj) : nullptr;
-				r.name = name && *name ? name : a_obj->GetName();
-				rows.push_back(std::move(r));
-			};
 			for (auto& [obj, data] : inv) {
 				const std::int32_t total = data.first;
 				if (total <= 0) {
@@ -255,15 +163,78 @@ namespace SKYBDeg
 							if (list) {
 								const auto n = std::max(1, list->GetCount());
 								listed += n;
-								add(obj, list, n);
+								a_add(obj, list, n);
 							}
 						}
 					}
 				}
 				if (total > listed) {
-					add(obj, nullptr, total - listed);  // untouched copies: full
+					a_add(obj, nullptr, total - listed);
 				}
 			}
+		}
+
+		bool IsWorn(const RE::ExtraDataList* a_list)
+		{
+			return a_list && (a_list->HasType<RE::ExtraWorn>() || a_list->HasType<RE::ExtraWornLeft>());
+		}
+
+		std::string NameOf(RE::TESBoundObject* a_obj, RE::ExtraDataList* a_list)
+		{
+			const char* name = a_list ? REBridge::DisplayName(a_list, a_obj) : nullptr;
+			return name && *name ? name : a_obj->GetName();
+		}
+
+		std::vector<Row> Census()
+		{
+			std::vector<Row> rows;
+			ForEachCopy([](RE::TESBoundObject& a_obj) { return Condition::Classify(&a_obj) != Kind::kNone; },
+				[&](RE::TESBoundObject* a_obj, RE::ExtraDataList* a_list, std::int32_t a_count) {
+					Row r;
+					r.obj = a_obj;
+					r.list = a_list;
+					r.count = a_count;
+					r.kind = Condition::Classify(a_obj);
+					r.worn = IsWorn(a_list);
+					r.q = Condition::GetHealth(a_list);  // 1.0 for plain copies
+					r.name = NameOf(a_obj, a_list);
+					r.enchanted = Condition::IsEnchanted(a_obj, a_list);
+					rows.push_back(std::move(r));
+				});
+			std::stable_sort(rows.begin(), rows.end(), [](const Row& a, const Row& b) {
+				if (a.worn != b.worn) return a.worn;
+				if (KindOrder(a.kind) != KindOrder(b.kind)) return KindOrder(a.kind) < KindOrder(b.kind);
+				if (std::abs(a.q - b.q) > 1e-4f) return a.q < b.q;
+				return a.name < b.name;
+			});
+			return rows;
+		}
+
+		// Recharge mode: every weapon or staff carried that holds a charge (full ones
+		// too, so the player sees them), equipped first, emptiest first.
+		std::vector<Row> RechargeCensus()
+		{
+			std::vector<Row> rows;
+			ForEachCopy([](RE::TESBoundObject& a_obj) { return a_obj.Is(RE::FormType::Weapon); },
+				[&](RE::TESBoundObject* a_obj, RE::ExtraDataList* a_list, std::int32_t a_count) {
+					const auto c = Condition::ChargeOf(a_obj, a_list);  // plain copies: full
+					if (!c.valid) {
+						return;
+					}
+					Row r;
+					r.obj = a_obj;
+					r.list = a_list;
+					r.count = a_count;
+					r.kind = Kind::kWeapon;
+					r.worn = IsWorn(a_list);
+					r.enchanted = true;
+					r.chargeCur = c.current;
+					r.chargeMax = c.max;
+					r.q = c.current / c.max;
+					r.enchantName = c.enchantment ? c.enchantment->GetName() : "";
+					r.name = NameOf(a_obj, a_list);
+					rows.push_back(std::move(r));
+				});
 			std::stable_sort(rows.begin(), rows.end(), [](const Row& a, const Row& b) {
 				if (a.worn != b.worn) return a.worn;
 				if (std::abs(a.q - b.q) > 1e-4f) return a.q < b.q;
@@ -274,7 +245,7 @@ namespace SKYBDeg
 
 		float VendorEnchanting(RE::Actor* a_vendor)
 		{
-			return a_vendor ? a_vendor->AsActorValueOwner()->GetActorValue(RE::ActorValue::kEnchanting) : 0.0f;
+			return a_vendor ? REBridge::AVOwner(a_vendor)->GetActorValue(RE::ActorValue::kEnchanting) : 0.0f;
 		}
 
 		PushRow DescribeRecharge(const Row& a_row, float a_vendorEnchanting)
@@ -298,6 +269,23 @@ namespace SKYBDeg
 			return p;
 		}
 
+		// The fields a repair row shows in both the player's and a vendor's menu.
+		PushRow DescribeCommon(const Row& a_row)
+		{
+			PushRow p;
+			p.name = a_row.count > 1 ? std::format("{} ({})", a_row.name, a_row.count) : a_row.name;
+			p.material = Condition::MaterialOf(a_row.obj).name;
+			p.kind = a_row.kind == Kind::kWeapon ? "weapon" : a_row.kind == Kind::kShield ? "shield" : "armor";
+			p.worn = a_row.worn;
+			p.count = a_row.count;
+			p.pct = a_row.q * 100.0f;
+			p.stat = Condition::EngineStat(a_row.obj, a_row.list);
+			const float catMult = a_row.kind == Kind::kWeapon ? Settings::Get(G::WeapRateMult) : Settings::Get(G::ArmorRateMult);
+			p.decay = Condition::MaterialMult(a_row.obj) * Condition::CurveMult(a_row.q) * Settings::Get(G::RateMult) * catMult *
+					  Condition::WearSkillMult() * Condition::MasteryWearMult(a_row.obj);
+			return p;
+		}
+
 		PushRow DescribeVendor(const Row& a_row, float a_vendorSkill);
 
 		PushRow Describe(const Row& a_row)
@@ -308,32 +296,20 @@ namespace SKYBDeg
 			if (g_vendorMode) {
 				return DescribeVendor(a_row, Condition::VendorSkill(Vendor()));
 			}
-			const float a_cap = Condition::RepairCap(a_row.obj);
-			PushRow p;
+			const float cap = Condition::RepairCap(a_row.obj);
+			PushRow p = DescribeCommon(a_row);
 			p.locked = !Condition::PlayerMayRepair(a_row.obj, a_row.list);
-			p.capPct = a_cap * 100.0f;
-			p.name = a_row.count > 1 ? std::format("{} ({})", a_row.name, a_row.count) : a_row.name;
-			p.material = Condition::MaterialOf(a_row.obj).name;
-			p.kind = a_row.kind == Kind::kWeapon ? "weapon" : a_row.kind == Kind::kShield ? "shield" : "armor";
-			p.worn = a_row.worn;
-			p.count = a_row.count;
-			p.pct = a_row.q * 100.0f;
-			const float nq = Condition::StrikeResult(a_row.q, a_cap);
+			p.capPct = cap * 100.0f;
+			const float nq = Condition::StrikeResult(a_row.q, cap);
 			p.nextPct = nq * 100.0f;
 			p.canStrike = nq > a_row.q + 1e-4f;
-			p.atCap = a_row.q >= a_cap - 1e-4f;
-			// engine number (temper included, our perk suspended) x condition effectiveness
-			const float eff = Condition::StatMult(a_row.q);
-			const float nextEff = Condition::StatMult(nq);
-			p.effPct = eff * 100.0f;
-			p.nextEffPct = nextEff * 100.0f;
-			p.stat = Condition::EffectiveStat(a_row.obj, a_row.list);
+			p.atCap = a_row.q >= cap - 1e-4f;
+			// condition effectiveness (1.0 without the temper hook)
+			p.effPct = Condition::StatMult(a_row.q) * 100.0f;
+			p.nextEffPct = Condition::StatMult(nq) * 100.0f;
 			if (p.canStrike && a_row.list && a_row.count == 1) {
-				p.nextStat = Condition::EffectiveStatAt(a_row.obj, a_row.list, nq);
+				p.nextStat = Condition::EngineStatAt(a_row.obj, a_row.list, nq);
 			}
-			const float catMult = a_row.kind == Kind::kWeapon ? Settings::Get(G::WeapRateMult) : Settings::Get(G::ArmorRateMult);
-			p.decay = Condition::MaterialMult(a_row.obj) * Condition::CurveMult(a_row.q) * Settings::Get(G::RateMult) * catMult *
-					  Condition::WearSkillMult() * Condition::MasteryWearMult(a_row.obj);
 			p.breakPct = g_hammer >= 0 ? Condition::BreakChance(g_hammer, a_row.obj) * 100.0f : -1.0f;
 			return p;
 		}
@@ -343,13 +319,7 @@ namespace SKYBDeg
 		PushRow DescribeVendor(const Row& a_row, float a_vendorSkill)
 		{
 			const float vcap = Condition::RepairCap(a_row.obj, a_vendorSkill);
-			PushRow p;
-			p.name = a_row.count > 1 ? std::format("{} ({})", a_row.name, a_row.count) : a_row.name;
-			p.material = Condition::MaterialOf(a_row.obj).name;
-			p.kind = a_row.kind == Kind::kWeapon ? "weapon" : a_row.kind == Kind::kShield ? "shield" : "armor";
-			p.worn = a_row.worn;
-			p.count = a_row.count;
-			p.pct = a_row.q * 100.0f;
+			PushRow p = DescribeCommon(a_row);
 			p.capPct = vcap * 100.0f;
 			p.canRepair = a_row.q < 1.0f - 1e-4f;
 			p.canLimit = a_row.q < vcap - 1e-4f;
@@ -361,13 +331,9 @@ namespace SKYBDeg
 			p.atCap = !p.canLimit;
 			p.effPct = Condition::StatMult(a_row.q) * 100.0f;
 			p.nextEffPct = Condition::StatMult(nq) * 100.0f;
-			p.stat = Condition::EffectiveStat(a_row.obj, a_row.list);
 			if (p.canLimit && a_row.list && a_row.count == 1) {
-				p.nextStat = Condition::EffectiveStatAt(a_row.obj, a_row.list, nq);
+				p.nextStat = Condition::EngineStatAt(a_row.obj, a_row.list, nq);
 			}
-			const float catMult = a_row.kind == Kind::kWeapon ? Settings::Get(G::WeapRateMult) : Settings::Get(G::ArmorRateMult);
-			p.decay = Condition::MaterialMult(a_row.obj) * Condition::CurveMult(a_row.q) * Settings::Get(G::RateMult) * catMult *
-					  Condition::WearSkillMult() * Condition::MasteryWearMult(a_row.obj);
 			return p;
 		}
 
@@ -377,9 +343,7 @@ namespace SKYBDeg
 			//Into the movie on the main thread, next frame.
 			MainThread::Post([header = std::move(a_header), rows = std::move(a_rows), a_select,
 												 status = std::move(a_status)]() {
-				auto ui = RE::UI::GetSingleton();
-				auto menu = ui ? ui->GetMenu(RepairMenu::MENU_NAME) : nullptr;
-				auto movie = menu ? menu->uiMovie : nullptr;
+				auto movie = ScaleformUtility::OpenMenuMovie(RepairMenu::MENU_NAME);
 				if (!movie) {
 					return;
 				}
@@ -478,7 +442,7 @@ namespace SKYBDeg
 				header.hammerKinds += Condition::Owned(i) > 0 ? 1 : 0;
 			}
 			header.enchantSkill = Settings::Get(G::EnchantRepairSkill);
-			header.gold = Condition::PlayerGold();
+			header.gold = Resources::PlayerGold();
 			if (auto vendor = Vendor()) {
 				header.mode = "vendor";
 				header.vendorName = vendor->GetDisplayFullName() ? vendor->GetDisplayFullName() : vendor->GetName();
@@ -507,8 +471,7 @@ namespace SKYBDeg
 				}
 			}
 			header.scalePct = scale * 100.0f;
-			auto input = RE::BSInputDeviceManager::GetSingleton();
-			header.gamepad = input && input->IsGamepadEnabled();
+			header.gamepad = ScaleformUtility::GamepadActive();
 
 			std::vector<PushRow> rows;
 			rows.reserve(g_rows.size());
@@ -538,7 +501,7 @@ namespace SKYBDeg
 			RE::NiPoint3 at = player->GetPosition();
 			at.z -= 2000.0f;
 			auto handle = player->RemoveItem(a_obj, 1, RE::ITEM_REMOVE_REASON::kDropping, a_list, nullptr, &at);
-			auto ref = handle.get();
+			auto ref = REBridge::Lookup(handle);
 			if (!ref) {
 				Log::ERROR("repair: drop of '{}' returned no reference", a_obj->GetName());
 				return false;
@@ -557,7 +520,7 @@ namespace SKYBDeg
 				player->PickUpObject(ref.get(), 1, false, false);
 				return false;
 			}
-			Condition::SetHealth(std::addressof(xl), a_q);
+			Condition::SetHealth(a_obj, std::addressof(xl), a_q);
 			player->PickUpObject(ref.get(), 1, false, false);
 			return true;
 		}
@@ -581,7 +544,7 @@ namespace SKYBDeg
 			};
 			std::vector<Job> jobs;
 			auto consider = [&](const Row& r) {
-				if (!r.list || (r.list && !Condition::ListIsLive(r.obj, r.list))) {
+				if (!r.list || !Condition::ListIsLive(r.obj, r.list)) {
 					return;
 				}
 				const auto c = Condition::ChargeOf(r.obj, r.list);
@@ -607,7 +570,7 @@ namespace SKYBDeg
 			for (const auto& j : jobs) {
 				total += j.cost;
 			}
-			const auto gold = Condition::PlayerGold();
+			const auto gold = Resources::PlayerGold();
 			if (gold < total) {
 				RE::PlaySound("UIMenuCancel");
 				Refresh({ { "$SKYB_repair_status_gold", { std::to_string(total), std::to_string(gold) } } }, a_row.obj,
@@ -656,7 +619,7 @@ namespace SKYBDeg
 				return;
 			}
 			const auto cost = Condition::VendorCost(a_row.obj, a_row.enchanted, q0, target, skill);
-			const auto gold = Condition::PlayerGold();
+			const auto gold = Resources::PlayerGold();
 			if (gold < cost) {
 				RE::PlaySound("UIMenuCancel");
 				Refresh({ { "$SKYB_repair_status_gold", { std::to_string(cost), std::to_string(gold) } } }, a_row.obj, q0,
@@ -665,7 +628,7 @@ namespace SKYBDeg
 			}
 			bool applied = true;
 			if (a_row.list && a_row.count == 1) {
-				Condition::SetHealth(a_row.list, target);
+				Condition::SetHealth(a_row.obj, a_row.list, target);
 			} else {
 				applied = SplitAndSet(a_row.obj, a_row.list, q0, target);
 			}
@@ -751,7 +714,7 @@ namespace SKYBDeg
 
 			bool applied = true;
 			if (row.list && row.count == 1) {
-				Condition::SetHealth(row.list, q);
+				Condition::SetHealth(row.obj, row.list, q);
 			} else {
 				applied = SplitAndSet(row.obj, row.list, q0, q);
 			}
@@ -784,30 +747,7 @@ namespace SKYBDeg
 	// ============================================================== menu =====
 	RepairMenu::RepairMenu()
 	{
-		auto scaleform = RE::BSScaleformManager::GetSingleton();
-		const bool loaded = scaleform->LoadMovieEx(this, FILE_NAME, [this](RE::GFxMovieDef* a_def) {
-			fxDelegate.reset(new RE::FxDelegate());
-			fxDelegate->RegisterHandler(this);
-			a_def->SetState(RE::GFxState::StateType::kExternalInterface, fxDelegate.get());
-			fxDelegate->Release();
-		});
-		if (!loaded) {
-			//Closed at once: a menu without its movie would sit invisible and modal.
-			Log::ERROR("repair menu: Interface\\{}.swf failed to load - closing", FILE_NAME);
-			if (auto queue = RE::UIMessageQueue::GetSingleton()) {
-				queue->AddMessage(MENU_NAME, RE::UI_MESSAGE_TYPE::kHide, nullptr);
-			}
-		}
-
-		depthPriority = 5;
-		inputContext = Context::kMenuMode;
-		menuFlags.set(RE::UI_MENU_FLAGS::kPausesGame, RE::UI_MENU_FLAGS::kDisablePauseMenu, RE::UI_MENU_FLAGS::kModal,
-					  RE::UI_MENU_FLAGS::kUsesMenuContext, RE::UI_MENU_FLAGS::kTopmostRenderedMenu,
-					  RE::UI_MENU_FLAGS::kRequiresUpdate, RE::UI_MENU_FLAGS::kUpdateUsesCursor);
-		auto input = RE::BSInputDeviceManager::GetSingleton();
-		if (!input || !input->IsGamepadEnabled()) {
-			menuFlags.set(RE::UI_MENU_FLAGS::kUsesCursor);
-		}
+		ScaleformUtility::LoadMenuMovie(*this, FILE_NAME, 5, true, Close);
 	}
 
 	void RepairMenu::Register()
@@ -818,73 +758,47 @@ namespace SKYBDeg
 		}
 	}
 
-	void RepairMenu::Open(bool a_fromInventory, const RE::TESForm* a_tool)
+	// Every open: the mode, then the menu (a vendor's over the dialogue, which stays open). Nothing when
+	// the menu is already up or its movie is missing.
+	static bool OpenAs(bool a_fromInventory, RE::Actor* a_vendor, bool a_recharge, const RE::TESForm* a_tool)
 	{
-		auto queue = RE::UIMessageQueue::GetSingleton();
-		auto ui = RE::UI::GetSingleton();
-		if (!queue || !ui || ui->IsMenuOpen(MENU_NAME)) {
-			return;
-		}
-		if (!ScaleformUtility::MovieExists(FILE_NAME)) {
-			Log::ERROR("repair menu: Interface\\{}.swf not found - not opened", FILE_NAME);
-			return;
+		if (!ScaleformUtility::CanShowMenu(RepairMenu::MENU_NAME, RepairMenu::FILE_NAME)) {
+			return false;
 		}
 		g_fromInventory = a_fromInventory;
-		g_vendorMode = false;
-		g_recharge = false;
-		g_vendor = {};
+		g_vendorMode = a_vendor != nullptr;
+		g_recharge = a_recharge;
+		g_vendor = a_vendor ? a_vendor->GetHandle() : RE::ActorHandle{};
 		g_pendingHammer = Condition::HammerIndex(a_tool);
 		if (a_fromInventory) {
-			queue->AddMessage(RE::InventoryMenu::MENU_NAME, RE::UI_MESSAGE_TYPE::kHide, nullptr);
+			ScaleformUtility::HideMenu(RE::InventoryMenu::MENU_NAME);
 		}
-		queue->AddMessage(MENU_NAME, RE::UI_MESSAGE_TYPE::kShow, nullptr);
+		ScaleformUtility::ShowMenu(RepairMenu::MENU_NAME);
+		return true;
+	}
+
+	void RepairMenu::Open(bool a_fromInventory, const RE::TESForm* a_tool)
+	{
+		OpenAs(a_fromInventory, nullptr, false, a_tool);
 	}
 
 	void RepairMenu::OpenVendor(RE::Actor* a_vendor)
 	{
-		auto queue = RE::UIMessageQueue::GetSingleton();
-		auto ui = RE::UI::GetSingleton();
-		if (!queue || !ui || !a_vendor || ui->IsMenuOpen(MENU_NAME)) {
-			return;
+		if (a_vendor && OpenAs(false, a_vendor, false, nullptr)) {
+			Log::INFO("vendor repair: opened by {} (Smithing {:.0f})", a_vendor->GetName(), Condition::VendorSkill(a_vendor));
 		}
-		if (!ScaleformUtility::MovieExists(FILE_NAME)) {
-			Log::ERROR("repair menu: Interface\\{}.swf not found - not opened", FILE_NAME);
-			return;
-		}
-		g_fromInventory = false;
-		g_vendorMode = true;
-		g_recharge = false;
-		g_vendor = a_vendor->GetHandle();
-		g_pendingHammer = -1;
-		Log::INFO("vendor repair: opened by {} (Smithing {:.0f})", a_vendor->GetName(), Condition::VendorSkill(a_vendor));
-		queue->AddMessage(MENU_NAME, RE::UI_MESSAGE_TYPE::kShow, nullptr);  // over the dialogue, which stays open
 	}
 
 	void RepairMenu::OpenRecharge(RE::Actor* a_vendor)
 	{
-		auto queue = RE::UIMessageQueue::GetSingleton();
-		auto ui = RE::UI::GetSingleton();
-		if (!queue || !ui || !a_vendor || ui->IsMenuOpen(MENU_NAME)) {
-			return;
+		if (a_vendor && OpenAs(false, a_vendor, true, nullptr)) {
+			Log::INFO("recharge: opened by {} (Enchanting {:.0f})", a_vendor->GetName(), VendorEnchanting(a_vendor));
 		}
-		if (!ScaleformUtility::MovieExists(FILE_NAME)) {
-			Log::ERROR("repair menu: Interface\\{}.swf not found - not opened", FILE_NAME);
-			return;
-		}
-		g_fromInventory = false;
-		g_vendorMode = true;
-		g_recharge = true;
-		g_vendor = a_vendor->GetHandle();
-		g_pendingHammer = -1;
-		Log::INFO("recharge: opened by {} (Enchanting {:.0f})", a_vendor->GetName(), VendorEnchanting(a_vendor));
-		queue->AddMessage(MENU_NAME, RE::UI_MESSAGE_TYPE::kShow, nullptr);
 	}
 
 	void RepairMenu::Close()
 	{
-		if (auto queue = RE::UIMessageQueue::GetSingleton()) {
-			queue->AddMessage(MENU_NAME, RE::UI_MESSAGE_TYPE::kHide, nullptr);
-		}
+		ScaleformUtility::HideMenu(MENU_NAME);
 	}
 
 	void RepairMenu::Accept(RE::FxDelegateHandler::CallbackProcessor* a_cbReg)
@@ -908,9 +822,7 @@ namespace SKYBDeg
 				g_recharge = false;
 				g_vendor = {};
 				if (back) {
-					if (auto queue = RE::UIMessageQueue::GetSingleton()) {
-						queue->AddMessage(RE::InventoryMenu::MENU_NAME, RE::UI_MESSAGE_TYPE::kShow, nullptr);
-					}
+					ScaleformUtility::ShowMenu(RE::InventoryMenu::MENU_NAME);
 				}
 			});
 		}
@@ -969,12 +881,7 @@ namespace SKYBDeg
 			return;
 		}
 		const std::string arg = a_params[0].GetString();
-		SKSE::GetTaskInterface()->AddTask([arg] {
-			SKSE::ModCallbackEvent ev{ "SKYBRequestHotkeys", arg.c_str(), 0.0f, nullptr };
-			if (auto src = SKSE::GetModCallbackEventSource()) {
-				src->SendEvent(&ev);
-			}
-		});
+		SKSE::GetTaskInterface()->AddTask([arg] { ModEvents::Send(HotkeyService::kRequestEvent.data(), arg); });
 	}
 
 	void RepairMenu::OnPlaySound(const RE::FxDelegateArgs& a_params)
@@ -987,9 +894,7 @@ namespace SKYBDeg
 	// ============================================================ opener =====
 	void RepairMenuOpener::Register()
 	{
-		if (auto source = SKSE::GetModCallbackEventSource()) {
-			source->AddEventSink(this);
-		}
+		ModEvents::AddSink(this);
 	}
 
 	RE::BSEventNotifyControl RepairMenuOpener::ProcessEvent(const SKSE::ModCallbackEvent* a_event,
@@ -997,7 +902,8 @@ namespace SKYBDeg
 	{
 		if (a_event && a_event->eventName == "SKYBDegOpenRepairMenu") {
 			Log::INFO("mod event SKYBDegOpenRepairMenu -> repair menu");
-			RepairMenu::Open(false, nullptr);
+			//A Papyrus ModEvent.Send arrives on the VM's thread; Open's state is the main thread's.
+			SKSE::GetTaskInterface()->AddTask([] { RepairMenu::Open(false, nullptr); });
 		}
 		return RE::BSEventNotifyControl::kContinue;
 	}

@@ -1,7 +1,6 @@
 #include "Plugin.h"
 
 #include "Achievements/AchievementService.h"
-#include "Platform/FormCache.h"
 #include "Degradation/Breakage.h"
 #include "Degradation/DecayService.h"
 #include "Degradation/InventoryHook.h"
@@ -11,10 +10,10 @@
 #include "Disposition/DispositionSystem.h"
 #include "Hotkeys/HotkeyService.h"
 #include "Papyrus/SKSEScriptRegistrar.h"
-#include "PerkSpells/PerkSpells.h"
-#include "SpellReflect/SpellReflect.h"
-#include "Resources.h"
+#include "PerkSpells/EntryPointSpells.h"
+#include "Platform/FormCache.h"
 #include "Platform/MainThread.h"
+#include "Resources.h"
 #include "Settings/SettingsService.h"
 #include "SettingsMenu/CombatService.h"
 #include "SettingsMenu/EconomyService.h"
@@ -23,6 +22,7 @@
 #include "SettingsMenu/SettingsStore.h"
 #include "SettingsMenu/SoundService.h"
 #include "Sigil/SigilSystem.h"
+#include "SpellReflect/SpellReflect.h"
 #include "Storage/CoSave.h"
 #include "UIs/PrismaUI/Persuasion/PersuasionSettings.h"
 #include "UIs/Scaleform/Alchemy/AlchemyMenuFeed.h"
@@ -66,8 +66,8 @@ bool Plugin::OnLoad(const SKSE::LoadInterface* a_skse)
 	//One SKSE trampoline for every call-site hook in the plugin (the frame hook, the temper
 	//patches, PerkSpells, SpellReflect): AllocTrampoline replaces the previous allocation, so it is
 	//called once, here. The trampoline keeps one 14-byte jump per destination: the frame hook 1, the
-	//temper patches 4, PerkSpells 1 (all its call sites share one thunk), SpellReflect 6 (five
-	//projectile-hit thunks, one melee-hit thunk). 12 x 14 bytes; 512 leaves room.
+	//temper patches 5, PerkSpells 1 (all its call sites share one thunk), SpellReflect 6 (five
+	//projectile-hit thunks, one melee-hit thunk). 13 x 14 bytes; 512 leaves room.
 	SKSE::AllocTrampoline(1 << 9);
 	//Calls into live Scaleform movies run on the main thread, once a frame (SKSE's task queues
 	//can run on worker threads).
@@ -80,7 +80,7 @@ bool Plugin::OnLoad(const SKSE::LoadInterface* a_skse)
 
 	//Perk "Apply ... Spell" entry points stack and the perk owner casts (the former standalone
 	//SKYBPerkSpells.dll, folded in; settings in SKYBPerkSpells.ini). At plugin load, as it was there.
-	PerkSpells::Install();
+	PerkSpells::EntryPointSpells::Install();
 
 	//Timed block (ranked by the Block mastery perks), arrow and spell parries, chance-based spell
 	//reflection (the former standalone SKYBSpellReflect.dll, folded in; settings in
@@ -121,12 +121,9 @@ bool Plugin::OnLoad(const SKSE::LoadInterface* a_skse)
 			SKYBDeg::Settings::ReloadIfChanged();
 			Persuasion::Settings::ReloadIfChanged();
 			ScrollCraft::ScrollCastXP::GetSingleton()->Reload();
-			//After Tween Menu Overhaul's own sink (added at kDataLoaded), so the tool options it pushes can be pruned.
-			TweenTools::TweenMenuFilter::Register();
 			SKSE::GetTaskInterface()->AddTask([] {
-				SKYBSettingsMenu::Store::GetSingleton()->OnGameReady();
+				SKYBSettingsMenu::Store::GetSingleton()->OnGameReady(true);
 				StartMenu::StartMenuService::OnNewGame();  // the new-game panel's presets, if chosen
-				StartMenu::StartMenuService::RepairInputAfterMenus();
 			});
 			break;
 		case SKSE::MessagingInterface::kPostLoadGame:
@@ -135,9 +132,7 @@ bool Plugin::OnLoad(const SKSE::LoadInterface* a_skse)
 			SKYBDeg::Settings::ReloadIfChanged();
 			Persuasion::Settings::ReloadIfChanged();
 			ScrollCraft::ScrollCastXP::GetSingleton()->Reload();
-			TweenTools::TweenMenuFilter::Register();
-			SKYBSettingsMenu::Store::GetSingleton()->OnGameReady();
-			StartMenu::StartMenuService::RepairInputAfterMenus();
+			SKYBSettingsMenu::Store::GetSingleton()->OnGameReady(false);
 			break;
 		case SKSE::MessagingInterface::kDataLoaded:
 			Log::INFO("SKSE Data Loaded...");
@@ -175,9 +170,8 @@ bool Plugin::OnLoad(const SKSE::LoadInterface* a_skse)
 			//Persuasion: its INI and perk rules (UISystem opens the wheel).
 			Persuasion::Settings::Resolve();
 			UISystem::OnDataLoaded();
-			//Also here, not only at kNewGame / kPostLoadGame: 'coc' from the title screen sends neither, and the
-			//filter never ran (2026-11-04). If the overhaul's sink comes later on an open, Prepare's deferred pass
-			//finds the options. Register is idempotent.
+			//The Tween menu's tool options (TOOLS). Here, not at kNewGame / kPostLoadGame: 'coc' from the
+			//title screen sends neither. Its pass runs the frame after the open, after Tween Menu Overhaul's sink.
 			TweenTools::TweenMenuFilter::Register();
 			Log::INFO("SKSE Data Loaded Complete");
 			break;

@@ -5,14 +5,9 @@
 #include "Degradation/Settings.h"
 #include "Degradation/TemperHook.h"
 #include <algorithm>
-#include <array>
-#include <charconv>
+#include <cctype>
 #include <cmath>
 #include <cstdint>
-#include <cstring>
-#include <filesystem>
-#include <format>
-#include <fstream>
 #include <optional>
 #include <random>
 #include <string>
@@ -94,7 +89,7 @@ namespace SKYBDeg::Condition
 		return 1.0f;
 	}
 
-	void SetHealth(RE::ExtraDataList* a_list, float a_value)
+	void SetHealth(RE::TESBoundObject* a_obj, RE::ExtraDataList* a_list, float a_value)
 	{
 		if (!a_list) {
 			return;
@@ -105,7 +100,7 @@ namespace SKYBDeg::Condition
 			a_list->Add(new RE::ExtraHealth(a_value));
 		}
 		// a broken weapon repaired far enough is usable again
-		Breakage::OnConditionSet(a_list, a_value);
+		Breakage::OnConditionSet(a_obj, a_list, a_value);
 	}
 
 	const Material& MaterialOf(const RE::TESBoundObject* a_obj)
@@ -235,7 +230,9 @@ namespace SKYBDeg::Condition
 
 	float StatMult(float a_q)
 	{
-		if (a_q >= 1.0f || !Settings::On(G::StatEnabled)) {
+		//Without the hook (SE, VR, an AE build where a site was not found) the engine applies no loss.
+		//"Gear degradation" off ([General] Enabled) turns the loss off too.
+		if (a_q >= 1.0f || !Settings::On(G::Enabled) || !Settings::On(G::StatEnabled) || !TemperHook::Installed()) {
 			return 1.0f;
 		}
 		const float q = std::max(a_q, Settings::Get(G::StatFloor));
@@ -245,7 +242,7 @@ namespace SKYBDeg::Condition
 	float Smithing()
 	{
 		auto player = RE::PlayerCharacter::GetSingleton();
-		return player ? player->AsActorValueOwner()->GetActorValue(RE::ActorValue::kSmithing) : 0.0f;
+		return player ? REBridge::AVOwner(player)->GetActorValue(RE::ActorValue::kSmithing) : 0.0f;
 	}
 
 	float RepairCap(const RE::TESBoundObject* a_obj)
@@ -319,6 +316,9 @@ namespace SKYBDeg::Condition
 		const float base = Settings::At(h.breakChance);
 		if (base <= 0.0f) {
 			return 0.0f;  // the unique hammer
+		}
+		if (Settings::Get(G::HammerBreakMult) <= 0.0f) {
+			return 0.0f;  // breaking switched off: the floor below is not a reason to break
 		}
 		const float over = a_obj ? std::max(0.0f, Hardness(a_obj) - Settings::At(h.tier)) : 0.0f;
 		const float skillMax = std::max(1.0f, Settings::Get(G::RepairCapSkillMax));
@@ -394,15 +394,8 @@ namespace SKYBDeg::Condition
 
 	float VendorSkill(RE::Actor* a_vendor)
 	{
-		const float own = a_vendor ? a_vendor->AsActorValueOwner()->GetActorValue(RE::ActorValue::kSmithing) : 0.0f;
+		const float own = a_vendor ? REBridge::AVOwner(a_vendor)->GetActorValue(RE::ActorValue::kSmithing) : 0.0f;
 		return std::clamp(own + Settings::Get(G::VendorSkillBonus), 0.0f, 100.0f);
-	}
-
-	std::int32_t PlayerGold()
-	{
-		auto player = RE::PlayerCharacter::GetSingleton();
-		auto* gold = Resources::gold;
-		return player && gold ? std::max(0, player->GetItemCount(gold)) : 0;
 	}
 
 	std::int32_t VendorCost(const RE::TESBoundObject* a_obj, bool a_enchanted, float a_from, float a_to, float a_vendorSkill)
@@ -511,7 +504,7 @@ namespace SKYBDeg::Condition
 			// is the fallback while the hand value is not set up (base 0).
 			bool fromHand = false;
 			if (auto av = HandCharge(a_list)) {
-				auto owner = RE::PlayerCharacter::GetSingleton()->AsActorValueOwner();
+				auto owner = REBridge::AVOwner(RE::PlayerCharacter::GetSingleton());
 				if (owner->GetBaseActorValue(*av) > 0.0f) {
 					c.current = owner->GetActorValue(*av);
 					fromHand = true;
@@ -543,7 +536,7 @@ namespace SKYBDeg::Condition
 			// Put the hand's charge value right: base = the TRUE maximum (the
 			// engine set it to the charge at equip time, which capped every
 			// refill at that level), then clear the damage the weapon has used.
-			auto owner = RE::PlayerCharacter::GetSingleton()->AsActorValueOwner();
+			auto owner = REBridge::AVOwner(RE::PlayerCharacter::GetSingleton());
 			const float before = owner->GetActorValue(*av);
 			const float baseBefore = owner->GetBaseActorValue(*av);
 			owner->SetBaseActorValue(*av, c.max);
@@ -649,16 +642,6 @@ namespace SKYBDeg::Condition
 			h->health = saved;
 		}
 		return value;
-	}
-
-	float EffectiveStat(RE::TESBoundObject* a_obj, RE::ExtraDataList* a_list)
-	{
-		return EngineStat(a_obj, a_list);
-	}
-
-	float EffectiveStatAt(RE::TESBoundObject* a_obj, RE::ExtraDataList* a_list, float a_q)
-	{
-		return EngineStatAt(a_obj, a_list, a_q);
 	}
 
 	std::mt19937& Rng()

@@ -1,8 +1,10 @@
 #include "PerkDataStore.h"
 #include "PerksContract.h"
+#include "Platform/FormCache.h"
+#include "Platform/JsonFile.h"
+#include "Platform/Text.h"
 
 #include <algorithm>
-#include <cctype>
 #include <cmath>
 #include <filesystem>
 #include <fstream>
@@ -27,13 +29,6 @@ namespace PerksView {
 		const std::regex kIdRe{R"(^[A-Za-z][A-Za-z0-9_]*$)"};
 		const std::regex kTransKeyRe{R"(^\$\S+$)"};
 		const std::regex kThemeColorRe{R"(^#[0-9A-Fa-f]{6}$)"};
-		const std::regex kFormRefRe{R"(^[0-9A-Fa-f]{1,8}\|\S.*$)"};
-
-		std::string Lower(std::string a_text) {
-			std::transform(a_text.begin(), a_text.end(), a_text.begin(),
-						   [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
-			return a_text;
-		}
 
 		bool IsId(const std::string& a_text) { return std::regex_match(a_text, kIdRe); }
 		bool IsTransKey(const std::string& a_text) { return std::regex_match(a_text, kTransKeyRe); }
@@ -66,18 +61,6 @@ namespace PerksView {
 				return std::nullopt;
 			}
 			return it->get<double>();
-		}
-
-		std::optional<FormRef> ParseFormRef(const std::string& a_raw) {
-			if (!std::regex_match(a_raw, kFormRefRe)) {
-				return std::nullopt;
-			}
-			FormRef ref;
-			ref.raw = a_raw;
-			const auto separator = a_raw.find('|');
-			ref.plugin = a_raw.substr(separator + 1);
-			ref.formID = static_cast<std::uint32_t>(std::stoul(a_raw.substr(0, separator), nullptr, 16));
-			return ref;
 		}
 
 		// Shared optional-field handler for visibilityGlobal (trees and perks):
@@ -162,24 +145,13 @@ namespace PerksView {
 
 		// ---- perk file ----------------------------------------------------
 		std::optional<Perk> ParsePerkFile(const fs::path& a_path) {
-			const std::string file = a_path.generic_string();
+			const std::string file = Text::Utf8(a_path);
 
-			std::ifstream in(a_path);
-			if (!in) {
-				Log::WARN("PerkDataStore: {}: cannot open - perk skipped", file);
+			const auto parsed = JsonFile::ReadObject(a_path, "PerkDataStore");
+			if (!parsed) {
 				return std::nullopt;
 			}
-			json document;
-			try {
-				document = json::parse(in, nullptr, true, true);  // comments allowed
-			} catch (const std::exception& e) {
-				Log::WARN("PerkDataStore: {}: invalid JSON ({}) - perk skipped", file, e.what());
-				return std::nullopt;
-			}
-			if (!document.is_object()) {
-				Log::WARN("PerkDataStore: {}: root is not an object - perk skipped", file);
-				return std::nullopt;
-			}
+			const json& document = *parsed;
 
 			Perk perk;
 
@@ -258,16 +230,15 @@ namespace PerksView {
 					Log::WARN("PerkDataStore: {}: rank missing 'rankId' - perk skipped", file);
 					return std::nullopt;
 				}
-				auto ref = ParseFormRef(*rankId);
-				if (!ref) {
+				if (!FormCache::ParseRef(*rankId)) {
 					Log::WARN("PerkDataStore: {}: rankId '{}' is not HEX|Plugin - perk skipped", file, *rankId);
 					return std::nullopt;
 				}
-				if (!localRankIds.insert(Lower(ref->raw)).second) {
-					Log::WARN("PerkDataStore: {}: duplicate rankId '{}' within perk - perk skipped", file, ref->raw);
+				if (!localRankIds.insert(Text::Lower(*rankId)).second) {
+					Log::WARN("PerkDataStore: {}: duplicate rankId '{}' within perk - perk skipped", file, *rankId);
 					return std::nullopt;
 				}
-				rank.rankId = std::move(*ref);
+				rank.rankId = *rankId;
 
 				const auto description = RequiredString(rankJson, "description");
 				if (!description || !IsTransKey(*description)) {
@@ -300,24 +271,13 @@ namespace PerksView {
 		// list). Validated independently: a bad tree.json rejects ONLY this
 		// tree (fail-soft per tree).
 		std::optional<Tree> ParseTreeJson(const fs::path& a_path, const std::string& a_folderName) {
-			const std::string file = a_path.generic_string();
+			const std::string file = Text::Utf8(a_path);
 
-			std::ifstream in(a_path);
-			if (!in) {
-				Log::WARN("PerkDataStore: {}: cannot open - tree skipped", file);
+			const auto parsed = JsonFile::ReadObject(a_path, "PerkDataStore");
+			if (!parsed) {
 				return std::nullopt;
 			}
-			json document;
-			try {
-				document = json::parse(in, nullptr, true, true);  // comments allowed
-			} catch (const std::exception& e) {
-				Log::WARN("PerkDataStore: {}: invalid JSON ({}) - tree skipped", file, e.what());
-				return std::nullopt;
-			}
-			if (!document.is_object()) {
-				Log::WARN("PerkDataStore: {}: root is not an object - tree skipped", file);
-				return std::nullopt;
-			}
+			const json& document = *parsed;
 
 			const auto version = document.find("schemaVersion");
 			if (version == document.end() || !version->is_number_integer() || version->get<int>() != 1) {
@@ -333,7 +293,7 @@ namespace PerksView {
 				return std::nullopt;
 			}
 			tree.id = *id;
-			if (Lower(tree.id) != Lower(a_folderName)) {
+			if (Text::Lower(tree.id) != Text::Lower(a_folderName)) {
 				Log::WARN("PerkDataStore: {}: id '{}' does not match folder name '{}' - tree skipped",
 							 file, tree.id, a_folderName);
 				return std::nullopt;
@@ -466,14 +426,14 @@ namespace PerksView {
 		const fs::path root{ PerksContract::DataRoot };
 		std::error_code ec;
 		if (!fs::is_directory(root, ec)) {
-			Log::ERROR("PerkDataStore: {} not found - no perk trees", root.generic_string());
+			Log::ERROR("PerkDataStore: {} not found - no perk trees", Text::Utf8(root));
 			return;
 		}
 
 		// Legacy master list: ignored since the decentralised-discovery round.
 		if (fs::exists(root / "trees.json", ec)) {
 			Log::WARN("PerkDataStore: {}/trees.json is DEPRECATED and ignored - trees are discovered per-folder "
-						 "(<TreeFolder>/tree.json)", root.generic_string());
+						 "(<TreeFolder>/tree.json)", Text::Utf8(root));
 		}
 
 		// Discovery: every subfolder with a valid tree.json registers a tree.
@@ -487,22 +447,22 @@ namespace PerksView {
 			if (!entry.is_directory(ec)) {
 				continue;
 			}
-			const std::string folderName = entry.path().filename().string();
+			const std::string folderName = Text::Utf8(entry.path().filename());
 			// Windows filenames are case-insensitive; construct the reserved
 			// name directly (any casing on disk resolves to it).
 			const fs::path treeFile = entry.path() / kTreeFileName;
 			if (!fs::is_regular_file(treeFile, ec)) {
-				Log::INFO("PerkDataStore: folder {} has no {} - skipped", entry.path().generic_string(), kTreeFileName);
+				Log::INFO("PerkDataStore: folder {} has no {} - skipped", Text::Utf8(entry.path()), kTreeFileName);
 				continue;
 			}
 			auto tree = ParseTreeJson(treeFile, folderName);
 			if (!tree) {
 				continue;  // reason already logged (fail-soft per tree)
 			}
-			candidates.push_back(Candidate{std::move(*tree), entry.path(), Lower(folderName)});
+			candidates.push_back(Candidate{std::move(*tree), entry.path(), Text::Lower(folderName)});
 		}
 		if (candidates.empty()) {
-			Log::ERROR("PerkDataStore: no valid tree folders under {}", root.generic_string());
+			Log::ERROR("PerkDataStore: no valid tree folders under {}", Text::Utf8(root));
 			return;
 		}
 
@@ -517,7 +477,7 @@ namespace PerksView {
 		};
 		std::unordered_map<std::string, std::size_t> winnerById;  // lowercased id -> candidates index
 		for (std::size_t i = 0; i < candidates.size(); ++i) {
-			const auto key = Lower(candidates[i].tree.id);
+			const auto key = Text::Lower(candidates[i].tree.id);
 			auto [it, inserted] = winnerById.try_emplace(key, i);
 			if (inserted) {
 				continue;
@@ -525,13 +485,13 @@ namespace PerksView {
 			auto& winner = it->second;
 			const auto loser = beats(candidates[i], candidates[winner]) ? std::exchange(winner, i) : i;
 			Log::WARN("PerkDataStore: duplicate tree id '{}': folder {} rejected (priority {} vs winning {} in {})",
-						 candidates[loser].tree.id, candidates[loser].folder.generic_string(),
+						 candidates[loser].tree.id, Text::Utf8(candidates[loser].folder),
 						 candidates[loser].tree.priority, candidates[winnerById[key]].tree.priority,
-						 candidates[winnerById[key]].folder.generic_string());
+						 Text::Utf8(candidates[winnerById[key]].folder));
 		}
 		std::vector<Candidate*> accepted;
 		for (std::size_t i = 0; i < candidates.size(); ++i) {
-			if (winnerById[Lower(candidates[i].tree.id)] == i) {
+			if (winnerById[Text::Lower(candidates[i].tree.id)] == i) {
 				accepted.push_back(&candidates[i]);
 			}
 		}
@@ -541,8 +501,8 @@ namespace PerksView {
 			if (a->tree.priority != b->tree.priority) {
 				return a->tree.priority < b->tree.priority;
 			}
-			const auto lowerA = Lower(a->tree.id);
-			const auto lowerB = Lower(b->tree.id);
+			const auto lowerA = Text::Lower(a->tree.id);
+			const auto lowerB = Text::Lower(b->tree.id);
 			return lowerA != lowerB ? lowerA < lowerB : a->tree.id < b->tree.id;
 		});
 
@@ -563,18 +523,18 @@ namespace PerksView {
 				if (!entry.is_regular_file(ec)) {
 					continue;
 				}
-				const auto nameLower = Lower(entry.path().filename().string());
+				const auto nameLower = Text::Lower(Text::Utf8(entry.path().filename()));
 				if (nameLower == kTreeFileName) {
 					continue;  // the tree definition itself
 				}
-				if (Lower(entry.path().extension().string()) == ".json") {
+				if (Text::Lower(Text::Utf8(entry.path().extension())) == ".json") {
 					files.push_back(entry.path());
 				}
 			}
 			std::sort(files.begin(), files.end(), [](const fs::path& a, const fs::path& b) {
-				const auto lowerA = Lower(a.filename().string());
-				const auto lowerB = Lower(b.filename().string());
-				return lowerA != lowerB ? lowerA < lowerB : a.filename().string() < b.filename().string();
+				const auto lowerA = Text::Lower(Text::Utf8(a.filename()));
+				const auto lowerB = Text::Lower(Text::Utf8(b.filename()));
+				return lowerA != lowerB ? lowerA < lowerB : a.filename() < b.filename();
 			});
 
 			for (const auto& file : files) {
@@ -584,14 +544,14 @@ namespace PerksView {
 				}
 				if (perkIds.contains(perk->id)) {
 					Log::WARN("PerkDataStore: {}: duplicate perk id '{}' - first file (alphabetical) wins, this one skipped",
-								 file.generic_string(), perk->id);
+								 Text::Utf8(file), perk->id);
 					continue;
 				}
 				bool rankClash = false;
 				for (const auto& rank : perk->ranks) {
-					if (globalRankIds.contains(Lower(rank.rankId.raw))) {
+					if (globalRankIds.contains(Text::Lower(rank.rankId))) {
 						Log::WARN("PerkDataStore: {}: rankId '{}' already used by another perk - perk skipped",
-									 file.generic_string(), rank.rankId.raw);
+									 Text::Utf8(file), rank.rankId);
 						rankClash = true;
 						break;
 					}
@@ -601,7 +561,7 @@ namespace PerksView {
 				}
 				perkIds.insert(perk->id);
 				for (const auto& rank : perk->ranks) {
-					globalRankIds.insert(Lower(rank.rankId.raw));
+					globalRankIds.insert(Text::Lower(rank.rankId));
 				}
 				rankCount += perk->ranks.size();
 				++perkCount;
@@ -658,7 +618,7 @@ namespace PerksView {
 		}
 
 		Log::INFO("PerkDataStore: loaded {} tree(s), {} perk(s), {} rank(s) from {} (priority order)",
-					 s_trees.size(), perkCount, rankCount, root.generic_string());
+					 s_trees.size(), perkCount, rankCount, Text::Utf8(root));
 	}
 
 }

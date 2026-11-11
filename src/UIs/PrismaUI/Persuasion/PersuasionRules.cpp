@@ -6,6 +6,15 @@
 
 namespace Persuasion
 {
+	namespace
+	{
+		// How much of the penalty Speechcraft takes away, 0..1.
+		float Relief(const Effective& a_eff)
+		{
+			return std::clamp(std::clamp(a_eff.playerSpeech / 100.0f, 0.0f, 1.0f) * a_eff.Get(P::PenaltySpeechRelief), 0.0f, 1.0f);
+		}
+	}
+
 	Effective Rules::Resolve()
 	{
 		Settings::ReloadIfChanged();
@@ -40,8 +49,7 @@ namespace Persuasion
 		const float span = max - start;
 		const float x = span > 0.0f ? std::clamp((a_disposition - start) / span, 0.0f, 1.0f) : 1.0f;
 		const float curve = std::max(0.01f, a_eff.Get(P::PenaltyCurve));
-		const float relief = std::clamp(a_eff.playerSpeech / 100.0f, 0.0f, 1.0f) * a_eff.Get(P::PenaltySpeechRelief);
-		const float penalty = a_eff.Get(P::PenaltyStrength) * std::pow(x, curve) * (1.0f - std::clamp(relief, 0.0f, 1.0f));
+		const float penalty = a_eff.Get(P::PenaltyStrength) * std::pow(x, curve) * (1.0f - Relief(a_eff));
 		return std::clamp(1.0f - penalty, std::clamp(a_eff.Get(P::PenaltyFloor), 0.0f, 1.0f), 1.0f);
 	}
 
@@ -54,7 +62,6 @@ namespace Persuasion
 			return nlohmann::json{ { "mult", a_eff.Get(mult) }, { "add", a_eff.Get(add) } };
 		};
 		const float rate = a_eff.Get(P::DecayRateMult);
-		const float relief = std::clamp(a_eff.playerSpeech / 100.0f, 0.0f, 1.0f) * a_eff.Get(P::PenaltySpeechRelief);
 		return nlohmann::json{
 			{ "responses", {
 				{ "Love", response(P::LoveFactor, P::LoveMult, P::LoveAdd) },
@@ -82,7 +89,7 @@ namespace Persuasion
 				{ "start", a_eff.Get(P::PenaltyStart) },
 				{ "strength", a_eff.Get(P::PenaltyStrength) },
 				{ "curve", std::max(0.01f, a_eff.Get(P::PenaltyCurve)) },
-				{ "relief", std::clamp(relief, 0.0f, 1.0f) },
+				{ "relief", Relief(a_eff) },
 				{ "floor", std::clamp(a_eff.Get(P::PenaltyFloor), 0.0f, 1.0f) } } },
 			{ "bribeEnabled", a_eff.On(P::BribeEnabled) },
 			{ "freeRotations", static_cast<int>(std::max(0.0f, a_eff.Get(P::FreeRotations))) }

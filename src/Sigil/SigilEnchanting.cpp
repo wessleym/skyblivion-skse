@@ -86,7 +86,7 @@ namespace Sigil {
 		RE::NiPoint3 dropLocation = player->GetPosition();
 		dropLocation.z -= kDropDepth;
 		auto handle = player->RemoveItem(gear, 1, RE::ITEM_REMOVE_REASON::kDropping, dropList, nullptr, &dropLocation);
-		auto reference = handle.get();
+		auto reference = REBridge::Lookup(handle);
 		if (!reference) {
 			Log::WARN("SigilEnchanting: The drop of {:08X} returned no reference.", gearID);
 			return Result::Missing;

@@ -36,7 +36,6 @@ namespace Skills::SkillData {
 	[[nodiscard]] std::optional<std::array<Reading, 18>> ReadAll(std::string_view source);
 
 	struct MasteryPerk {
-		RE::BGSPerk* perk;
 		std::string name;
 		std::string description;
 		bool owned;

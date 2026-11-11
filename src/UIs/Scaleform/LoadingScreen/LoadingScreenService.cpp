@@ -165,8 +165,7 @@ namespace LoadingScreen {
 		if (!movie) {
 			return;
 		}
-		auto* input = RE::BSInputDeviceManager::GetSingleton();
-		const bool gamepad = input && input->IsGamepadEnabled();
+		const bool gamepad = ScaleformUtility::GamepadActive();
 
 		RE::GFxValue arg{ gamepad };
 		movie->Invoke(LoadingScreenContract::AsPath::SetGamepad, nullptr, &arg, 1);

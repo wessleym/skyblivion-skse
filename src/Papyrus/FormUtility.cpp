@@ -32,7 +32,7 @@ std::vector<RE::TESForm*> FormUtility::GetAssociatedMenuForm(RE::BSScript::Inter
 		}
 	}
 	else if (a_menu == "Console") {
-		auto selected = RE::Console::GetSelectedRef();
+		auto selected = REBridge::ConsoleSelectedRef();
 		result.push_back(selected.get());
 	}
 	else if (a_menu == "BarterMenu") {
@@ -56,22 +56,20 @@ std::vector<RE::TESForm*> FormUtility::GetAssociatedMenuForm(RE::BSScript::Inter
 		// Not implemented. The trainer actor is the probable target; unverified.
 	}
 	else if (a_menu == "GiftMenu") {
-		auto handle = RE::GiftMenu::GetReceiverRefHandle();
-
-		if (handle) {
-			auto receiver = RE::Actor::LookupByHandle(handle);
-
-			if (receiver) {
+		//GiftMenu::GetReceiverRefHandle's global is address-library id 519571, which VR's library lacks:
+		//reading it there would be fatal, so VR answers with no form.
+		if (!REL::Module::IsVR()) {
+			auto handle = RE::GiftMenu::GetReceiverRefHandle();
+			if (auto receiver = RE::Actor::LookupByHandle(handle)) {
 				result.push_back(receiver.get());
 			}
 		}
-
 	}
 	else if (a_menu == "Dialogue Menu") {
 		// Always two entries, speaker then last speaker: callers index them. Each is null when the manager is unavailable.
 		auto menuTopicManager = RE::MenuTopicManager::GetSingleton();
-		result.push_back(menuTopicManager && menuTopicManager->speaker ? menuTopicManager->speaker.get().get() : nullptr);
-		result.push_back(menuTopicManager && menuTopicManager->lastSpeaker ? menuTopicManager->lastSpeaker.get().get() : nullptr);
+		result.push_back(menuTopicManager && menuTopicManager->speaker ? REBridge::Lookup(menuTopicManager->speaker).get() : nullptr);
+		result.push_back(menuTopicManager && menuTopicManager->lastSpeaker ? REBridge::Lookup(menuTopicManager->lastSpeaker).get() : nullptr);
 	}
 	else {
 		// TODO: report the unsupported menu name

@@ -1,18 +1,7 @@
 #pragma once
-#include <algorithm>
-#include <array>
-#include <charconv>
-#include <cmath>
 #include <cstdint>
-#include <cstring>
-#include <filesystem>
-#include <format>
-#include <fstream>
-#include <optional>
 #include <random>
 #include <string>
-#include <string_view>
-#include <unordered_map>
 #include <vector>
 
 // Item condition = the engine's own temper value (ExtraHealth on the item's
@@ -33,7 +22,8 @@ namespace SKYBDeg::Condition
 	[[nodiscard]] Kind Classify(const RE::TESForm* a_form);
 
 	[[nodiscard]] float GetHealth(const RE::ExtraDataList* a_list);  // 1.0 when absent
-	void                SetHealth(RE::ExtraDataList* a_list, float a_value);
+	// a_obj: the instance's base object (a repaired broken weapon gets its own name back).
+	void                SetHealth(RE::TESBoundObject* a_obj, RE::ExtraDataList* a_list, float a_value);
 
 	// Material: first WeapMaterial*/ArmorMaterial* keyword with a matching key
 	// in [WeaponMaterialWear] / [ArmorMaterialWear], else that section's Default.
@@ -53,7 +43,7 @@ namespace SKYBDeg::Condition
 	[[nodiscard]] float CurveMult(float a_q);
 
 	// Share of damage / armor rating kept at condition q (1.0 at or above 100%,
-	// never below StatFloor (INI)). Applied by TemperHook inside the engine.
+	// never below StatFloor (INI)). Applied by TemperHook inside the engine; 1.0 when it is not installed.
 	[[nodiscard]] float StatMult(float a_q);
 
 	// This item's repair limit at full Smithing (material cap + bonus).
@@ -106,9 +96,6 @@ namespace SKYBDeg::Condition
 	//   x (1 + HardnessCostMult x (hardness - 1)) x (1 + SkillCostMult x skill / 100)
 	//   x EnchantedCostMult (if enchanted) x PriceMult, rounded up, at least MinCost.
 	[[nodiscard]] float        VendorSkill(RE::Actor* a_vendor);
-	// The player's gold (Gold001, 0000000F). Not Actor::GetGoldAmount(): the
-	// CommonLibSSE-NG 3.6.0 helper reads a bad pointer on 1.6.1170.
-	[[nodiscard]] std::int32_t PlayerGold();
 	[[nodiscard]] std::int32_t VendorCost(const RE::TESBoundObject* a_obj, bool a_enchanted, float a_from, float a_to,
 										  float a_vendorSkill);
 
@@ -141,11 +128,6 @@ namespace SKYBDeg::Condition
 	[[nodiscard]] float EngineStat(RE::TESBoundObject* a_obj, RE::ExtraDataList* a_list);
 	// The same at a hypothetical condition (temporarily writes, then restores).
 	[[nodiscard]] float EngineStatAt(RE::TESBoundObject* a_obj, RE::ExtraDataList* a_list, float a_q);
-
-	// What the item really does now / at condition q (= the engine number;
-	// TemperHook puts the condition penalty inside it).
-	[[nodiscard]] float EffectiveStat(RE::TESBoundObject* a_obj, RE::ExtraDataList* a_list);
-	[[nodiscard]] float EffectiveStatAt(RE::TESBoundObject* a_obj, RE::ExtraDataList* a_list, float a_q);
 
 	[[nodiscard]] std::mt19937& Rng();
 	[[nodiscard]] float         Roll();  // [0,1)

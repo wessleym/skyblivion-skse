@@ -47,7 +47,7 @@ namespace Alchemy {
 		static int CarriedTier(const Tool& a_tool);
 
 		static inline std::vector<Tool> s_tools;
-		static inline std::unordered_map<std::string, Baseline> s_baselines;  //"0003EB15:Skyrim.esm" -> baseline
+		static inline std::unordered_map<std::string, Baseline> s_baselines;  //"03EB15:Skyrim.esm" -> baseline
 		static inline bool s_preview = false;
 		static inline bool s_parsed = false;
 	};

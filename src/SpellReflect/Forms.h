@@ -1,11 +1,7 @@
 #pragma once
 
-#include <cstdint>
-#include <optional>
-#include <span>
 #include <string>
 #include <string_view>
-#include <vector>
 
 // INI form references: an editor ID (survives ESM merges and renumbering), or
 // "Plugin.esp|0xFormID". Empty = none.

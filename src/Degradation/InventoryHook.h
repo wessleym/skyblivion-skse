@@ -1,19 +1,4 @@
 #pragma once
-#include <algorithm>
-#include <array>
-#include <charconv>
-#include <cmath>
-#include <cstdint>
-#include <cstring>
-#include <filesystem>
-#include <format>
-#include <fstream>
-#include <optional>
-#include <random>
-#include <string>
-#include <string_view>
-#include <unordered_map>
-#include <vector>
 
 // Activating a repair tool (any form in SKYBDegRepairTools) in the inventory opens the repair menu.
 // InventoryMenu registers its Scaleform callbacks in Accept() (FxDelegateHandler vfunc 01); the hook

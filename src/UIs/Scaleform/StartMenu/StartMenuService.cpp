@@ -7,8 +7,6 @@
 #include "UIs/Scaleform/ScaleformUtility.h"
 
 #include <algorithm>
-#include <array>
-#include <format>
 #include <string>
 
 namespace StartMenu {
@@ -30,22 +28,6 @@ namespace StartMenu {
 			return;
 		}
 		Log::INFO("StartMenuService: Registered.");
-	}
-
-	void StartMenuService::RepairInputAfterMenus() {
-#if SKY_COMMONLIB == SKY_COMMONLIB_NG
-		auto* ui = RE::UI::GetSingleton();
-		if (!ui || !ui->modal) {
-			return;
-		}
-		for (const auto& menu : ui->menuStack) {
-			if (menu && menu->menuFlags.all(RE::UI_MENU_FLAGS::kModal)) {
-				return;
-			}
-		}
-		ui->modal = false;
-		Log::INFO("StartMenuService: UI.modal was set with no modal menu on the stack. Cleared.");
-#endif
 	}
 
 	void StartMenuService::PushOptions() {
