@@ -54,13 +54,13 @@ namespace SKYBDeg::TemperHook
 		float Scale(float a_health) { return a_health < 1.0f ? Condition::StatMult(a_health) : 1.0f; }
 
 		float Damage40291(RE::ActorValueOwner* a_av, RE::TESObjectWEAP* a_weap, RE::TESAmmo* a_ammo, float a_health,
-						  float a_mult, bool a_flag)
+			float a_mult, bool a_flag)
 		{
 			return g_damage40291(a_av, a_weap, a_ammo, std::max(a_health, 1.0f), a_mult, a_flag) * Scale(a_health);
 		}
 
 		float Damage44100(RE::ActorValueOwner* a_av, RE::TESObjectWEAP* a_weap, RE::TESAmmo* a_ammo, float a_health,
-						  float a_mult, bool a_flag)
+			float a_mult, bool a_flag)
 		{
 			return g_damage44100(a_av, a_weap, a_ammo, std::max(a_health, 1.0f), a_mult, a_flag) * Scale(a_health);
 		}
@@ -86,25 +86,37 @@ namespace SKYBDeg::TemperHook
 
 		struct Site
 		{
-			const char*    what;
-			REL::ID        func;       // the function holding the call
-			std::ptrdiff_t offset;     // call instruction inside it
-			REL::ID        target;     // vanilla callee
+			const char* what;
+			REL::VariantID func;       // the function holding the call
+			std::ptrdiff_t seOffset;   // call instruction inside it on SE 1.5.97, and on VR 1.4.15 (VR's code matches SE's)
+			std::ptrdiff_t aeOffset;   // call instruction inside it on AE 1.6.1170
+			REL::VariantID target;     // vanilla callee
 			std::ptrdiff_t scanBytes = kScanBytes;  // the search on another AE build stays within this
 		};
 
-		// 1.6.1170 offsets; other AE builds are searched (Locate).
-		const Site kHealth44100{ "projectile weapon health", REL::ID(44100), 0x2CC, REL::ID(15990) };
-		const Site kDamage44100{ "projectile weapon damage", REL::ID(44100), 0x2F8, REL::ID(26410) };
-		const Site kHealth40253{ "display damage health", REL::ID(40253), 0x26, REL::ID(15990) };
-		const Site kHealth40252{ "display equipped damage health", REL::ID(40252), 0x92, REL::ID(15990) };
-		const Site kDamage40291{ "display weapon damage", REL::ID(40291), 0x37, REL::ID(26410) };
-		const Site kHealth16017{ "armor rating health", REL::ID(16017), 0x27, REL::ID(15990) };
-		const Site kBonus16017{ "armor temper bonus", REL::ID(16017), 0x2F, REL::ID(26499) };
+		// (SE id, AE id, VR offset). VR's address library lacks several of these, hence offsets.
+		// The callees:
+		constexpr REL::VariantID kHealthFn{ 15752, 15990, 0x1E7080 };
+		constexpr REL::VariantID kDamageFn{ 25847, 26410, 0x3CD7A0 };
+		constexpr REL::VariantID kMeleeDamageFn{ 25846, 26409, 0x3CD770 };
+		constexpr REL::VariantID kArmorBonusFn{ 25916, 26499, 0x3D08C0 };
+		// The functions holding more than one site:
+		constexpr REL::VariantID kProjectile{ 42920, 44100, 0x775C20 };
+		constexpr REL::VariantID kArmorRating{ 15779, 16017, 0x1E7ED0 };
+		constexpr REL::VariantID kMeleeHit{ 15778, 16016, 0x1E7E60 };
+
+		// Other AE builds than 1.6.1170 are searched (Locate).
+		const Site kHealth44100{ "projectile weapon health", kProjectile, 0x2CC, 0x2CC, kHealthFn };
+		const Site kDamage44100{ "projectile weapon damage", kProjectile, 0x2F4, 0x2F8, kDamageFn };
+		const Site kHealth40253{ "display damage health", REL::VariantID(39179, 40253, 0x69C650), 0x26, 0x26, kHealthFn };
+		const Site kHealth40252{ "display equipped damage health", REL::VariantID(39178, 40252, 0x69C4B0), 0x8D, 0x92, kHealthFn };
+		const Site kDamage40291{ "display weapon damage", REL::VariantID(39215, 40291, 0x69D950), 0x2F, 0x37, kDamageFn };
+		const Site kHealth16017{ "armor rating health", kArmorRating, 0x27, 0x27, kHealthFn };
+		const Site kBonus16017{ "armor temper bonus", kArmorRating, 0x2F, 0x2F, kArmorBonusFn };
 		// The melee hit's damage (hit data, id 44001 -> 16016). 16016 is 0x5C bytes and 16017, which calls
 		// 15990 too, follows it: the search stays inside 16016.
-		const Site kHealth16016{ "melee weapon health", REL::ID(16016), 0x27, REL::ID(15990), 0x60 };
-		const Site kDamage16016{ "melee weapon damage", REL::ID(16016), 0x3D, REL::ID(26409), 0x60 };
+		const Site kHealth16016{ "melee weapon health", kMeleeHit, 0x27, 0x27, kHealthFn, 0x60 };
+		const Site kDamage16016{ "melee weapon damage", kMeleeHit, 0x3D, 0x3D, kMeleeDamageFn, 0x60 };
 
 		// The call's destination if the bytes at a_at are a 5-byte call, else nothing.
 		std::optional<std::uintptr_t> CallDest(std::uintptr_t a_at)
@@ -118,15 +130,16 @@ namespace SKYBDeg::TemperHook
 		}
 
 		// Where to patch the site on this runtime, or nothing.
-		//   1.6.1170  exactly the known offset, holding the vanilla call;
-		//   other AE  the known offset if it holds the vanilla call, else the ONE call to the
-		//             expected callee in the function's first kScanBytes (code moves between builds).
-		// On 1.6.1170 a call to anything else at the known offset means another mod hooked it: no search then.
+		// On SE, VR and AE 1.6.1170, the site is exactly the known offset, which must hold the vanilla call.
+		// A call to anything else there means another mod hooked it, so there is no search.
+		// On other AE builds, code moves between builds: the site is the known offset if it holds the vanilla call.
+		// Otherwise the one call to the expected callee in the function's first scanBytes.
 		std::optional<std::uintptr_t> Locate(const Site& a_site, bool a_exactBuild)
 		{
+			const auto offset = REL::Module::IsAE() ? a_site.aeOffset : a_site.seOffset;
 			const auto func = a_site.func.address();
 			const auto target = a_site.target.address();
-			const auto at = func + a_site.offset;
+			const auto at = func + offset;
 			const auto dest = CallDest(at);
 			if (dest && *dest == target) {
 				return at;
@@ -135,7 +148,8 @@ namespace SKYBDeg::TemperHook
 				if (dest) {
 					Log::ERROR("temper hook: {} at {:#x} calls {:#x}, expected {:#x} (another mod hooks it?)",
 						a_site.what, at, *dest, target);
-				} else {
+				}
+				else {
 					Log::ERROR("temper hook: {} at {:#x} is not a call (byte {:02X})", a_site.what, at,
 						*reinterpret_cast<const std::uint8_t*>(at));
 				}
@@ -157,22 +171,16 @@ namespace SKYBDeg::TemperHook
 					a_site.what, matches, target, a_site.scanBytes, func);
 				return std::nullopt;
 			}
-			Log::INFO("temper hook: {} found at +{:#x} (1.6.1170: +{:#x})", a_site.what, *found - func, a_site.offset);
+			Log::INFO("temper hook: {} found at +{:#x} (1.6.1170: +{:#x})", a_site.what, *found - func, offset);
 			return found;
 		}
 	}
 
-	// The sites are AE ids and AE code, so SE and VR are left alone (condition below 100% has
-	// no stat effect there). Nothing is patched unless all seven are found.
+	// Nothing is patched unless all seven are found.
 	void Install()
 	{
 		const auto version = REL::Module::get().version();
-		if (!REL::Module::IsAE()) {
-			Log::WARN("temper hook: runtime {} is not Anniversary Edition; not installed - condition below 100% will not change damage / armor",
-				version.string());
-			return;
-		}
-		const bool exactBuild = version == REL::Version(1, 6, 1170, 0);
+		const bool exactBuild = !REL::Module::IsAE() || version == REL::Version(1, 6, 1170, 0);
 		const Site* sites[] = { &kHealth44100, &kDamage44100, &kHealth40253, &kHealth40252,
 								&kDamage40291, &kHealth16017, &kBonus16017 };
 		std::uintptr_t at[std::size(sites)]{};
@@ -206,7 +214,8 @@ namespace SKYBDeg::TemperHook
 			t.write_call<5>(*meleeHealth, Health);
 			g_damage16016 = t.write_call<5>(*meleeDamage, Damage16016);
 			Log::INFO("temper hook: melee hits covered too (2 more call sites)");
-		} else {
+		}
+		else {
 			Log::ERROR("temper hook: melee sites not found on {} - condition below 100% will not change melee damage",
 				version.string());
 		}

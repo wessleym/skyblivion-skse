@@ -2,7 +2,10 @@
 
 // Makes the engine's own temper system honour condition below 100%.
 //
-// Engine functions (AE ids, offsets from 1.6.1170):
+// Named by AE id below. SE 1.5.97 and VR 1.4.15 make the same calls; TemperHook.cpp has their ids,
+// addresses and call offsets.
+//
+// Engine functions:
 //   id 15990  InventoryEntryData health  = max(1.0, highest ExtraHealth)   <- the 1.0 floor
 //   id 26410  weapon damage (actor, weapon, ammo, health, mult, flag); temper bonus via id 26498
 //   id 16017  armor rating of an entry; reads 15990, temper bonus via id 26499(health, armor)
@@ -21,11 +24,11 @@
 //                            to Condition::StatMult(health) of itself
 // The smithing menu's own reads (id 51360) are untouched.
 //
-// Safety: installs only on Anniversary Edition runtimes, and only where a site is found holding the
-// vanilla `call` to the expected function: on 1.6.1170 at the known offset; on another AE build at
-// that offset or, failing that, as the one such call near the function's start (0x400 bytes; 0x60 in
-// 16016, which 16017 follows). The seven sites install all or none; the two melee sites then install
-// both or neither. SE, VR, a hooked site or an unfound one = nothing is patched there; the log says which.
+// Safety: installs only where a site is found holding the vanilla `call` to the expected function:
+// on SE 1.5.97, VR 1.4.15 and AE 1.6.1170 at the known offset; on another AE build at that offset or,
+// failing that, as the one such call near the function's start (0x400 bytes; 0x60 in 16016, which
+// 16017 follows). The seven sites install all or none; the two melee sites then install both or
+// neither. A hooked site or an unfound one = nothing is patched there; the log says which.
 namespace SKYBDeg::TemperHook
 {
 	// Called at plugin load; patches all seven sites or none, then the two melee sites or neither.

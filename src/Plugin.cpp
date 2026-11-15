@@ -73,8 +73,7 @@ bool Plugin::OnLoad(const SKSE::LoadInterface* a_skse)
 	//can run on worker threads).
 	MainThread::Install();
 
-	//Weapon and armor degradation. The temper patches install on Anniversary Edition runtimes
-	//only; elsewhere they log why and stay off.
+	//Weapon and armor degradation. The temper patches cover SE, AE and VR. A call site that isn't patched is logged with the reason.
 	SKYBDeg::InventoryHook::Install();
 	SKYBDeg::TemperHook::Install();
 
