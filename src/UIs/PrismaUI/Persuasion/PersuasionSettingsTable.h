@@ -63,6 +63,7 @@ namespace Persuasion
         BribeSpeechcraftMult,
         BribeMinPrice,
         BribeMinGain,
+        SpeechXPPerPick,
         kCount
     };
 
@@ -77,7 +78,7 @@ namespace Persuasion
         { "General", "GainMult", 1.0f },
         { "General", "LossMult", 1.0f },
         { "General", "MaxDisposition", 100.0f },
-        { "General", "CloseOnMax", 1.0f },
+        { "General", "CloseOnMax", 0.0f },
         { "General", "MaxRounds", 0.0f },
         { "General", "FreeRotations", 0.0f },
         { "General", "UsePrismaView", 0.0f },
@@ -127,6 +128,7 @@ namespace Persuasion
         { "Bribe", "SpeechcraftMult", 0.03f },
         { "Bribe", "MinPrice", 1.0f },
         { "Bribe", "MinGain", 1.0f },
+        { "Experience", "PerPick", 10.0f },
     };
     static_assert(std::size(kSettingDefs) == static_cast<std::size_t>(P::kCount));
 }
