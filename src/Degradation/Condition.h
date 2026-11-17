@@ -65,6 +65,12 @@ namespace SKYBDeg::Condition
 	[[nodiscard]] float RepairCap(const RE::TESBoundObject* a_obj);                  // player's Smithing
 	[[nodiscard]] float RepairCap(const RE::TESBoundObject* a_obj, float a_skill);   // any smith's
 	[[nodiscard]] float StrikeResult(float a_q, float a_cap);  // condition after one strike
+	// Grindstone / workbench: the condition one bench repair brings this item to. The player's own
+	// limit, lifted to at least BenchCapFloor (INI; 0 = no floor). The part above 100% is then scaled
+	// by the player's Mod Tempering Health perk entries (the smithing perks, Hard Labor, fortify
+	// smithing: what the tempering menu applied to its own improvement). Never past CapAtFullSkill,
+	// never below the player's own limit.
+	[[nodiscard]] float BenchCap(const RE::TESBoundObject* a_obj);
 	// Hammer tiers (Settings::Hammers()): index of a hammer form, or -1.
 	[[nodiscard]] int HammerIndex(const RE::TESForm* a_form);
 	// Break chance per strike of hammer a_hammer on this item:
