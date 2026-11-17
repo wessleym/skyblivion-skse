@@ -435,13 +435,13 @@ namespace SKYBSettingsMenu
 			if (const auto v = ReadGameSetting(a_row.key)) {
 				return Snap(a_row, *v);
 			}
-			return a_row.presets[0];
+			return a_row.presets[kPresetBaseline];
 		}
 		if (a_row.applier == Applier::kSound) {
 			if (const auto v = SoundService::GetSingleton()->Get(a_row.key)) {
 				return Snap(a_row, *v);
 			}
-			return a_row.presets[0];
+			return a_row.presets[kPresetBaseline];
 		}
 		// a row that mirrors an existing SKYBSettings.ini key reads that key,
 		// so the title screen / journal toggles and this menu agree
@@ -450,14 +450,14 @@ namespace SKYBSettingsMenu
 			if (const auto v = ParseFloat(s)) {
 				return Snap(a_row, *v);
 			}
-			return a_row.presets[0];
+			return a_row.presets[kPresetBaseline];
 		}
 		const auto section = a_row.scope == Scope::kGlobal ? kGlobalSection : kDefaultsSection;
 		const auto s = Settings::SettingsService::GetString(section, a_row.id, "");
 		if (const auto v = ParseFloat(s)) {
 			return Snap(a_row, *v);
 		}
-		return a_row.presets[0];
+		return a_row.presets[kPresetBaseline];
 	}
 
 	float Store::Get(const RowDef& a_row) const
@@ -546,6 +546,10 @@ namespace SKYBSettingsMenu
 		}
 		if (!any) {
 			return kNoPresets;
+		}
+		// rows that are the same in several presets: the baseline is named first
+		if (match[kPresetBaseline]) {
+			return static_cast<int>(kPresetBaseline);
 		}
 		for (std::size_t p = 0; p < kPresetCount; ++p) {
 			if (match[p]) {
