@@ -43,6 +43,18 @@ namespace Translation {
 			return wide;
 		}
 
+		//Interns text the way the game's translator does, with its case kept.
+		//RE::BSFixedStringW's constructor looks text up without regard to case and hands back the first spelling the
+		//game interned. A key made that way lands on the game's "$MAGIC" when the file says "$Magic", and Translate,
+		//which keys case-sensitively, then never finds it; a value comes out in the casing of an earlier value.
+		//GetCachedString is the function Translate keys with. It assigns into a fixed string's single pointer.
+		RE::BSFixedStringW InternExact(std::wstring& text) {
+			static_assert(sizeof(RE::BSFixedStringW) == sizeof(wchar_t*));
+			RE::BSFixedStringW interned;
+			RE::BSScaleformTranslator::GetCachedString(reinterpret_cast<wchar_t**>(std::addressof(interned)), text.data(), 0);
+			return interned;
+		}
+
 		std::optional<std::filesystem::path> ResolveFolder(const std::string& language) {
 			std::error_code error;
 			const std::filesystem::path root{ TranslationContract::StringsRoot };
@@ -113,19 +125,12 @@ namespace Translation {
 				continue;
 			}
 
-			auto folded = StringsFormat::FoldKey(key);
 			if (auto previous = s_origins.Define(key, fileName)) {
 				//Not an error, since the later file wins, but logged because cross-file key collisions are otherwise silent.
-				if (previous->key == key) {
-					Log::WARN("TranslationService: Key {} redefined in {} (was {}).", key, fileName, previous->file);
-				}
-				else {
-					Log::WARN("TranslationService: Key {} redefined in {} (was {} in {}; keys are case-insensitive).",
-						key, fileName, previous->key, previous->file);
-				}
-				std::erase_if(s_staged, [&folded](const Staged& entry) { return entry.folded == folded; });
+				Log::WARN("TranslationService: Key {} redefined in {} (was {}).", key, fileName, *previous);
+				std::erase_if(s_staged, [&wideKey](const Staged& entry) { return entry.key == wideKey; });
 			}
-			s_staged.push_back({ std::move(folded), std::move(wideKey), std::move(wideValue) });
+			s_staged.push_back({ std::move(wideKey), std::move(wideValue) });
 			++parsed;
 		}
 
@@ -145,14 +150,15 @@ namespace Translation {
 
 		auto& map = translator->translator.translationMap;
 		int applied = 0;
-		for (const auto& entry : s_staged) {
-			RE::BSFixedStringW mapKey{ entry.key.c_str() };
+		for (auto& entry : s_staged) {
+			const auto mapKey = InternExact(entry.key);
+			auto mapValue = InternExact(entry.value);
 			//Replaces rather than skips: a key migrated out of the engine-loaded file must take the Skyblivion text.
 			if (auto existing = map.find(mapKey); existing != map.end()) {
-				existing->second = RE::BSFixedStringW{ entry.value.c_str() };
+				existing->second = std::move(mapValue);
 			}
 			else {
-				map.insert({ mapKey, RE::BSFixedStringW{ entry.value.c_str() } });
+				map.insert({ mapKey, std::move(mapValue) });
 			}
 			++applied;
 		}
