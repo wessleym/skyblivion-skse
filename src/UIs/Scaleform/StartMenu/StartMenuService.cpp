@@ -43,7 +43,6 @@ namespace StartMenu {
 		//otherwise the row starts on the preset they match. Nothing changes until a different choice is made.
 		using SKYBSettingsMenu::kCategories;
 		using SKYBSettingsMenu::kPresetCount;
-		using SKYBSettingsMenu::kPresetLabels;
 		auto* store = SKYBSettingsMenu::Store::GetSingleton();
 		s_pending.assign(kCategories.size(), -1);
 		s_hasCurrent.assign(kCategories.size(), false);
@@ -70,7 +69,7 @@ namespace StartMenu {
 				values.PushBack(RE::GFxValue("$SKYB_start_preset_current"));
 			}
 			for (std::size_t p = 0; p < kPresetCount; ++p) {
-				values.PushBack(RE::GFxValue(kPresetLabels[p]));
+				values.PushBack(RE::GFxValue(cat.presetLabels[p]));
 			}
 			option.SetMember("values", values);
 			const double index = custom ? 0.0 : static_cast<double>(matched);

@@ -77,7 +77,7 @@ namespace SKYBSettingsMenu
 		a_cbReg->Process("PlaySound", OnPlaySound);
 	}
 
-	// what Reset sets a row to: its Classic value, or for a volume the category's own default
+	// what Reset sets a row to: its baseline preset's value, or for a volume the category's own default
 	static float ResetValue(const RowDef& a_row)
 	{
 		if (a_row.applier == Applier::kSound) {
@@ -85,7 +85,7 @@ namespace SKYBSettingsMenu
 				return Store::Snap(a_row, *d);
 			}
 		}
-		return a_row.presets[0];
+		return a_row.presets[kPresetBaseline];
 	}
 
 	void SettingsMenu::Push()
@@ -100,16 +100,8 @@ namespace SKYBSettingsMenu
 		movie->CreateObject(&header);
 		header.SetMember("context", RE::GFxValue(store->EditingDefaults() ? "defaults" : "save"));
 		header.SetMember("gamepad", RE::GFxValue(ScaleformUtility::GamepadActive()));
-		RE::GFxValue presetLabels, presetDescs;
-		movie->CreateArray(&presetLabels);
-		movie->CreateArray(&presetDescs);
-		for (std::size_t p = 0; p < kPresetCount; ++p) {
-			presetLabels.PushBack(RE::GFxValue(kPresetLabels[p]));
-			// the desc key is the label key + _desc (generated in pairs)
-			presetDescs.PushBack(RE::GFxValue(std::string(kPresetLabels[p]) + "_desc"));
-		}
-		header.SetMember("presetLabels", presetLabels);
-		header.SetMember("presetDescs", presetDescs);
+		// the preset every value starts at: the menu draws the Preset row as unchanged while it is in force
+		header.SetMember("presetBase", RE::GFxValue(static_cast<double>(kPresetBaseline)));
 		// the menu's own rebindable keys, and a one-shot capture message
 		auto*        hotkeys = HotkeyService::GetSingleton();
 		RE::GFxValue keys;
@@ -129,6 +121,19 @@ namespace SKYBSettingsMenu
 			o.SetMember("label", RE::GFxValue(c.label));
 			o.SetMember("empty", RE::GFxValue(c.empty));
 			o.SetMember("preset", RE::GFxValue(static_cast<double>(store->PresetOf(c.id))));
+			// the names this category shows its presets under (Interface has its own)
+			RE::GFxValue presetLabels, presetDescs;
+			movie->CreateArray(&presetLabels);
+			movie->CreateArray(&presetDescs);
+			if (c.presets) {
+				for (std::size_t p = 0; p < kPresetCount; ++p) {
+					presetLabels.PushBack(RE::GFxValue(c.presetLabels[p]));
+					// the desc key is the label key + _desc (generated in pairs)
+					presetDescs.PushBack(RE::GFxValue(std::string(c.presetLabels[p]) + "_desc"));
+				}
+			}
+			o.SetMember("presetLabels", presetLabels);
+			o.SetMember("presetDescs", presetDescs);
 			cats.PushBack(o);
 		}
 
@@ -252,7 +257,7 @@ namespace SKYBSettingsMenu
 			} else if (const auto* key = HotkeyService::Find(id)) {
 				HotkeyService::GetSingleton()->Reset(*key);
 			} else if (Store::FindCategory(id)) {
-				store->ApplyPreset(id, 0);
+				store->ApplyPreset(id, kPresetBaseline);
 			} else {
 				return;
 			}
