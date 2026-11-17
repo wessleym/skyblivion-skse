@@ -184,6 +184,7 @@ namespace SKYBDeg
         WeapBreakBlockMult,
         WeapBrokenCondition,
         WeapUsableAt,
+        BenchCapFloor,
         kCount
     };
 
@@ -369,6 +370,7 @@ namespace SKYBDeg
         { "Breakage", "BlockMult", 1.0f },
         { "Breakage", "BrokenCondition", 0.2f },
         { "Breakage", "UsableAt", 0.6f },
+        { "Repair", "BenchCapFloor", 1.15f },
     };
     static_assert(std::size(kSettingDefs) == static_cast<std::size_t>(G::kCount));
 }
