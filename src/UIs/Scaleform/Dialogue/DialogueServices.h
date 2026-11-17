@@ -7,8 +7,8 @@ namespace Dialogue {
 	//Oblivion's service buttons in the dialogue menu: barter and training, with repair and recharge reserved.
 	//
 	//Each service has topics (the prompts whose fragments open it) and factions (who offers it).
-	//The built-in table can be extended or overridden by DialogueContract::ServicesIniFile:
-	//	[barter]                       ; section = service id
+	//The built-in table can be extended or overridden in SkyblivionSKSE.ini (DialogueContract::ServicesIniFeature):
+	//	[DialogueServices.barter]      ; after the dot = service id
 	//	topics=EditorID|icon           ; comma-separated; icon optional
 	//	factions=EditorID              ; comma-separated
 	//	fallback=1                     ; offer and open with no row (default 0)

@@ -5,7 +5,7 @@
 // for the entry points that have a separate target, let the perk owner cast
 // them on that target. Folded in from the standalone SKYBPerkSpells plugin,
 // which must not be installed alongside (both would redirect the same call
-// sites). Settings: Data\SKSE\Plugins\SKYBPerkSpells.ini.
+// sites). Settings: [PerkSpells.*] in Data\SKSE\Plugins\SkyblivionSKSE.ini.
 //
 // How it works (all engine facts below were confirmed against Skyblivion.esm
 // data or CommonLibSSE-NG declarations):

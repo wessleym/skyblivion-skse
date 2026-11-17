@@ -1,8 +1,8 @@
 #include "HoverCursor.h"
 
-#include "Platform/IniFile.h"
 #include "Platform/MainThread.h"
 #include "Platform/Text.h"
+#include "Settings/PluginIni.h"
 
 #include <algorithm>
 #include <array>
@@ -21,7 +21,7 @@ namespace HoverCursor {
 		constexpr std::string_view kCursorMovieFile = "cursormenu.swf";
 		//Relative to the cursor menu's own file (Data\Interface\cursormenu.swf).
 		constexpr const char* kHandUrl = "Skyblivion/SKYBCursorHand.swf";
-		constexpr const char* kIniPath = "Data/SKSE/Plugins/SKYBHoverCursor.ini";
+		constexpr std::string_view kIniFeature = "HoverCursor";  //[HoverCursor] in SkyblivionSKSE.ini
 
 		//The clip cursormenu.swf moves to the mouse (the vanilla file's name, kept by ours).
 		constexpr const char* kCursorClip = "mc_Cursor";
@@ -70,9 +70,9 @@ namespace HoverCursor {
 		}
 
 		void ReadConfig() {
-			//Without the file: on, nothing excluded.
-			IniFile::Read(kIniPath, "HoverCursor", [](const IniFile::Entry& a_entry) {
-				if (!Text::IEquals(a_entry.section, "HoverCursor")) {
+			//Without the file or the section: on, nothing excluded. The feature has the one section, [HoverCursor].
+			PluginIni::Read(kIniFeature, [](const IniFile::Entry& a_entry) {
+				if (!a_entry.section.empty()) {
 					return;
 				}
 				const auto key = Text::Lower(a_entry.key);
@@ -429,7 +429,7 @@ namespace HoverCursor {
 	void InstallScaleform() {
 		ReadConfig();
 		if (!g_config.enabled) {
-			Log::INFO("HoverCursor: off (SKYBHoverCursor.ini bEnabled=0).");
+			Log::INFO("HoverCursor: off ({} bEnabled=0).", PluginIni::Where(kIniFeature));
 			return;
 		}
 		auto* scaleform = SKSE::GetScaleformInterface();

@@ -15,13 +15,15 @@
 //does not fit Enchanting: the costs run from 1 to over 40,000 and Enchanting's Use Mult is 900, so a few scrolls would
 //level the skill in one cast.
 //
-//Settings: Data/SKSE/Plugins/SKYBScrollCrafting.ini, [CastingXP] Enabled (1), ScrollScale (0.02), StaffScale (0.02),
-//LogCasts (1). Read at kDataLoaded and again at every new game and game load. Event-driven, main thread, no polling.
+//Settings: Data/SKSE/Plugins/SkyblivionSKSE.ini, [ScrollCrafting.CastingXP] Enabled (1), ScrollScale (0.02),
+//StaffScale (0.02), LogCasts (1). Read at kDataLoaded and again at every new game and game load. Event-driven, main
+//thread, no polling.
 namespace ScrollCraft {
 
 	class ScrollCastXP : public RE::BSTEventSink<RE::TESSpellCastEvent> {
 	public:
-		static constexpr const char* kIniPath = "Data/SKSE/Plugins/SKYBScrollCrafting.ini";
+		//[ScrollCrafting.<group>] in SkyblivionSKSE.ini
+		static constexpr std::string_view kIniFeature = "ScrollCrafting";
 
 		static ScrollCastXP* GetSingleton()
 		{

@@ -1,7 +1,7 @@
 #pragma once
 
 // Brute Force (perk rework, 2026-11-04; player only): a melee power attack that lands on a
-// locked container or door (bDoors) is an attempt to force the lock. [BruteForce] in SKYBSpellReflect.ini:
+// locked container or door (bDoors) is an attempt to force the lock. [SpellReflect.BruteForce] in SkyblivionSKSE.ini:
 //  * the rank is the highest held of sRankPerks (Brute Force 052CE0 and its two new ranks);
 //    the chance comes from that rank's row and the lock level; 0 = the lock cannot be forced;
 //  * success unlocks the lock as lockpicking does (REFR_LOCK unlocked + AddLockChange);

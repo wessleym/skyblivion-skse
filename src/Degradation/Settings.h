@@ -6,10 +6,10 @@
 #include "Degradation/SettingsTable.h"
 #include "Settings/IniTable.h"
 
-// Every tunable of the degradation system lives in Data\SKSE\Plugins\SKYBDegradation.ini, one key
-// per row of Settings.csv (which also gives the built-in defaults). The file is read at kDataLoaded
-// and re-read when its write time changes (checked on every save load and menu open). Values are not
-// stored in the save.
+// Every tunable of the degradation system lives in the [Degradation.*] sections of
+// Data\SKSE\Plugins\SkyblivionSKSE.ini (PluginIni), one key per row of Settings.csv (which also gives the
+// built-in defaults). They are taken at kDataLoaded and again when the file's write time changes (checked on
+// every save load and menu open). Values are not stored in the save.
 //
 // Overrides: the settings menu owns the player-facing values (wear rate, stat floor, prices...) per
 // character and calls SetOverride for each on every game load and change. An override replaces the
@@ -54,10 +54,11 @@ namespace SKYBDeg
 
 		//the tool list by editor ID: SKYBDegradation.esp, SKYBCombined.esp or the ESM
 		static constexpr const char* kToolsList = "SKYBDegRepairTools";
-		static constexpr std::string_view kIniPath = "Data/SKSE/Plugins/SKYBDegradation.ini";
+		// [Degradation.<section>] in SkyblivionSKSE.ini
+		static constexpr std::string_view kIniFeature = "Degradation";
 
 	private:
-		static inline Table               s_table{ kIniPath, "degradation" };
+		static inline Table               s_table{ kIniFeature, "degradation" };
 		static inline RE::BGSListForm*    s_tools = nullptr;
 		static inline std::vector<Hammer> s_hammers;
 	};

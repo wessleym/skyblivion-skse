@@ -1,7 +1,8 @@
 #pragma once
 
-// SpellReflect settings, read once at load from Data\SKSE\Plugins\SKYBSpellReflect.ini (the
-// standalone plugin's file name). Missing file or keys fall back to the defaults below.
+// SpellReflect settings, read once at load from the [SpellReflect.*] sections of
+// Data\SKSE\Plugins\SkyblivionSKSE.ini (PluginIni; the standalone plugin's keys). Missing file, sections
+// or keys fall back to the defaults below.
 
 #include <array>
 #include <cstdint>

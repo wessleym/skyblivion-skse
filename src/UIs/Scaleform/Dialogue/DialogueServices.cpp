@@ -2,8 +2,8 @@
 #include "DialogueContract.h"
 #include "Degradation/RepairMenu.h"
 #include "Platform/FormCache.h"
-#include "Platform/IniFile.h"
 #include "Platform/Text.h"
+#include "Settings/PluginIni.h"
 
 #include <algorithm>
 #include <string_view>
@@ -118,11 +118,15 @@ namespace Dialogue {
 
 		void ApplyServicesIni(std::vector<ServiceDef>& services) {
 			ServiceDef* current = nullptr;
-			const bool read = IniFile::Read(DialogueContract::ServicesIniFile, "DialogueServices", [&](const IniFile::Entry& a_entry) {
+			const auto where = PluginIni::Where(DialogueContract::ServicesIniFeature);
+			std::size_t lines = 0;
+			PluginIni::Read(DialogueContract::ServicesIniFeature, [&](const IniFile::Entry& a_entry) {
 				if (a_entry.section.empty()) {
-					Log::WARN("DialogueServices: {}({}) ignored: no [service] above it.", DialogueContract::ServicesIniFile, a_entry.line);
+					Log::WARN("DialogueServices: {} line {} ignored: the section above it names no service ([{}.<service>]).", where,
+						a_entry.line, DialogueContract::ServicesIniFeature);
 					return;
 				}
+				++lines;
 				if (!current || current->id != a_entry.section) {
 					const auto found = std::ranges::find(services, a_entry.section, &ServiceDef::id);
 					if (found != services.end()) {
@@ -168,8 +172,8 @@ namespace Dialogue {
 					Log::WARN("DialogueServices: [{}] unknown key '{}'.", current->id, key);
 				}
 			});
-			if (read) {
-				Log::INFO("DialogueServices: Read {}.", DialogueContract::ServicesIniFile);
+			if (lines) {
+				Log::INFO("DialogueServices: Read {} ({} line(s)).", where, lines);
 			}
 		}
 

@@ -1,7 +1,7 @@
 #include "PerkSpells/Settings.h"
 
-#include "Platform/IniFile.h"
 #include "Platform/Text.h"
+#include "Settings/PluginIni.h"
 
 #include <string>
 
@@ -46,12 +46,12 @@ namespace PerkSpells::Settings {
     }
 
     void Load() {
-        constexpr auto path = "Data/SKSE/Plugins/SKYBPerkSpells.ini";
-        const bool read = IniFile::Read(path, "PerkSpells: INI", [](const IniFile::Entry& a_entry) {
+        // [PerkSpells.Spells] sStacking arrives as section "Spells", key "sStacking".
+        const bool read = PluginIni::Read("PerkSpells", [](const IniFile::Entry& a_entry) {
             Apply(Text::Lower(a_entry.section + "." + a_entry.key), a_entry.value);
         });
         if (!read) {
-            Log::INFO("PerkSpells: INI: {} not found, using defaults", path);
+            Log::INFO("PerkSpells: INI: {} not found, using defaults", PluginIni::kFileName);
         }
 
         const auto& v = g_values;

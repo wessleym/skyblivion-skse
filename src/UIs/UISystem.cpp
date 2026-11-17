@@ -127,7 +127,7 @@ void UISystem::OnDataLoaded() {
 }
 
 void UISystem::OpenPersuasion(RE::Actor* target) {
-    // The Scaleform menu hosts the wheel; SKYBPersuasion.ini [General] UsePrismaView = 1 opens
+    // The Scaleform menu hosts the wheel; SkyblivionSKSE.ini [Persuasion.General] UsePrismaView = 1 opens
     // the PrismaUI view instead.
     if (Persuasion::Settings::On(Persuasion::P::UsePrismaView)) {
         Persuasion::PersuasionView::Open(target);

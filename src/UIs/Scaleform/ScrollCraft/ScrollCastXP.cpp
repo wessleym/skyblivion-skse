@@ -1,6 +1,6 @@
 #include "ScrollCastXP.h"
-#include "Platform/IniFile.h"
 #include "Platform/Text.h"
+#include "Settings/PluginIni.h"
 
 #include <algorithm>
 #include <string>
@@ -40,13 +40,15 @@ namespace ScrollCraft {
 		float scrollScale = 0.02f;
 		float staffScale = 0.02f;
 		bool log = true;
-		const bool read = IniFile::Read(kIniPath, "ScrollCastXP", [&](const IniFile::Entry& a_entry) {
+		PluginIni::Refresh();
+		const auto where = PluginIni::Where(kIniFeature);
+		const bool read = PluginIni::Read(kIniFeature, [&](const IniFile::Entry& a_entry) {
 			if (a_entry.section != "CastingXP") {
 				return;
 			}
 			float number = 0.0f;
 			if (!Text::Parse(a_entry.value, number)) {
-				Log::WARN("ScrollCastXP: {}: '{}' is not a number for {}; kept the default", kIniPath, a_entry.value, a_entry.key);
+				Log::WARN("ScrollCastXP: {}: '{}' is not a number for {}; kept the default", where, a_entry.value, a_entry.key);
 			} else if (a_entry.key == "Enabled") {
 				enabled = number != 0.0f;
 			} else if (a_entry.key == "ScrollScale") {
@@ -58,7 +60,7 @@ namespace ScrollCraft {
 			}
 		});
 		if (!read) {
-			Log::WARN("ScrollCastXP: {} not found; defaults (Enabled 1, ScrollScale 0.02, StaffScale 0.02)", kIniPath);
+			Log::WARN("ScrollCastXP: {} not found; defaults (Enabled 1, ScrollScale 0.02, StaffScale 0.02)", PluginIni::kFileName);
 		}
 		m_enabled = enabled;
 		m_scrollScale = scrollScale;

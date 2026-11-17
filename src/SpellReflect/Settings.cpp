@@ -1,7 +1,7 @@
 #include "SpellReflect/Settings.h"
 
-#include "Platform/IniFile.h"
 #include "Platform/Text.h"
+#include "Settings/PluginIni.h"
 
 #include <algorithm>
 #include <string>
@@ -208,12 +208,12 @@ namespace SpellReflect::Settings {
     }
 
     void Load() {
-        constexpr auto path = "Data/SKSE/Plugins/SKYBSpellReflect.ini";
-        const bool read = IniFile::Read(path, "SpellReflect: INI", [](const IniFile::Entry& a_entry) {
+        // [SpellReflect.Arrows] sPerk arrives as section "Arrows", key "sPerk".
+        const bool read = PluginIni::Read("SpellReflect", [](const IniFile::Entry& a_entry) {
             Apply(Text::Lower(a_entry.section + "." + a_entry.key), a_entry.value);
         });
         if (!read) {
-            Log::INFO("SpellReflect: INI: {} not found, using defaults", path);
+            Log::INFO("SpellReflect: INI: {} not found, using defaults", PluginIni::kFileName);
         }
 
         auto& v = g_values;
