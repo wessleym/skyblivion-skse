@@ -26,11 +26,11 @@ namespace SKYBSettingsMenu
     };
 
     inline constexpr std::array<CategoryDef, 6> kCategories{ {
-        { "UI", "$SKYB_settings_cat_ui", "$SKYB_settings_cat_ui_empty", true, "" },
-        { "Progression", "$SKYB_settings_cat_progression", "$SKYB_settings_cat_progression_empty", true, "$SKYB_settings_newgame_progression" },
-        { "Combat", "$SKYB_settings_cat_combat", "$SKYB_settings_cat_combat_empty", true, "$SKYB_settings_newgame_combat" },
         { "Game", "$SKYB_settings_cat_game", "$SKYB_settings_cat_game_empty", false, "" },
         { "Audio", "$SKYB_settings_cat_audio", "$SKYB_settings_cat_audio_empty", false, "" },
+        { "Combat", "$SKYB_settings_cat_combat", "$SKYB_settings_cat_combat_empty", true, "$SKYB_settings_newgame_combat" },
+        { "Progression", "$SKYB_settings_cat_progression", "$SKYB_settings_cat_progression_empty", true, "$SKYB_settings_newgame_progression" },
+        { "UI", "$SKYB_settings_cat_ui", "$SKYB_settings_cat_ui_empty", true, "" },
         { "Hotkeys", "$SKYB_settings_cat_hotkeys", "$SKYB_settings_cat_hotkeys_empty", false, "" },
     } };
 
@@ -53,7 +53,7 @@ namespace SKYBSettingsMenu
         bool        gate;      // value 0 hides the rest of this row's group in the menu (the menu's collapse)
     };
 
-    inline constexpr std::array<RowDef, 95> kRows{ {
+    inline constexpr std::array<RowDef, 96> kRows{ {
         { "DegEnabled", "Progression", "$SKYB_settings_group_gear_degradation", Type::kToggle, Applier::kDegradation, "General", "Enabled", 0.0f, 1.0f, 1.0f, "", 0, Scope::kSave, "now", "$SKYB_settings_row_deg_enabled", { 1.0f, 1.0f, 1.0f, 1.0f }, true },
         { "DegWearRate", "Progression", "$SKYB_settings_group_gear_degradation", Type::kNumber, Applier::kDegradation, "Wear", "RateMult", 0.25f, 3.0f, 0.25f, "mult", 0, Scope::kSave, "now", "$SKYB_settings_row_deg_wear_rate", { 1.0f, 0.5f, 2.0f, 1.5f }, false },
         { "DegWeaponWear", "Progression", "$SKYB_settings_group_gear_degradation", Type::kNumber, Applier::kDegradation, "Wear", "WeapRateMult", 0.0f, 3.0f, 0.25f, "mult", 0, Scope::kSave, "now", "$SKYB_settings_row_deg_weapon_wear", { 1.0f, 1.0f, 1.0f, 1.0f }, false },
@@ -110,8 +110,8 @@ namespace SKYBSettingsMenu
         { "EcoMerchantGold", "Progression", "$SKYB_settings_group_economy", Type::kNumber, Applier::kEconomy, "Gold", "Merchant", 0.25f, 3.0f, 0.25f, "mult", 0, Scope::kSave, "restock", "$SKYB_settings_row_eco_merchant_gold", { 1.0f, 1.5f, 0.75f, 0.75f }, false },
         { "EcoBuyPrices", "Progression", "$SKYB_settings_group_economy", Type::kNumber, Applier::kEconomy, "Price", "Buy", 0.5f, 2.0f, 0.05f, "mult", 0, Scope::kSave, "now", "$SKYB_settings_row_eco_buy_prices", { 1.0f, 0.85f, 1.25f, 1.1f }, false },
         { "EcoSellPrices", "Progression", "$SKYB_settings_group_economy", Type::kNumber, Applier::kEconomy, "Price", "Sell", 0.25f, 2.0f, 0.05f, "mult", 0, Scope::kSave, "now", "$SKYB_settings_row_eco_sell_prices", { 1.0f, 1.2f, 0.75f, 0.9f }, false },
-        { "EcoEnchanted", "Progression", "$SKYB_settings_group_economy", Type::kNumber, Applier::kChanceNone, "", "SKYBLLEnchGateChanceNone", 0.0f, 2.0f, 0.25f, "mult", 0, Scope::kSave, "newloot", "$SKYB_settings_row_eco_enchanted", { 1.0f, 1.5f, 0.75f, 0.75f }, false },
-        { "EcoRareFinds", "Progression", "$SKYB_settings_group_economy", Type::kNumber, Applier::kChanceNone, "", "SKYBLootChanceCommon SKYBLootChanceUncommon SKYBLootChanceRare SKYBLootChanceVeryRare", 0.0f, 2.0f, 0.25f, "mult", 0, Scope::kSave, "newloot", "$SKYB_settings_row_eco_rare_finds", { 1.0f, 1.25f, 0.75f, 1.0f }, false },
+        { "EcoEnchanted", "Progression", "$SKYB_settings_group_economy", Type::kNumber, Applier::kChanceNone, "", "SKYBLLEnchGateChanceNone SKYBLLEnchChanceNone40 SKYBLLEnchChanceNone50 SKYBLLEnchChanceNone65 SKYBLLEnchChanceNone70 SKYBLLEnchChanceNone75 SKYBLLEnchChanceNone80 SKYBLLEnchChanceNone85 SKYBLLEnchChanceNone90", 0.0f, 2.0f, 0.25f, "mult", 0, Scope::kSave, "newloot", "$SKYB_settings_row_eco_enchanted", { 1.0f, 1.5f, 0.75f, 0.75f }, false },
+        { "EcoRareFinds", "Progression", "$SKYB_settings_group_economy", Type::kNumber, Applier::kChanceNone, "", "SKYBLootChanceCommon SKYBLootChanceUncommon SKYBLootChanceRare SKYBLootChanceVeryRare SKYBLootRareChanceNone25 SKYBLootRareChanceNone50 SKYBLootRareChanceNone75 SKYBLootRareChanceNone85 SKYBLootRareChanceNone90 SKYBLootRareChanceNone91 SKYBLootRareChanceNone93 SKYBLootRareChanceNone95 SKYBLootRareChanceNone98", 0.0f, 2.0f, 0.25f, "mult", 0, Scope::kSave, "newloot", "$SKYB_settings_row_eco_rare_finds", { 1.0f, 1.25f, 0.75f, 1.0f }, false },
         { "PersuasionGain", "Progression", "$SKYB_settings_group_persuasion", Type::kNumber, Applier::kPersuasion, "General", "GainMult", 0.25f, 3.0f, 0.25f, "mult", 0, Scope::kSave, "now", "$SKYB_settings_row_persuasion_gain", { 1.0f, 1.5f, 0.75f, 1.0f }, false },
         { "PersuasionLoss", "Progression", "$SKYB_settings_group_persuasion", Type::kNumber, Applier::kPersuasion, "General", "LossMult", 0.0f, 3.0f, 0.25f, "mult", 0, Scope::kSave, "now", "$SKYB_settings_row_persuasion_loss", { 1.0f, 0.75f, 1.5f, 1.0f }, false },
         { "PersuasionDecay", "Progression", "$SKYB_settings_group_persuasion", Type::kToggle, Applier::kPersuasion, "Decay", "WhileOpen", 0.0f, 1.0f, 1.0f, "", 0, Scope::kSave, "now", "$SKYB_settings_row_persuasion_decay", { 1.0f, 0.0f, 1.0f, 1.0f }, false },
@@ -140,6 +140,7 @@ namespace SKYBSettingsMenu
         { "GameItemFade", "Game", "$SKYB_settings_group_fade_distances", Type::kNumber, Applier::kGameIni, "", "fLODFadeOutMultItems:LOD", 1.5f, 10.0f, 0.5f, "mult", 0, Scope::kGlobal, "now", "$SKYB_settings_row_game_item_fade", { 10.0f, 10.0f, 10.0f, 10.0f }, false },
         { "GameObjectFade", "Game", "$SKYB_settings_group_fade_distances", Type::kNumber, Applier::kGameIni, "", "fLODFadeOutMultObjects:LOD", 5.0f, 30.0f, 1.0f, "mult", 0, Scope::kGlobal, "now", "$SKYB_settings_row_game_object_fade", { 15.0f, 15.0f, 15.0f, 15.0f }, false },
         { "GameSurvival", "Game", "$SKYB_settings_group_survival", Type::kToggle, Applier::kGameGlobal, "", "Survival_ModeToggle", 0.0f, 1.0f, 1.0f, "", 0, Scope::kSave, "now", "$SKYB_settings_row_game_survival", { 0.0f, 0.0f, 0.0f, 0.0f }, false },
+        { "GameEmperorRestored", "Game", "$SKYB_settings_group_tutorial", Type::kToggle, Applier::kGlobalVar, "", "SKYBCGEmperorUseCutDialogue", 0.0f, 1.0f, 1.0f, "", 0, Scope::kGlobal, "now", "$SKYB_settings_row_game_emperor_restored", { 1.0f, 1.0f, 1.0f, 1.0f }, false },
         { "AudioMaster", "Audio", "$SKYB_settings_group_sounds", Type::kNumber, Applier::kSound, "", "master", 0.0f, 1.0f, 0.05f, "pct", 0, Scope::kGlobal, "now", "$SKYB_settings_row_audio_master", { 1.0f, 1.0f, 1.0f, 1.0f }, false },
         { "AudioVoice", "Audio", "$SKYB_settings_group_sounds", Type::kNumber, Applier::kSound, "", "Skyrim.esm:0876BD", 0.0f, 1.0f, 0.05f, "pct", 0, Scope::kGlobal, "now", "$SKYB_settings_row_audio_voice", { 0.8f, 0.8f, 0.8f, 0.8f }, false },
         { "AudioCat071E64", "Audio", "$SKYB_settings_group_sounds", Type::kNumber, Applier::kSound, "", "Skyrim.esm:071E64", 0.0f, 1.0f, 0.05f, "pct", 0, Scope::kGlobal, "now", "$SKYB_settings_row_audio_cat071_e64", { 1.0f, 1.0f, 1.0f, 1.0f }, false },
@@ -391,7 +392,7 @@ namespace SKYBSettingsMenu
         const char* shares;       // shared action (group "shared") this one follows, "" = none
         std::uint8_t shareMask;   // devices it follows the shared action on: 1 keyboard, 2 gamepad
     };
-    inline constexpr std::array<HotkeyDef, 66> kHotkeys{ {
+    inline constexpr std::array<HotkeyDef, 62> kHotkeys{ {
         { "UiPrimary", "shared", "$SKYB_settings_hotkey_ui_primary", 69, 96, 0, "", "", "", 0 },
         { "UiSecondary", "shared", "$SKYB_settings_hotkey_ui_secondary", 82, 98, 0, "", "", "", 0 },
         { "UiThird", "shared", "$SKYB_settings_hotkey_ui_third", 70, 99, 0, "", "", "", 0 },
@@ -418,16 +419,12 @@ namespace SKYBSettingsMenu
         { "SkillClose", "skills", "$SKYB_settings_hotkey_skill_close", -1, -1, 0, "", "", "UiClose", 1 },
         { "SkillMastery", "skills", "$SKYB_settings_hotkey_skill_mastery", -1, -1, 0, "", "", "UiPrimary", 2 },
         { "SkillTooltip", "skills", "$SKYB_settings_hotkey_skill_tooltip", -1, -1, 0, "", "", "UiInfo", 3 },
-        { "PerkClose", "perks", "$SKYB_settings_hotkey_perk_close", -1, 98, 0, "", "", "UiClose", 1 },
+        { "PerkClose", "perks", "$SKYB_settings_hotkey_perk_close", -1, -1, 0, "", "", "UiClose", 1 },
         { "PerkAcquire", "perks", "$SKYB_settings_hotkey_perk_acquire", -1, -1, 0, "", "", "UiPrimary", 2 },
-        { "PerkRank", "perks", "$SKYB_settings_hotkey_perk_rank", -1, 99, 0, "", "", "UiSecondary", 1 },
+        { "PerkRank", "perks", "$SKYB_settings_hotkey_perk_rank", -1, -1, 0, "", "", "UiThird", 3 },
         { "PerkTooltip", "perks", "$SKYB_settings_hotkey_perk_tooltip", -1, -1, 0, "", "", "UiInfo", 3 },
         { "PerkTreePrev", "perks", "$SKYB_settings_hotkey_perk_tree_prev", -1, -1, 0, "", "", "UiCycle2Prev", 3 },
         { "PerkTreeNext", "perks", "$SKYB_settings_hotkey_perk_tree_next", -1, -1, 0, "", "", "UiCycle2Next", 3 },
-        { "PerkZoomIn", "perks", "$SKYB_settings_hotkey_perk_zoom_in", 187, -1, 0, "", "", "", 0 },
-        { "PerkZoomOut", "perks", "$SKYB_settings_hotkey_perk_zoom_out", 189, -1, 0, "", "", "", 0 },
-        { "PerkZoomReset", "perks", "$SKYB_settings_hotkey_perk_zoom_reset", 36, -1, 0, "", "", "", 0 },
-        { "PerkZoomToggle", "perks", "$SKYB_settings_hotkey_perk_zoom_toggle", -1, 102, 0, "", "", "", 0 },
         { "BirthDone", "birthsign", "$SKYB_settings_hotkey_birth_done", -1, -1, 0, "", "", "UiSecondary", 3 },
         { "BirthTipPrev", "birthsign", "$SKYB_settings_hotkey_birth_tip_prev", -1, -1, 0, "", "", "UiCycle1Prev", 3 },
         { "BirthTipNext", "birthsign", "$SKYB_settings_hotkey_birth_tip_next", -1, -1, 0, "", "", "UiCycle1Next", 3 },
