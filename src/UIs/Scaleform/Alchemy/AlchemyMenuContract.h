@@ -4,8 +4,8 @@
 //apparatus strip and the ingredient effect colours.
 //
 //The movie has no skse object of its own that could ask for data, so the plugin registers with SKSE's
-//Scaleform interface and, every time craftingmenu.swf is loaded, puts two functions on its _root.
-//The patched CraftingMenu class calls them from Initialize and on the toggle key.
+//Scaleform interface and, every time craftingmenu.swf is loaded, puts three functions on its _root.
+//The patched CraftingMenu class calls them from Initialize, on the toggle key and while the panel is open.
 namespace Alchemy::AlchemyMenuContract {
 	//The movie this applies to (the end of GFxMovieDef::GetFileURL, compared case-insensitively).
 	inline constexpr const char* MovieFile = "craftingmenu.swf";
@@ -18,6 +18,10 @@ namespace Alchemy::AlchemyMenuContract {
 		inline constexpr const char* Fetch = "SKYBAlchemyFetch";
 		//(bool) remembers whether the bonus preview is open, for the session only.
 		inline constexpr const char* Remember = "SKYBAlchemyRemember";
+		//(bool) false puts the item model away; true brings back the potion being made, if there is one.
+		//The engine draws the model after the movie, so it covers the bonus panel, and the movie's own
+		//ShowItem3D(false) is ignored while a result potion exists.
+		inline constexpr const char* Model = "SKYBAlchemyModel";
 	}
 
 	//The data object SKYBAlchemyFetch returns:
