@@ -1,22 +1,27 @@
 #include "PersuasionPerks.h"
 
 #include "Platform/FormCache.h"
+#include "Settings/PluginIni.h"
 #include "UIs/Scaleform/Skills/SkillData.h"
 
+#include <algorithm>
 #include <charconv>
-#include <fstream>
 #include <sstream>
 
 namespace Persuasion
 {
 	namespace
 	{
-		// Used when the INI is missing, the same rules the shipped file holds: Speechcraft 100 halves the
+		// Used when SkyblivionSKSE.ini is missing or has no [PersuasionPerks.*] section, the same rules the
+		// shipped file holds (there each header carries the "PersuasionPerks." prefix): Speechcraft 100 halves the
 		// bribe cost, the first Speechcraft mastery stops decay while the wheel is open, and the
 		// Journeyman and Master masteries give one and two free turns of the wheel per conversation.
 		// Person of Interest raises the bonus of positive responses in the disposition mini game:
 		// each of its four ranks makes loved and liked answers worth 10% more (+40% at rank 4), and
-		// bribes 10 / 20 / 30 / 40% cheaper in total (each rank's factor is the step from the one before)
+		// bribes 10 / 20 / 30 / 40% cheaper in total (each rank's factor is the step from the one before).
+		// Reputation: the wheel's gains grow 0.25% per point of Fame and bribes cost 0.25% less per point
+		// of Infamy, each counted up to 100 points. No stack of rules takes the bribe price below a
+		// quarter of what the settings ask.
 		constexpr std::string_view kDefaultRules =
 			"[Skill:Speechcraft>=100]\nBribe.CostMult*=0.5\n"
 			"[Mastery:Speechcraft:1]\nDecay.WhileOpen=0\n"
@@ -24,7 +29,10 @@ namespace Persuasion
 			"[Perk:0x09D03C~Skyblivion.esm]\nResponse.LoveMult+=0.1\nResponse.LikeMult+=0.1\nBribe.CostMult*=0.9\n"
 			"[Perk:0x09D03B~Skyblivion.esm]\nResponse.LoveMult+=0.1\nResponse.LikeMult+=0.1\nBribe.CostMult*=0.888889\n"
 			"[Perk:0x1A8CDA~Skyblivion.esm]\nResponse.LoveMult+=0.1\nResponse.LikeMult+=0.1\nBribe.CostMult*=0.875\n"
-			"[Perk:0x28F5CB~Skyblivion.esm]\nResponse.LoveMult+=0.1\nResponse.LikeMult+=0.1\nBribe.CostMult*=0.857143\n";
+			"[Perk:0x28F5CB~Skyblivion.esm]\nResponse.LoveMult+=0.1\nResponse.LikeMult+=0.1\nBribe.CostMult*=0.857143\n"
+			"[Perk:0x1A8CE3~Skyblivion.esm]\nGeneral.GainMult*=0.0025 per Fame up to 100\n"
+			"Bribe.CostMult*=-0.0025 per Infamy up to 100\n"
+			"[Always]\nBribe.CostMult>=0.25\n";
 
 		RE::ActorValue ActorValueNamed(const std::string& a_name)
 		{
@@ -40,9 +48,13 @@ namespace Persuasion
 	bool Perks::ParseHeader(std::string_view a_text, Rule& a_rule, std::size_t a_lineNo)
 	{
 		a_rule.header = std::string(a_text);
+		if (Text::IEquals(Text::Trim(a_text), "Always")) {
+			a_rule.kind = Kind::kAlways;
+			return true;
+		}
 		const auto colon = a_text.find(':');
 		if (colon == std::string_view::npos) {
-			Log::WARN("persuasion perks: line {}: section [{}] has no kind (Perk:, Mastery:, Skill:) - ignored", a_lineNo, a_text);
+			Log::WARN("persuasion perks: line {}: section [{}] has no kind (Perk:, Mastery:, Skill:, Always) - ignored", a_lineNo, a_text);
 			return false;
 		}
 		const auto kind = Text::Trim(a_text.substr(0, colon));
@@ -110,88 +122,101 @@ namespace Persuasion
 	{
 		s_rules.clear();
 
-		const auto         time = Text::WriteTime(kIniPath);
-		std::ifstream      file{ std::filesystem::path{ kIniPath } };
-		std::istringstream builtIn{ std::string(kDefaultRules) };
-		s_time = time && file ? time : std::nullopt;
-		const bool fromFile = s_time.has_value();
-		if (!fromFile) {
-			Log::INFO("persuasion perks: {} not found - using the built-in rules", kIniPath);
-		}
-		std::istream& in = fromFile ? static_cast<std::istream&>(file) : builtIn;
-
-		std::string line;
-		std::size_t lineNo = 0, ops = 0;
-		bool sectionValid = false;
-		while (std::getline(in, line)) {
-			++lineNo;
-			auto s = Text::Trim(line);
-			if (s.empty() || s.front() == ';' || s.front() == '#') {
-				continue;
+		std::size_t ops = 0;
+		bool        sectionValid = false;
+		//A section header: the condition, as written after "PersuasionPerks." (the whole header in the built-in rules).
+		const auto onSection = [&](const IniFile::Entry& a_header) {
+			Rule rule;
+			sectionValid = ParseHeader(a_header.section, rule, a_header.line);
+			if (sectionValid) {
+				s_rules.push_back(std::move(rule));
 			}
-			if (s.front() == '[') {
-				const auto close = s.find(']');
-				const auto header = Text::Trim(s.substr(1, close == std::string_view::npos ? std::string_view::npos : close - 1));
-				Rule rule;
-				sectionValid = ParseHeader(header, rule, lineNo);
-				if (sectionValid) {
-					s_rules.push_back(std::move(rule));
-				}
-				continue;
-			}
+		};
+		//Section.Key<op>value, op one of "=", "*=", "+=", ">=", "<=": the key arrives with the operator's first
+		//character still on it.
+		const auto onEntry = [&](const IniFile::Entry& a_entry) {
 			if (!sectionValid) {
-				continue;
+				return;
 			}
-			//Section.Key<op>value, op one of "=", "*=", "+=".
-			const auto eq = s.find('=');
-			if (eq == std::string_view::npos || eq == 0) {
-				Log::WARN("persuasion perks: line {} is not Section.Key=value: '{}'", lineNo, s);
-				continue;
+			const auto lineNo = a_entry.line;
+			char       op = '=';
+			auto       target = a_entry.key;
+			if (!target.empty() && std::string_view("*+><").find(target.back()) != std::string_view::npos) {
+				op = target.back();
+				target = Text::Trim(std::string_view(target).substr(0, target.size() - 1));
 			}
-			char op = '=';
-			std::size_t keyEnd = eq;
-			if (s[eq - 1] == '*' || s[eq - 1] == '+') {
-				op = s[eq - 1];
-				keyEnd = eq - 1;
+			if (target.empty()) {
+				Log::WARN("persuasion perks: line {} is not Section.Key=value: '{}={}'", lineNo, a_entry.key, a_entry.value);
+				return;
 			}
-			const auto target = Text::Trim(s.substr(0, keyEnd));
 			const auto dot = target.find('.');
-			if (dot == std::string_view::npos) {
+			if (dot == std::string::npos) {
 				Log::WARN("persuasion perks: line {}: '{}' must be Section.Key", lineNo, target);
-				continue;
+				return;
 			}
-			auto value = s.substr(eq + 1);
-			if (const auto c = value.find_first_of(";#"); c != std::string_view::npos) {
-				value = value.substr(0, c);
+			std::string_view value = a_entry.value;
+			//"<number> per <ActorValue> [up to <points>]": the number counts once for each point.
+			std::string per;
+			float       upTo = 0.0f;
+			if (const auto at = Text::Lower(value).find(" per "); at != std::string::npos) {
+				auto scale = Text::Trim(value.substr(at + 5));
+				value = value.substr(0, at);
+				if (const auto cap = Text::Lower(scale).find(" up to "); cap != std::string::npos) {
+					if (!Text::Parse(std::string_view(scale).substr(cap + 7), upTo) || upTo <= 0.0f) {
+						Log::WARN("persuasion perks: line {}: 'up to' needs a number above 0: '{}={}'", lineNo, a_entry.key, a_entry.value);
+						return;
+					}
+					scale = Text::Trim(std::string_view(scale).substr(0, cap));
+				}
+				if (scale.empty() || op == '>' || op == '<') {
+					Log::WARN("persuasion perks: line {}: 'per' needs an actor value and one of =, *=, +=: '{}={}'", lineNo, a_entry.key,
+						a_entry.value);
+					return;
+				}
+				per = std::move(scale);
 			}
 			float v = 0.0f;
 			if (!Text::Parse(value, v)) {
 				Log::WARN("persuasion perks: line {}: '{}' is not a number", lineNo, Text::Trim(value));
-				continue;
+				return;
 			}
-			const int idx = Settings::Find(target.substr(0, dot), target.substr(dot + 1));
+			const int idx = Settings::Find(std::string_view(target).substr(0, dot), std::string_view(target).substr(dot + 1));
 			if (idx < 0) {
 				Log::WARN("persuasion perks: line {}: unknown setting {} - ignored", lineNo, target);
-				continue;
+				return;
 			}
-			s_rules.back().ops.push_back(Op{ static_cast<std::size_t>(idx), op, v });
+			s_rules.back().ops.push_back(Op{ static_cast<std::size_t>(idx), op, v, std::move(per), upTo });
 			++ops;
+		};
+
+		const bool fromFile = PluginIni::Has(kIniFeature);
+		s_generation = PluginIni::Generation();
+		if (fromFile) {
+			PluginIni::Read(kIniFeature, onSection, onEntry);
+		} else {
+			Log::INFO("persuasion perks: {} has no [{}.*] section - using the built-in rules", PluginIni::kFileName, kIniFeature);
+			std::istringstream builtIn{ std::string(kDefaultRules) };
+			IniFile::Parse(builtIn, "the built-in rules", "persuasion perks", onSection, onEntry);
 		}
-		Log::INFO("persuasion perks: {} read: {} section(s), {} change(s)", fromFile ? kIniPath : "built-in rules", s_rules.size(), ops);
+		Log::INFO("persuasion perks: {} read: {} section(s), {} change(s)", fromFile ? PluginIni::Where(kIniFeature) : "built-in rules",
+			s_rules.size(), ops);
 	}
 
 	void Perks::ReloadIfChanged()
 	{
-		if (Text::WriteTime(kIniPath) == s_time) {
+		PluginIni::Refresh();
+		if (PluginIni::Generation() == s_generation) {
 			return;
 		}
-		Log::INFO("persuasion perks: {} changed on disk - reloading", kIniPath);
+		Log::INFO("persuasion perks: {} was read again - reloading", PluginIni::kFileName);
 		Load();
 	}
 
 	bool Perks::Holds(const Rule& a_rule, RE::PlayerCharacter* a_player)
 	{
 		switch (a_rule.kind) {
+		case Kind::kAlways:
+			return true;
 		//The perk records resolve once, on the first conversation (the form table logs a miss once).
 		case Kind::kPerkEditorID: {
 			const std::string source = "persuasion perks [" + a_rule.header + "]";
@@ -249,6 +274,8 @@ namespace Persuasion
 		if (!player || s_rules.empty()) {
 			return 0;
 		}
+		//The limits (>=, <=) measure against the settings as they stood before the first rule.
+		const Settings::Values start = a_values;
 		std::size_t held = 0;
 		for (const auto& rule : s_rules) {
 			if (!Holds(rule, player)) {
@@ -256,16 +283,33 @@ namespace Persuasion
 			}
 			++held;
 			for (const auto& op : rule.ops) {
+				const auto& def = Settings::Def(op.index);
+				float amount = op.value;
+				if (!op.per.empty()) {
+					const auto av = ActorValueNamed(op.per);
+					auto* owner = REBridge::AVOwner(player);
+					if (av == RE::ActorValue::kNone || !owner) {
+						Log::WARN("persuasion perks: [{}]: [{}] {}: no actor value named {} - line skipped", rule.header,
+							def.section, def.key, op.per);
+						continue;
+					}
+					float points = std::max(0.0f, owner->GetActorValue(av));
+					if (op.upTo > 0.0f) {
+						points = std::min(points, op.upTo);
+					}
+					amount *= points;
+				}
 				float& slot = a_values[op.index];
 				const float before = slot;
 				switch (op.op) {
-				case '*': slot *= op.value; break;
-				case '+': slot += op.value; break;
-				default:  slot = op.value; break;
+				case '*': slot *= op.per.empty() ? amount : 1.0f + amount; break;
+				case '+': slot += amount; break;
+				case '>': slot = std::max(slot, amount * start[op.index]); break;
+				case '<': slot = std::min(slot, amount * start[op.index]); break;
+				default:  slot = amount; break;
 				}
-				const auto& def = Settings::Def(op.index);
-				Log::INFO("persuasion perks: [{}]: [{}] {} {}= {} -> {} (was {})", rule.header, def.section, def.key,
-					op.op == '=' ? "" : std::string(1, op.op), op.value, slot, before);
+				Log::INFO("persuasion perks: [{}]: [{}] {} {}= {}{} -> {} (was {})", rule.header, def.section, def.key,
+					op.op == '=' ? "" : std::string(1, op.op), op.value, op.per.empty() ? "" : " per " + op.per, slot, before);
 			}
 		}
 		return held;

@@ -1,6 +1,6 @@
 #pragma once
 
-// Weapon breakage. Tunables: [Breakage] in SKYBDegradation.ini (Settings.csv); the settings menu
+// Weapon breakage. Tunables: [Degradation.Breakage] in SkyblivionSKSE.ini (Settings.csv); the settings menu
 // overrides the player-facing ones.
 //
 //   use       a landed hit, or a block with the weapon, below Threshold rolls a break chance that rises

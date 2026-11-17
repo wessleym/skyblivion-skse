@@ -2,10 +2,10 @@
 
 namespace Persuasion {
 
-//Oblivion's bribery formula with every constant exposed. The values come from SKYBPersuasion.ini
-//([Bribe]) through PersuasionRules::BribeParams, perks and skill rules laid over them. The
-//Speechcraft 100 price halving is a costMult rule of SKYBPersuasionPerks.ini (or of the built-in
-//rules in PersuasionPerks.cpp when that file is missing).
+//Oblivion's bribery formula with every constant exposed. The values come from SkyblivionSKSE.ini
+//([Persuasion.Bribe]) through PersuasionRules::BribeParams, perks and skill rules laid over them. The
+//Speechcraft 100 price halving is a costMult rule of its [PersuasionPerks.*] sections (or of the built-in
+//rules in PersuasionPerks.cpp when the file has none).
 class BribeEconomy {
 public:
     struct Params {

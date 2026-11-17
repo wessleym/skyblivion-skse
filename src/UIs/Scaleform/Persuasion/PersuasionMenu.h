@@ -1,7 +1,7 @@
 #pragma once
 // The persuasion wheel as a Scaleform menu: a native IMenu around
 // Interface\Skyblivion\SKYBPersuasionWheel.swf. It is the wheel's default host; the PrismaUI
-// view is used instead when SKYBPersuasion.ini [General] UsePrismaView = 1.
+// view is used instead when SkyblivionSKSE.ini [Persuasion.General] UsePrismaView = 1.
 //
 // Contract with the movie (gfx.io.GameDelegate / Invoke):
 //   movie -> DLL   SKYBPersuade_Ready()                 movie is up: send the conversation

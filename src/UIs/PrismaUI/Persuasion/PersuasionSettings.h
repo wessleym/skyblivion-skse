@@ -1,13 +1,14 @@
 #pragma once
-// The persuasion wheel's tunables, read from Data\SKSE\Plugins\SKYBPersuasion.ini; the built-in
-// defaults come from PersuasionSettingsTable.h. The file is read at kDataLoaded and re-read whenever
-// its write time changes (checked on every save load and every wheel open). Values are not saved.
+// The persuasion wheel's tunables: the [Persuasion.*] sections of Data\SKSE\Plugins\SkyblivionSKSE.ini
+// (PluginIni); the built-in defaults come from PersuasionSettingsTable.h. They are taken at kDataLoaded and
+// again whenever the file's write time changes (checked on every save load and every wheel open). Values
+// are not saved.
 //
 // OVERRIDES: the settings menu (Progression > Persuasion) owns a few values per character. Its store
 // calls SetOverride on every game load and change; an override replaces the INI value for that key
 // and survives INI reloads.
 //
-// PERKS: SKYBPersuasionPerks.ini (PersuasionPerks) changes a copy of these values per
+// PERKS: the [PersuasionPerks.*] sections (PersuasionPerks) change a copy of these values per
 // conversation; see PersuasionRules::Resolve. Nothing here knows about the player.
 #include <string_view>
 
@@ -24,9 +25,9 @@ namespace Persuasion
 		static constexpr std::size_t kCount = Table::kCount;
 		using Values = Table::Values;
 
-		// kDataLoaded: read the INI (and the perks file through PersuasionPerks).
+		// kDataLoaded: read the INI (and the perk rules through PersuasionPerks).
 		static void Resolve();
-		// Re-read the INI if it changed on disk since the last read (the perks file too).
+		// Re-read the INI if it changed on disk since the last read (the perk rules too).
 		static void ReloadIfChanged();
 
 		// The settings menu's store: set one override.
@@ -41,9 +42,10 @@ namespace Persuasion
 		[[nodiscard]] static int               Find(std::string_view a_section, std::string_view a_key) { return Table::Find(a_section, a_key); }
 		[[nodiscard]] static const SettingDef& Def(std::size_t a_index) { return kSettingDefs[a_index]; }
 
-		static constexpr std::string_view kIniPath = "Data/SKSE/Plugins/SKYBPersuasion.ini";
+		// [Persuasion.<section>] in SkyblivionSKSE.ini
+		static constexpr std::string_view kIniFeature = "Persuasion";
 
 	private:
-		static inline Table s_table{ kIniPath, "persuasion" };
+		static inline Table s_table{ kIniFeature, "persuasion" };
 	};
 }

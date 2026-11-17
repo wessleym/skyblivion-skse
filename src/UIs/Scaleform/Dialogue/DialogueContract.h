@@ -22,8 +22,9 @@ namespace Dialogue::DialogueContract {
 		inline constexpr const char* OpenDialogueService = "SKYBOpenDialogueService";
 	}
 
-	//Optional extension of the service table, relative to the game folder (see DialogueServices.h).
-	inline constexpr const char* ServicesIniFile = "Data/SKSE/Plugins/SKYBDialogueServices.ini";
+	//Optional extension of the service table: the [DialogueServices.<service>] sections of SkyblivionSKSE.ini
+	//(see DialogueServices.h).
+	inline constexpr const char* ServicesIniFeature = "DialogueServices";
 
 	//Resolved by editor ID (po3 Tweaks).
 	namespace Forms {
