@@ -11,6 +11,8 @@
 #include <unordered_set>
 #include <vector>
 
+#include <Windows.h>
+
 namespace {
 	using RE::BSScript::Object;
 	using ObjectPtr = RE::BSTSmartPointer<Object>;
@@ -32,6 +34,29 @@ namespace {
 	}};
 
 	RE::BSScript::Internal::VirtualMachine* VM() { return RE::BSScript::Internal::VirtualMachine::GetSingleton(); }
+
+	// QuickLoot IE, Skyblivion edition (4.1.3.2 on): QuickLootIE.dll exports QuickLootIE_ApplySettings and takes
+	// its settings as name / number pairs, under the names this table already uses (QLIE_...). No quest and no
+	// script are involved, so nothing has to be waited for, and nothing can put a default back afterwards.
+	// Upstream QuickLoot IE has no such export: nullptr, and the script route in Flush is used. Looked up once,
+	// on the first flush, which is long after every SKSE plugin is loaded.
+	struct QuickLootSetting {
+		const char* name;
+		double      value;
+	};
+	using QuickLootApply = std::uint32_t (*)(const QuickLootSetting*, std::uint32_t);
+
+	QuickLootApply QuickLootDirect() {
+		static const QuickLootApply apply = [] {
+			const auto module = ::GetModuleHandleW(L"QuickLootIE.dll");
+			const auto found = module ? reinterpret_cast<QuickLootApply>(::GetProcAddress(module, "QuickLootIE_ApplySettings")) : nullptr;
+			Log::INFO("interface: QuickLoot settings go {}", found ? "straight to QuickLootIE.dll (QuickLootIE_ApplySettings)" :
+				module ? "through its MCM script (this QuickLootIE.dll has no QuickLootIE_ApplySettings)" :
+						 "through its MCM script (no QuickLootIE.dll is loaded)");
+			return found;
+		}();
+		return apply;
+	}
 
 	// the script object of a_script bound to the quest with editor ID a_quest (the quest resolves once; a
 	// miss is logged once, which is expected when that mod is not installed)
@@ -230,6 +255,21 @@ void InterfaceAdapters::Flush() {
 		// no game loaded yet: the next load's apply refreshes it
 	}
 
+	if (_quickLootDirty) {
+		if (const auto apply = QuickLootDirect()) {
+			std::vector<QuickLootSetting> values;
+			values.reserve(_quickLoot.size());
+			for (const auto& [name, value] : _quickLoot) {
+				values.push_back({ name.c_str(), static_cast<double>(value) });
+			}
+			const auto taken = apply(values.data(), static_cast<std::uint32_t>(values.size()));
+			Log::INFO("interface: QuickLoot - {} of {} setting(s) handed to QuickLootIE.dll", taken, values.size());
+			_quickLoot.clear();
+			_quickLootDirty = false;
+		}
+	}
+
+	// the script route (upstream QuickLoot IE)
 	if (_quickLootDirty) {
 		const auto all = AllBound(kQuickLootScript);
 		const bool ready = !all.empty() && std::all_of(all.begin(), all.end(), [](const ObjectPtr& a) { return QuickLootInitialised(a); });

@@ -7,11 +7,15 @@
 //
 //   moreHUD   settings are AHZ* GlobalVariables. SetGlobal writes one; the flush
 //             calls ahzmainquest.UpdateSettings once per frame of changes.
-//   QuickLoot SetQuickLoot writes a property of QuickLootIEMCM (quest
-//             MCMQuickLootIE); the flush calls QuickLootIENative.UpdateVariables
-//             once. Its first-time init on a new game overwrites every property,
-//             so while IsInitialLoad is true the writes stay pending and are
-//             retried on each SKICP_configManagerReady.
+//   QuickLoot the Skyblivion edition of QuickLootIE.dll exports
+//             QuickLootIE_ApplySettings: the flush hands it the pending values as
+//             name / number pairs and is done (no quest, no script, no waiting).
+//             An upstream QuickLootIE.dll has no such export; then SetQuickLoot's
+//             values are written as properties of QuickLootIEMCM (quest
+//             MCMQuickLootIE) and the flush calls QuickLootIENative.UpdateVariables
+//             once. That script's first-time init on a new game overwrites every
+//             property, so while IsInitialLoad is true the writes stay pending and
+//             are retried on each SKICP_configManagerReady.
 //   MCM       the pages are removed with SKI_ConfigManager.UnregisterMod on every
 //             SKICP_configManagerReady. A removed page never re-registers and the
 //             removal is saved; the scripts stay loaded. Other mods' pages are kept.
