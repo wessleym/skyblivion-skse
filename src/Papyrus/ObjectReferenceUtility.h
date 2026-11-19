@@ -7,9 +7,6 @@ public:
     static void Register(RE::BSScript::Internal::VirtualMachine* vm);
 
 private:
-    /* __declspec(dllimport) */ static inline double g_silent_voice_duration_seconds = 0.0;
-    /* __declspec(dllimport) */ static inline int g_is_obscript_say_say_to = 0;
-
     static inline RE::SCRIPT_FUNCTION* sayFunction = nullptr;
     static inline std::array<std::uint8_t, 9> sayScriptData{
         static_cast<std::uint8_t>(RE::FUNCTION_DATA::FunctionID::kSay), 0x10, 0x5, 0x0, 0x1, 0x0, 0x72, 0x1, 0x0};
@@ -27,6 +24,10 @@ private:
     static RE::Script* initDummySayToScript();
     static float ObScriptSayTo(RE::StaticFunctionTag*, RE::TESObjectREFR* thisActor, RE::Actor* anotherActor,
                                RE::TESTopic* TopicID, bool value);
+
+    // Runs the Say or SayTo command with its script and returns the line's length plus half a second.
+    static float RunSayCommand(RE::SCRIPT_FUNCTION* command, RE::Script* script, RE::TESObjectREFR* speaker,
+                               RE::TESObjectREFR* listener, RE::TESTopic* topic);
 
     static bool isAnimPlaying(RE::StaticFunctionTag*, RE::TESObjectREFR* animatedRefr);
 

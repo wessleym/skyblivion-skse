@@ -1,4 +1,5 @@
 #include "ObjectReferenceUtility.h"
+#include "VoiceDuration.h"
 
 void ObjectReferenceUtility::Register(RE::BSScript::Internal::VirtualMachine* vm) {
 	std::string_view className = "SKYBObjectReferenceUtility";
@@ -22,8 +23,7 @@ void ObjectReferenceUtility::Register(RE::BSScript::Internal::VirtualMachine* vm
 	// For example, PlayerRef.StartConversation(SomeActor_p, SomeTopic_p) works, but
 	// SomeActor_p.StartConversation(PlayerRef, SomeTopic_p) seems to do nothing.
 
-	// I'm measuring performance in SKYBObjectReferenceUtility.psc for the below.
-	SKSEScriptRegistrar::Register(vm, className, "ContainsItem2", ContainsItem);
+	SKSEScriptRegistrar::Register(vm, className, "ContainsItem", ContainsItem);
 }
 
 RE::Script* ObjectReferenceUtility::initDummySayScript() {
@@ -59,16 +59,7 @@ float ObjectReferenceUtility::ObScriptSay(RE::StaticFunctionTag*, RE::TESObjectR
 	RE::Script* dummySayScript = initDummySayScript();
 	dummySayScript->refObjects = reflist;
 
-	g_is_obscript_say_say_to = true;
-	g_silent_voice_duration_seconds = 5.0;
-
-	double result = 0;
-	std::uint32_t opcodeOffset = 0x4;
-	sayFunction->executeFunction(sayFunction->params, reinterpret_cast<RE::SCRIPT_FUNCTION::ScriptData*>(sayScriptData.data()), thisActor, nullptr, dummySayScript, nullptr, result, opcodeOffset);
-
-	g_is_obscript_say_say_to = false;
-	if (result == 0) { result = g_silent_voice_duration_seconds; }
-	return static_cast<float>(result + 0.5);
+	return RunSayCommand(sayFunction, dummySayScript, thisActor, nullptr, TopicID);
 }
 
 RE::Script* ObjectReferenceUtility::initDummySayToScript() {
@@ -110,16 +101,18 @@ float ObjectReferenceUtility::ObScriptSayTo(RE::StaticFunctionTag*, RE::TESObjec
 	RE::Script* dummySayToScript = initDummySayToScript();
 	dummySayToScript->refObjects = reflist;
 
-	g_is_obscript_say_say_to = true;
-	g_silent_voice_duration_seconds = 5.0;
+	return RunSayCommand(sayToFunction, dummySayToScript, thisActor, anotherActor, TopicID);
+}
+
+float ObjectReferenceUtility::RunSayCommand(RE::SCRIPT_FUNCTION* command, RE::Script* script, RE::TESObjectREFR* speaker, RE::TESObjectREFR* listener, RE::TESTopic* topic) {
+	// Measured before running command (Say or SayTo) because the command can run a script that changes which TESTopicInfo is selected.
+	double seconds = VoiceDuration::Seconds(topic, speaker, listener);
+
 	double result = 0;
 	std::uint32_t opcodeOffset = 0x4;
+	command->executeFunction(command->params, script->data, speaker, nullptr, script, nullptr, result, opcodeOffset);
 
-	sayToFunction->executeFunction(sayToFunction->params, reinterpret_cast<RE::SCRIPT_FUNCTION::ScriptData*>(sayToScriptData.data()), thisActor, nullptr, dummySayToScript, nullptr, result, opcodeOffset);
-
-	g_is_obscript_say_say_to = false;
-	if (result == 0) { result = g_silent_voice_duration_seconds; }
-	return static_cast<float>(result + 0.5);
+	return static_cast<float>(seconds + 0.5);
 }
 
 //Mirrors the ObScript IsAnimPlaying with no animation group: is any Gamebryo controller sequence
@@ -214,6 +207,8 @@ bool ObjectReferenceUtility::ContainsItem(RE::StaticFunctionTag*, RE::TESObjectR
 	if (!soughtObjectAsBoundObject) {
 		return false;
 	}
-	auto inventory = objectRef->GetInventory();
-	return inventory.contains(soughtObjectAsBoundObject);
+	// Removed base-container items stay in the map with a count of 0 or less, so the count must be checked.
+	auto counts = objectRef->GetInventoryCounts([soughtObjectAsBoundObject](RE::TESBoundObject& obj) { return &obj == soughtObjectAsBoundObject; });
+	auto it = counts.find(soughtObjectAsBoundObject);
+	return it != counts.end() && it->second > 0;
 }

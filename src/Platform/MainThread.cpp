@@ -1,4 +1,5 @@
 #include "Platform/MainThread.h"
+#include "Platform/ScriptClock.h"
 
 #include <atomic>
 #include <mutex>
@@ -39,6 +40,7 @@ namespace MainThread {
 
 		struct FrameHook {
 			static void thunk(RE::Main* a_main, float a_delta) {
+				ScriptClock::OnFrame();
 				Drain();
 				func(a_main, a_delta);
 			}

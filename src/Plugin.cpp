@@ -9,6 +9,7 @@
 #include "Degradation/TemperHook.h"
 #include "Disposition/DispositionSystem.h"
 #include "Hotkeys/HotkeyService.h"
+#include "Papyrus/FormUtility.h"
 #include "Papyrus/SKSEScriptRegistrar.h"
 #include "PerkSpells/EntryPointSpells.h"
 #include "Platform/FormCache.h"
@@ -113,9 +114,11 @@ bool Plugin::OnLoad(const SKSE::LoadInterface* a_skse)
 			break;
 		case SKSE::MessagingInterface::kPreLoadGame:
 			UISystem::OnPreLoadGame({ static_cast<const char*>(msg->data), msg->dataLen });
+			FormUtility::ClearGetSecondsPassedTimes();
 			break;
 		case SKSE::MessagingInterface::kNewGame:
 			UISystem::OnGameStarting();
+			FormUtility::ClearGetSecondsPassedTimes();
 			//The new game's globals exist a frame later.
 			SKYBDeg::Settings::ReloadIfChanged();
 			Persuasion::Settings::ReloadIfChanged();

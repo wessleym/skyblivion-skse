@@ -1,7 +1,18 @@
 #include "FormUtility.h"
+#include "Platform/ScriptClock.h"
+
+#include <mutex>
+#include <unordered_map>
+
+namespace {
+	std::mutex g_lastGetSecondsPassedTimesLock;
+	std::unordered_map<const void*, double> g_lastGetSecondsPassedTimes;
+}
 
 void FormUtility::Register(RE::BSScript::Internal::VirtualMachine* vm) {
 	SKSEScriptRegistrar::Register(vm, "SKYBFormUtility", "GetAssociatedMenuForm", GetAssociatedMenuForm);
+	SKSEScriptRegistrar::Register(vm, "SKYBFormUtility", "GetSecondsPassed", GetSecondsPassed, true);
+	SKSEScriptRegistrar::Register(vm, "SKYBFormUtility", "GetSecondsPassedByActiveEffect", GetSecondsPassedByActiveEffect, true);
 }
 
 std::vector<RE::TESForm*> FormUtility::GetAssociatedMenuForm(RE::BSScript::Internal::VirtualMachine* /*a_vm*/, RE::VMStackID /*a_stackID*/, RE::StaticFunctionTag*, RE::BSFixedString a_menu) {
@@ -78,4 +89,26 @@ std::vector<RE::TESForm*> FormUtility::GetAssociatedMenuForm(RE::BSScript::Inter
 	result.shrink_to_fit();
 
 	return result;
+}
+
+void FormUtility::ClearGetSecondsPassedTimes() {
+	std::scoped_lock lock(g_lastGetSecondsPassedTimesLock);
+	g_lastGetSecondsPassedTimes.clear();
+}
+
+float FormUtility::GetSecondsPassed(RE::StaticFunctionTag*, RE::TESForm* a_form) {
+	return SecondsSinceLastGetSecondsPassed(a_form);
+}
+
+float FormUtility::GetSecondsPassedByActiveEffect(RE::StaticFunctionTag*, RE::ActiveEffect* a_effect) {
+	return SecondsSinceLastGetSecondsPassed(a_effect);
+}
+
+float FormUtility::SecondsSinceLastGetSecondsPassed(const void* a_object) {
+	const double now = ScriptClock::Seconds();
+	std::scoped_lock lock(g_lastGetSecondsPassedTimesLock);
+	auto [lastTime, isFirstCall] = g_lastGetSecondsPassedTimes.try_emplace(a_object, now);
+	const double seconds = isFirstCall ? 0.0 : now - lastTime->second;
+	lastTime->second = now;
+	return static_cast<float>(seconds);
 }
