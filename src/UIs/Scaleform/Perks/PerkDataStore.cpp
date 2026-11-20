@@ -19,7 +19,7 @@
 namespace fs = std::filesystem;
 using nlohmann::json;
 
-namespace PerksView {
+namespace Perks {
 
 	namespace {
 		constexpr const char* kTreeFileName = "tree.json";  // reserved filename per tree folder

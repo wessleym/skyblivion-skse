@@ -4,13 +4,13 @@
 #include "PersuasionContract.h"
 
 namespace RE { class Actor; }
-class PrismaViewHandle;
+namespace PrismaUI { class PrismaViewHandle; }
 
 namespace Persuasion {
 
-	class PersuasionView : public PrismaFeatureView<PersuasionView> {
+	class PersuasionView : public PrismaUI::PrismaFeatureView<PersuasionView> {
 	public:
-		static void Initialize(const PrismaUIService& service);
+		static void Initialize(const PrismaUI::PrismaUIService& service);
 		static void Open(RE::Actor* target);
 		static void Close();
 		// A game is loading: the wheel is hidden and forgets its target, so no End follows the load.
@@ -19,7 +19,7 @@ namespace Persuasion {
 	private:
 		static constexpr const char* kHtmlPath = "Persuasion/index.html";
 		static constexpr const char* kVerifyJsFunc = PersuasionContract::JsFunc::PersuasionVerifyBridges;
-		static void RegisterListeners(const PrismaViewHandle& view);
+		static void RegisterListeners(const PrismaUI::PrismaViewHandle& view);
 
 		static RE::ActorHandle s_currentTarget;//ActorHandle of NPC currently being persuaded
 

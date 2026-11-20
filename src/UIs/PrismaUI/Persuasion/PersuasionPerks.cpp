@@ -1,7 +1,7 @@
 #include "PersuasionPerks.h"
 
 #include "Platform/FormCache.h"
-#include "Settings/PluginIni.h"
+#include "Platform/PluginIni.h"
 #include "UIs/Scaleform/Skills/SkillData.h"
 
 #include <algorithm>

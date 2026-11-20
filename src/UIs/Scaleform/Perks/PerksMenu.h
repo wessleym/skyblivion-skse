@@ -1,6 +1,6 @@
 #pragma once
 
-namespace PerksView {
+namespace Perks {
 
 	//Opens the SKYBPerksView perk menu through its existing entry point:
 	//the SKYBMenuSwitch mod event with "PerkMenu", which Papyrus handles.

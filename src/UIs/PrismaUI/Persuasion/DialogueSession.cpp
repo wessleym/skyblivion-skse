@@ -135,7 +135,7 @@ namespace Persuasion {
 					// The wheel's last expression is gone for certain before the new conversation's
 					// greeting: a hover's Set that arrives after the close's Reset could otherwise leave
 					// the override on, and an override holds the mouth still through every line that follows.
-					ActorExpression::ResetNow(actor.get());
+					Actors::ActorExpression::ResetNow(actor.get());
 					if (auto* player = RE::PlayerCharacter::GetSingleton()) {
 						// Activate NPC to start conversation (same frame as EnableAI -- no gap to turn).
 						actor->ActivateRef(player, 0, nullptr, 1, false);
@@ -162,7 +162,7 @@ namespace Persuasion {
 				SetDialogueMenuVisible(true);
 				if (RE::ActorPtr actor = REBridge::Lookup(handle)) {
 					// The face is the engine's again before the goodbye (see ReopenDialogueWhenClosed).
-					ActorExpression::ResetNow(actor.get());
+					Actors::ActorExpression::ResetNow(actor.get());
 					// Freeze the NPC before the close releases the NPC so the NPC can't start walking away.
 					// Re-enabled in ReopenDialogueWhenClosed.
 					actor->EnableAI(false);
@@ -213,7 +213,7 @@ namespace Persuasion {
 			RE::ActorHandle handle = target->GetHandle();
 			SKSE::GetTaskInterface()->AddTask([handle] {
 				if (RE::ActorPtr actor = REBridge::Lookup(handle)) {
-					ActorExpression::CloseMouthNow(actor.get());
+					Actors::ActorExpression::CloseMouthNow(actor.get());
 				}
 			});
 		}

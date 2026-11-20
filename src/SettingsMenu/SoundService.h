@@ -16,7 +16,7 @@
 // manager's master volume and the game's fAudioMasterVolume setting. When the menu closes after a change, the game's
 // prefs writer saves the file (as the journal's SaveSettings does); the game reads it back at the next start.
 // Each change plays a short sound of the category (not for music, which is heard anyway).
-namespace SKYBSettingsMenu
+namespace SettingsMenu
 {
 	class SoundService : public RE::BSTEventSink<RE::MenuOpenCloseEvent>
 	{

@@ -130,7 +130,7 @@ namespace Achievements {
 			try {
 				//Replaces bytes that are not UTF-8, such as a character name in a Windows code page, instead of throwing.
 				const auto serializedStore = g_store.dump(2, ' ', false, nlohmann::json::error_handler_t::replace);
-				if (SafeFileWrite::Write(*path, serializedStore, "AchievementStore")) {
+				if (Storage::SafeFileWrite::Write(*path, serializedStore, "AchievementStore")) {
 					Log::INFO("AchievementStore: Saved {} achievement(s).", count);
 				}
 			}

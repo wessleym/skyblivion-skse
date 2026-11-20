@@ -8,7 +8,7 @@
 #include <string>
 #include <string_view>
 
-namespace StringsFormat {
+namespace Translation::StringsFormat {
 	inline void TrimInPlace(std::string& text) {
 		const auto notSpace = [](unsigned char c) { return !std::isspace(c); };
 		text.erase(text.begin(), std::find_if(text.begin(), text.end(), notSpace));

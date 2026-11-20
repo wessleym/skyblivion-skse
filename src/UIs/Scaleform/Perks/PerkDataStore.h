@@ -5,7 +5,7 @@
 #include <string_view>
 #include <vector>
 
-namespace PerksView {
+namespace Perks {
 
 	//Loads and caches the perk tree definitions from PerksContract::DataRoot.
 	//

@@ -39,79 +39,82 @@
 
 #include "SettingsMenu/SettingsMenuTable.h"
 
-class HotkeyService :
-	public RE::BSTEventSink<SKSE::ModCallbackEvent>,
-	public RE::BSTEventSink<RE::InputEvent*> {
-public:
-	struct Binding {
-		int pc = -1;
-		int pad = -1;
+namespace Hotkeys
+{
+	class HotkeyService :
+		public RE::BSTEventSink<SKSE::ModCallbackEvent>,
+		public RE::BSTEventSink<RE::InputEvent*> {
+	public:
+		struct Binding {
+			int pc = -1;
+			int pad = -1;
+		};
+		struct Status {
+			std::string key;  // string key, "" = none
+			std::string arg;  // {0}; a string key is translated by the menu
+		};
+
+		static HotkeyService* GetSingleton();
+		void Register();  // kDataLoaded: both sinks
+
+		[[nodiscard]] static const SettingsMenu::HotkeyDef*      Find(std::string_view a_id);
+		[[nodiscard]] static const SettingsMenu::HotkeyGroupDef* Group(std::string_view a_id);
+		[[nodiscard]] static const SettingsMenu::KeyName*        Name(int a_code, bool a_game = false);
+		[[nodiscard]] static bool                                    IsGame(const SettingsMenu::HotkeyDef& a_def);
+		[[nodiscard]] static bool IsShared(const SettingsMenu::HotkeyDef& a_def);  // a shared action itself
+		// devices this row binds itself (1 keyboard, 2 gamepad; 0 = it only follows a shared action)
+		[[nodiscard]] static int  OwnDevices(const SettingsMenu::HotkeyDef& a_def);
+		[[nodiscard]] static bool Listed(const SettingsMenu::HotkeyDef& a_def) { return OwnDevices(a_def) != 0; }
+		[[nodiscard]] static std::string Text(const SettingsMenu::HotkeyDef& a_def, Binding a_binding);  // "R  /  Y"
+
+		[[nodiscard]] Binding Get(const SettingsMenu::HotkeyDef& a_def) const;      // this row's own (stored) binding
+		[[nodiscard]] Binding Resolve(const SettingsMenu::HotkeyDef& a_def) const;  // what its menu receives
+		void                  Reset(const SettingsMenu::HotkeyDef& a_def);
+		void                  ApplyGameKeys();  // kPostLoadGame / kNewGame: every in-world binding to its targets
+
+		void                      BeginCapture(std::string_view a_id);
+		void                      CancelCapture();
+		[[nodiscard]] std::string CapturingId() const;
+		[[nodiscard]] Status      TakeStatus();  // one-shot message for the settings menu
+
+		// called after a capture ends or a binding changes (the settings menu re-pushes)
+		void SetOnChange(std::function<void()> a_fn) { _onChange = std::move(a_fn); }
+
+		// {<id>: {pc, pad, pcGlyph, padGlyph, ps3Glyph}} in a_movie
+		void BuildMap(RE::GFxMovieView* a_movie, RE::GFxValue& a_out) const;
+
+		RE::BSEventNotifyControl ProcessEvent(const SKSE::ModCallbackEvent* a_event,
+											  RE::BSTEventSource<SKSE::ModCallbackEvent>*) override;
+		RE::BSEventNotifyControl ProcessEvent(RE::InputEvent* const* a_event,
+											  RE::BSTEventSource<RE::InputEvent*>*) override;
+
+		static constexpr std::string_view kSection = "Hotkeys";
+		static constexpr std::string_view kRequestEvent = "SKYBRequestHotkeys";
+		static constexpr std::string_view kSharedGroup = "shared";
+
+	private:
+		// a rebind: refused (status set), or the rows that give up the key
+		struct Plan {
+			Status                                        refuse;
+			std::vector<const SettingsMenu::HotkeyDef*> swaps;
+		};
+
+		HotkeyService() = default;
+		void Store(const SettingsMenu::HotkeyDef& a_def, Binding a_binding);
+		[[nodiscard]] Plan PlanAssign(const SettingsMenu::HotkeyDef& a_def, bool a_pad, int a_code, bool a_reset) const;
+		void Assign(const SettingsMenu::HotkeyDef& a_def, bool a_pad, int a_code, const Plan& a_plan);
+		void EndCapture(Status a_status);
+		void ApplyGame(const SettingsMenu::HotkeyDef& a_def, Binding a_binding);
+		void DropSharedMemberEntries();  // bindings stored before an action became shared
+		// the menu groups that receive a_def's binding on that device
+		[[nodiscard]] static std::vector<const SettingsMenu::HotkeyGroupDef*> Groups(const SettingsMenu::HotkeyDef& a_def,
+																						bool a_pad);
+		// the row that decides a_def's binding on that device (its shared action, or itself)
+		[[nodiscard]] static const SettingsMenu::HotkeyDef* Owner(const SettingsMenu::HotkeyDef& a_def, bool a_pad);
+
+		std::string                           _capturing;  // action id, "" = not capturing
+		std::chrono::steady_clock::time_point _armedAt{};
+		Status                                _status;
+		std::function<void()>                 _onChange;
 	};
-	struct Status {
-		std::string key;  // string key, "" = none
-		std::string arg;  // {0}; a string key is translated by the menu
-	};
-
-	static HotkeyService* GetSingleton();
-	void Register();  // kDataLoaded: both sinks
-
-	[[nodiscard]] static const SKYBSettingsMenu::HotkeyDef*      Find(std::string_view a_id);
-	[[nodiscard]] static const SKYBSettingsMenu::HotkeyGroupDef* Group(std::string_view a_id);
-	[[nodiscard]] static const SKYBSettingsMenu::KeyName*        Name(int a_code, bool a_game = false);
-	[[nodiscard]] static bool                                    IsGame(const SKYBSettingsMenu::HotkeyDef& a_def);
-	[[nodiscard]] static bool IsShared(const SKYBSettingsMenu::HotkeyDef& a_def);  // a shared action itself
-	// devices this row binds itself (1 keyboard, 2 gamepad; 0 = it only follows a shared action)
-	[[nodiscard]] static int  OwnDevices(const SKYBSettingsMenu::HotkeyDef& a_def);
-	[[nodiscard]] static bool Listed(const SKYBSettingsMenu::HotkeyDef& a_def) { return OwnDevices(a_def) != 0; }
-	[[nodiscard]] static std::string Text(const SKYBSettingsMenu::HotkeyDef& a_def, Binding a_binding);  // "R  /  Y"
-
-	[[nodiscard]] Binding Get(const SKYBSettingsMenu::HotkeyDef& a_def) const;      // this row's own (stored) binding
-	[[nodiscard]] Binding Resolve(const SKYBSettingsMenu::HotkeyDef& a_def) const;  // what its menu receives
-	void                  Reset(const SKYBSettingsMenu::HotkeyDef& a_def);
-	void                  ApplyGameKeys();  // kPostLoadGame / kNewGame: every in-world binding to its targets
-
-	void                      BeginCapture(std::string_view a_id);
-	void                      CancelCapture();
-	[[nodiscard]] std::string CapturingId() const;
-	[[nodiscard]] Status      TakeStatus();  // one-shot message for the settings menu
-
-	// called after a capture ends or a binding changes (the settings menu re-pushes)
-	void SetOnChange(std::function<void()> a_fn) { _onChange = std::move(a_fn); }
-
-	// {<id>: {pc, pad, pcGlyph, padGlyph, ps3Glyph}} in a_movie
-	void BuildMap(RE::GFxMovieView* a_movie, RE::GFxValue& a_out) const;
-
-	RE::BSEventNotifyControl ProcessEvent(const SKSE::ModCallbackEvent* a_event,
-										  RE::BSTEventSource<SKSE::ModCallbackEvent>*) override;
-	RE::BSEventNotifyControl ProcessEvent(RE::InputEvent* const* a_event,
-										  RE::BSTEventSource<RE::InputEvent*>*) override;
-
-	static constexpr std::string_view kSection = "Hotkeys";
-	static constexpr std::string_view kRequestEvent = "SKYBRequestHotkeys";
-	static constexpr std::string_view kSharedGroup = "shared";
-
-private:
-	// a rebind: refused (status set), or the rows that give up the key
-	struct Plan {
-		Status                                        refuse;
-		std::vector<const SKYBSettingsMenu::HotkeyDef*> swaps;
-	};
-
-	HotkeyService() = default;
-	void Store(const SKYBSettingsMenu::HotkeyDef& a_def, Binding a_binding);
-	[[nodiscard]] Plan PlanAssign(const SKYBSettingsMenu::HotkeyDef& a_def, bool a_pad, int a_code, bool a_reset) const;
-	void Assign(const SKYBSettingsMenu::HotkeyDef& a_def, bool a_pad, int a_code, const Plan& a_plan);
-	void EndCapture(Status a_status);
-	void ApplyGame(const SKYBSettingsMenu::HotkeyDef& a_def, Binding a_binding);
-	void DropSharedMemberEntries();  // bindings stored before an action became shared
-	// the menu groups that receive a_def's binding on that device
-	[[nodiscard]] static std::vector<const SKYBSettingsMenu::HotkeyGroupDef*> Groups(const SKYBSettingsMenu::HotkeyDef& a_def,
-																					bool a_pad);
-	// the row that decides a_def's binding on that device (its shared action, or itself)
-	[[nodiscard]] static const SKYBSettingsMenu::HotkeyDef* Owner(const SKYBSettingsMenu::HotkeyDef& a_def, bool a_pad);
-
-	std::string                           _capturing;  // action id, "" = not capturing
-	std::chrono::steady_clock::time_point _armedAt{};
-	Status                                _status;
-	std::function<void()>                 _onChange;
-};
+}

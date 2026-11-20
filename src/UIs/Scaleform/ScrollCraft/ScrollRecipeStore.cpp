@@ -301,7 +301,7 @@ namespace ScrollCraft {
 			if (!ui || !ui->IsMenuOpen(RE::InventoryMenu::MENU_NAME)) {
 				return false;
 			}
-			ScaleformUtility::HideMenu(RE::InventoryMenu::MENU_NAME);
+			Scaleform::ScaleformUtility::HideMenu(RE::InventoryMenu::MENU_NAME);
 			return true;
 		}
 		void PapyrusShowInventory(RE::StaticFunctionTag*)
@@ -309,7 +309,7 @@ namespace ScrollCraft {
 			SKSE::GetTaskInterface()->AddTask([] {
 				auto* ui = RE::UI::GetSingleton();
 				if (ui && !ui->IsMenuOpen(RE::InventoryMenu::MENU_NAME)) {
-					ScaleformUtility::ShowMenu(RE::InventoryMenu::MENU_NAME);
+					Scaleform::ScaleformUtility::ShowMenu(RE::InventoryMenu::MENU_NAME);
 				}
 			});
 		}
@@ -473,16 +473,16 @@ namespace ScrollCraft {
 
 	void ScrollRecipeStore::RegisterPapyrus(RE::BSScript::Internal::VirtualMachine* vm)
 	{
-		SKSEScriptRegistrar::Register(vm, ScriptName, "GetStatus", PapyrusStatus);
-		SKSEScriptRegistrar::Register(vm, ScriptName, "GetScroll", PapyrusScroll);
-		SKSEScriptRegistrar::Register(vm, ScriptName, "Find", PapyrusFind);
-		SKSEScriptRegistrar::Register(vm, ScriptName, "Resolve", PapyrusResolve);
-		SKSEScriptRegistrar::Register(vm, ScriptName, "KnownTable", PapyrusKnownTable);
-		SKSEScriptRegistrar::Register(vm, ScriptName, "GetSeats", PapyrusGetSeats);
-		SKSEScriptRegistrar::Register(vm, ScriptName, "GetCosts", PapyrusGetCosts);
-		SKSEScriptRegistrar::Register(vm, ScriptName, "GetCost", PapyrusGetCost);
-		SKSEScriptRegistrar::Register(vm, ScriptName, "PlayUISound", PapyrusPlayUISound);
-		SKSEScriptRegistrar::Register(vm, ScriptName, "HideInventory", PapyrusHideInventory);
-		SKSEScriptRegistrar::Register(vm, ScriptName, "ShowInventory", PapyrusShowInventory);
+		Papyrus::SKSEScriptRegistrar::Register(vm, ScriptName, "GetStatus", PapyrusStatus);
+		Papyrus::SKSEScriptRegistrar::Register(vm, ScriptName, "GetScroll", PapyrusScroll);
+		Papyrus::SKSEScriptRegistrar::Register(vm, ScriptName, "Find", PapyrusFind);
+		Papyrus::SKSEScriptRegistrar::Register(vm, ScriptName, "Resolve", PapyrusResolve);
+		Papyrus::SKSEScriptRegistrar::Register(vm, ScriptName, "KnownTable", PapyrusKnownTable);
+		Papyrus::SKSEScriptRegistrar::Register(vm, ScriptName, "GetSeats", PapyrusGetSeats);
+		Papyrus::SKSEScriptRegistrar::Register(vm, ScriptName, "GetCosts", PapyrusGetCosts);
+		Papyrus::SKSEScriptRegistrar::Register(vm, ScriptName, "GetCost", PapyrusGetCost);
+		Papyrus::SKSEScriptRegistrar::Register(vm, ScriptName, "PlayUISound", PapyrusPlayUISound);
+		Papyrus::SKSEScriptRegistrar::Register(vm, ScriptName, "HideInventory", PapyrusHideInventory);
+		Papyrus::SKSEScriptRegistrar::Register(vm, ScriptName, "ShowInventory", PapyrusShowInventory);
 	}
 }

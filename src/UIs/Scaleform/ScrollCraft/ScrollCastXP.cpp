@@ -1,6 +1,6 @@
 #include "ScrollCastXP.h"
 #include "Platform/Text.h"
-#include "Settings/PluginIni.h"
+#include "Platform/PluginIni.h"
 
 #include <algorithm>
 #include <string>

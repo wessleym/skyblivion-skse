@@ -9,7 +9,7 @@
 //    CreateDetectionEvent makes) and, when the lock is owned and the player is detected,
 //    the trespass alarm lockpicking raises (1.7.104 id 51981: owner -> highest detection level
 //    against the player -> Actor::TrespassAlarm(ref, owner, -1));
-//  * with Degradation on, the weapon takes extra wear through SKYBDeg::DecayService::Degrade,
+//  * with Degradation on, the weapon takes extra wear through Degradation::DecayService::Degrade,
 //    scaled by the lock level, from fWearMultFail or fWearMultSuccess (2026-11-05: more wear, and
 //    more for a lock that gives way);
 //  * the player hears sSuccessSound or sFailSound at the lock (2026-11-05; the detection event is

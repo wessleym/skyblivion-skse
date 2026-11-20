@@ -23,11 +23,11 @@ namespace Persuasion {
 
 	}
 
-	void PersuasionView::Initialize(const PrismaUIService& service) {
+	void PersuasionView::Initialize(const PrismaUI::PrismaUIService& service) {
 		PrismaFeatureView::Initialize(service, kHtmlPath, kVerifyJsFunc, &PersuasionView::RegisterListeners);
 	}
 
-	void PersuasionView::RegisterListeners(const PrismaViewHandle& view) {
+	void PersuasionView::RegisterListeners(const PrismaUI::PrismaViewHandle& view) {
 		view.RegisterListener(PersuasionContract::Listener::PersuasionWedgeHover, OnWedgeHover);
 		view.RegisterListener(PersuasionContract::Listener::PersuasionClose, OnCloseFromJS);
 		view.RegisterListener(PersuasionContract::Listener::PersuasionDispositionChanged, OnDispositionChanged);
@@ -61,7 +61,7 @@ namespace Persuasion {
 
 		auto displayName = target->GetDisplayFullName();
 		std::string name = displayName ? displayName : "Name Not Found";
-		int disposition = DispositionSystem::GetDispositionActorValue(target);
+		int disposition = Disposition::DispositionSystem::GetDispositionActorValue(target);
 		auto prefs = PersuasionPreferences::GetRandomPreferences(target);
 
 		nlohmann::json preferences = nlohmann::json::object();
@@ -94,7 +94,7 @@ namespace Persuasion {
 		}
 
 		if (RE::ActorPtr actor = REBridge::Lookup(s_currentTarget)) {
-			ActorExpression::Reset(actor.get());
+			Actors::ActorExpression::Reset(actor.get());
 		}
 
 		DialogueSession::End(s_currentTarget);
@@ -130,10 +130,10 @@ namespace Persuasion {
 			return;
 		}
 		if (const auto* info = PersuasionPreferences::GetPreference(preference)) {
-			ActorExpression::Set(actor, info->expression, info->strength);
+			Actors::ActorExpression::Set(actor, info->expression, info->strength);
 		}
 		else {
-			ActorExpression::Reset(actor);
+			Actors::ActorExpression::Reset(actor);
 		}
 	}
 
@@ -208,7 +208,7 @@ namespace Persuasion {
 		RE::ActorHandle handle = actor->GetHandle();
 		taskInterface->AddTask([handle, value]() {
 			if (RE::ActorPtr actor = REBridge::Lookup(handle)) {
-				DispositionSystem::SetDispositionActorValue(actor.get(), value, true);
+				Disposition::DispositionSystem::SetDispositionActorValue(actor.get(), value, true);
 			}
 			});
 	}

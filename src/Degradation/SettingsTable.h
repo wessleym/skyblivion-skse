@@ -6,7 +6,7 @@
 #include <cstdint>
 #include <iterator>
 
-namespace SKYBDeg
+namespace Degradation
 {
     enum class G : std::uint32_t
     {

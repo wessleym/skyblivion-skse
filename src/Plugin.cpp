@@ -15,7 +15,7 @@
 #include "Platform/FormCache.h"
 #include "Platform/MainThread.h"
 #include "Resources.h"
-#include "Settings/PluginIni.h"
+#include "Platform/PluginIni.h"
 #include "Settings/SettingsService.h"
 #include "SettingsMenu/CombatService.h"
 #include "SettingsMenu/EconomyService.h"
@@ -28,11 +28,9 @@
 #include "Storage/CoSave.h"
 #include "UIs/PrismaUI/Persuasion/PersuasionSettings.h"
 #include "UIs/Scaleform/Alchemy/AlchemyMenuFeed.h"
-#include "UIs/Scaleform/Cursor/HoverCursor.h"
 #include "UIs/Scaleform/ScrollCraft/ScrollCastXP.h"
 #include "UIs/Scaleform/ScrollCraft/ScrollRecipeStore.h"
 #include "UIs/Scaleform/StartMenu/StartMenuService.h"
-#include "UIs/TweenMenuFilter.h"
 #include "UIs/UISystem.h"
 
 #include <Windows.h>
@@ -59,11 +57,11 @@ bool Plugin::OnLoad(const SKSE::LoadInterface* a_skse)
 		return false;
 	}
 
-	if (!SKSEScriptRegistrar::Initialize()) {
+	if (!Papyrus::SKSEScriptRegistrar::Initialize()) {
 		return false;
 	}
 
-	DispositionSystem::Initialize();
+	Disposition::DispositionSystem::Initialize();
 
 	//One SKSE trampoline for every call-site hook in the plugin (the frame hook, the temper
 	//patches, PerkSpells, SpellReflect): AllocTrampoline replaces the previous allocation, so it is
@@ -80,8 +78,8 @@ bool Plugin::OnLoad(const SKSE::LoadInterface* a_skse)
 	PluginIni::Load();
 
 	//Weapon and armor degradation. The temper patches cover SE, AE and VR. A call site that isn't patched is logged with the reason.
-	SKYBDeg::InventoryHook::Install();
-	SKYBDeg::TemperHook::Install();
+	Degradation::InventoryHook::Install();
+	Degradation::TemperHook::Install();
 
 	//Perk "Apply ... Spell" entry points stack and the perk owner casts (the former standalone
 	//SKYBPerkSpells.dll, folded in; settings in [PerkSpells.*]). At plugin load, as it was there.
@@ -92,16 +90,10 @@ bool Plugin::OnLoad(const SKSE::LoadInterface* a_skse)
 	//[SpellReflect.*]). At plugin load, as it was there.
 	SpellReflect::Install();
 
-	UISystem::Initialize();
-
-	//The vanilla crafting menu's alchemy data: SKSE takes Scaleform callbacks only while loading.
-	Alchemy::AlchemyMenuFeed::InstallScaleform();
-
-	//The pointing-hand cursor over anything clickable in any menu: a Mouse listener in every movie.
-	HoverCursor::InstallScaleform();
+	UIs::UISystem::Initialize();
 
 	//One co-save for the plugin: every store adds its record first (UISystem: spell making).
-	SKYBSettingsMenu::Store::InstallSerialization();
+	SettingsMenu::Store::InstallSerialization();
 	//Achievements: this save's unlocks (definitions in ConfigFiles\Achievements).
 	Achievements::AchievementService::InstallSerialization();
 	Storage::CoSave::Install();
@@ -110,36 +102,36 @@ bool Plugin::OnLoad(const SKSE::LoadInterface* a_skse)
 	auto OnMessage = [](SKSE::MessagingInterface::Message* msg) {
 		switch (msg->type) {
 		case SKSE::MessagingInterface::kPostLoad:
-			UISystem::OnPostLoad();
+			UIs::UISystem::OnPostLoad();
 			break;
 		case SKSE::MessagingInterface::kInputLoaded:
-			UISystem::OnInputLoaded();
+			UIs::UISystem::OnInputLoaded();
 			//The block-press listener for timed blocks and parries.
 			SpellReflect::OnInputLoaded();
 			break;
 		case SKSE::MessagingInterface::kPreLoadGame:
-			UISystem::OnPreLoadGame({ static_cast<const char*>(msg->data), msg->dataLen });
-			FormUtility::ClearGetSecondsPassedTimes();
+			UIs::UISystem::OnPreLoadGame({ static_cast<const char*>(msg->data), msg->dataLen });
+			Papyrus::FormUtility::ClearGetSecondsPassedTimes();
 			break;
 		case SKSE::MessagingInterface::kNewGame:
-			UISystem::OnGameStarting();
-			FormUtility::ClearGetSecondsPassedTimes();
+			UIs::UISystem::OnGameStarting();
+			Papyrus::FormUtility::ClearGetSecondsPassedTimes();
 			//The new game's globals exist a frame later.
-			SKYBDeg::Settings::ReloadIfChanged();
+			Degradation::Settings::ReloadIfChanged();
 			Persuasion::Settings::ReloadIfChanged();
 			ScrollCraft::ScrollCastXP::GetSingleton()->Reload();
 			SKSE::GetTaskInterface()->AddTask([] {
-				SKYBSettingsMenu::Store::GetSingleton()->OnGameReady(true);
+				SettingsMenu::Store::GetSingleton()->OnGameReady(true);
 				StartMenu::StartMenuService::OnNewGame();  // the new-game panel's presets, if chosen
 			});
 			break;
 		case SKSE::MessagingInterface::kPostLoadGame:
 			//Take the degradation and persuasion settings again if the INI changed, then apply every settings-menu
 			//row (its degradation and persuasion overrides among them).
-			SKYBDeg::Settings::ReloadIfChanged();
+			Degradation::Settings::ReloadIfChanged();
 			Persuasion::Settings::ReloadIfChanged();
 			ScrollCraft::ScrollCastXP::GetSingleton()->Reload();
-			SKYBSettingsMenu::Store::GetSingleton()->OnGameReady(false);
+			SettingsMenu::Store::GetSingleton()->OnGameReady(false);
 			break;
 		case SKSE::MessagingInterface::kDataLoaded:
 			Log::INFO("SKSE Data Loaded...");
@@ -154,32 +146,29 @@ bool Plugin::OnLoad(const SKSE::LoadInterface* a_skse)
 			ScrollCraft::ScrollRecipeStore::LoadOnce();
 			//Casting a scroll or firing a staff trains Enchanting ([ScrollCrafting.CastingXP]).
 			ScrollCraft::ScrollCastXP::GetSingleton()->Register();
-			DispositionSystem::OnDataLoaded();
+			Disposition::DispositionSystem::OnDataLoaded();
 			Sigil::SigilSystem::Register();
 			Achievements::AchievementService::Register();
 			//Before UISystem: the title screen and the journal read the settings.
 			Settings::SettingsService::Register();
 			//The settings menu and the services it drives.
 			//Combat before the store: the store applies through it.
-			CombatService::GetSingleton()->Register();
-			SKYBSettingsMenu::SoundService::GetSingleton()->Register();
-			EconomyService::GetSingleton()->Register();
-			HotkeyService::GetSingleton()->Register();
-			InterfaceAdapters::GetSingleton()->Register();
-			SKYBSettingsMenu::Store::GetSingleton()->Register();
-			SKYBSettingsMenu::SettingsMenu::Register();
+			SettingsMenu::CombatService::GetSingleton()->Register();
+			SettingsMenu::SoundService::GetSingleton()->Register();
+			SettingsMenu::EconomyService::GetSingleton()->Register();
+			Hotkeys::HotkeyService::GetSingleton()->Register();
+			SettingsMenu::InterfaceAdapters::GetSingleton()->Register();
+			SettingsMenu::Store::GetSingleton()->Register();
+			SettingsMenu::SettingsMenu::Register();
 			//Degradation: its INI and tool list, the repair menu and its opener, the decay itself.
-			SKYBDeg::Settings::Resolve();
-			SKYBDeg::RepairMenu::Register();
-			SKYBDeg::RepairMenuOpener::GetSingleton()->Register();
-			SKYBDeg::DecayService::GetSingleton()->Register();
-			SKYBDeg::Breakage::EquipGuard::GetSingleton()->Register();
+			Degradation::Settings::Resolve();
+			Degradation::RepairMenu::Register();
+			Degradation::RepairMenuOpener::GetSingleton()->Register();
+			Degradation::DecayService::GetSingleton()->Register();
+			Degradation::Breakage::EquipGuard::GetSingleton()->Register();
 			//Persuasion: its INI and perk rules (UISystem opens the wheel).
 			Persuasion::Settings::Resolve();
-			UISystem::OnDataLoaded();
-			//The Tween menu's tool options (TOOLS). Here, not at kNewGame / kPostLoadGame: 'coc' from the
-			//title screen sends neither. Its pass runs the frame after the open, after Tween Menu Overhaul's sink.
-			TweenTools::TweenMenuFilter::Register();
+			UIs::UISystem::OnDataLoaded();
 			Log::INFO("SKSE Data Loaded Complete");
 			break;
 		default:

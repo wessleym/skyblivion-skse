@@ -2,7 +2,7 @@
 
 //The SKYBPerksView perk menu (Scaleform), ported from SKYBPerkService.
 //The menu's event contract and JSON schemas are defined by the SKYBPerksView design documents.
-namespace PerksView::PerksContract {
+namespace Perks::PerksContract {
 	//SKYBPerksView.swf -> C++:
 	namespace ModEvent {
 		//strArg: "menu,target[,mode]". Pushes the tree definitions (PerksFeed).

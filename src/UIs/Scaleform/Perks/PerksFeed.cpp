@@ -10,7 +10,7 @@
 #include <chrono>
 #include <unordered_set>
 
-namespace PerksView {
+namespace Perks {
 
 	namespace {
 		const char* CurrencyTypeName(CurrencyType type) {
@@ -87,7 +87,7 @@ namespace PerksView {
 	}
 
 	void PerksFeed::Register() {
-		if (!ModEvents::AddSink(&s_sink)) {
+		if (!Papyrus::ModEvents::AddSink(&s_sink)) {
 			Log::WARN("PerksFeed: No mod-event source. Perk menu requests will not be heard.");
 			return;
 		}
@@ -97,7 +97,7 @@ namespace PerksView {
 	void PerksFeed::PushTrees(const std::string& request) {
 		const auto start = std::chrono::steady_clock::now();
 
-		const auto feed = FeedRequest::Open(request, FeedRequest::Mode::Optional, "PerksFeed (trees)");
+		const auto feed = Scaleform::FeedRequest::Open(request, Scaleform::FeedRequest::Mode::Optional, "PerksFeed (trees)");
 		if (!feed) {
 			return;
 		}
@@ -134,13 +134,13 @@ namespace PerksView {
 			return;
 		}
 		Log::INFO("PerksFeed: {} tree(s), {} perk(s) -> {} in {} us.",
-			PerkDataStore::Trees().size(), perkCount, feed->target, ScaleformUtility::MicrosecondsSince(start));
+			PerkDataStore::Trees().size(), perkCount, feed->target, Scaleform::ScaleformUtility::MicrosecondsSince(start));
 	}
 
 	void PerksFeed::PushState(const std::string& request) {
 		const auto start = std::chrono::steady_clock::now();
 
-		const auto feed = FeedRequest::Open(request, FeedRequest::Mode::Optional, "PerksFeed (state)");
+		const auto feed = Scaleform::FeedRequest::Open(request, Scaleform::FeedRequest::Mode::Optional, "PerksFeed (state)");
 		auto* player = RE::PlayerCharacter::GetSingleton();
 		if (!feed || !player) {
 			return;
@@ -241,7 +241,7 @@ namespace PerksView {
 		}
 		Log::INFO("PerksFeed: State (level {}, {} perk point(s), {} tree(s), {} actor value(s)) -> {} in {} us.",
 			player->GetLevel(), perkPoints, trees.size(), actorValueNames.size(), feed->target,
-			ScaleformUtility::MicrosecondsSince(start));
+			Scaleform::ScaleformUtility::MicrosecondsSince(start));
 	}
 
 	RE::BSEventNotifyControl PerksFeed::Sink::ProcessEvent(const SKSE::ModCallbackEvent* a_event,
@@ -250,10 +250,10 @@ namespace PerksView {
 			return RE::BSEventNotifyControl::kContinue;
 		}
 		if (a_event->eventName == PerksContract::ModEvent::RequestTrees) {
-			MainThread::Post([request = ModEvents::StrArg(*a_event)] { PushTrees(request); });
+			MainThread::Post([request = Papyrus::ModEvents::StrArg(*a_event)] { PushTrees(request); });
 		}
 		else if (a_event->eventName == PerksContract::ModEvent::RequestState) {
-			MainThread::Post([request = ModEvents::StrArg(*a_event)] { PushState(request); });
+			MainThread::Post([request = Papyrus::ModEvents::StrArg(*a_event)] { PushState(request); });
 		}
 		return RE::BSEventNotifyControl::kContinue;
 	}

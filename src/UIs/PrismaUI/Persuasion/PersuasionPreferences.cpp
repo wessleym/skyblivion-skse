@@ -7,10 +7,10 @@ namespace Persuasion {
 
 	namespace {
 		constexpr std::array<PersuasionPreferences::PreferenceInfo, 4> kPreferences = { {
-			{ "Love", ActorExpression::Expression::Happy, 100.0f},
-			{ "Like",  ActorExpression::Expression::Happy, 50.0f },
-			{ "Dislike", ActorExpression::Expression::Anger, 50.0f},
-			{ "Hate", ActorExpression::Expression::Anger, 100.0f},
+			{ "Love", Actors::ActorExpression::Expression::Happy, 100.0f},
+			{ "Like",  Actors::ActorExpression::Expression::Happy, 50.0f },
+			{ "Dislike", Actors::ActorExpression::Expression::Anger, 50.0f},
+			{ "Hate", Actors::ActorExpression::Expression::Anger, 100.0f},
 		} };
 
 		// Fixed action quadrants. Their count drives the preference shuffle below.

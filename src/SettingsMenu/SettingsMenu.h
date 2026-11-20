@@ -29,7 +29,7 @@
 //                 + Hotkeys rows: {id, category "Hotkeys", group, type "key", label, desc,
 //                   text, defaultText, changed, scope "global", applies ("key" | "keyworld")}
 //   Every change re-sends the whole set; the movie keeps its place by id.
-namespace SKYBSettingsMenu
+namespace SettingsMenu
 {
 	class SettingsMenu : public RE::IMenu
 	{

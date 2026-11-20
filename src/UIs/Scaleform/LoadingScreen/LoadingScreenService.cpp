@@ -18,7 +18,7 @@ namespace LoadingScreen {
 		constexpr std::uint32_t kScanE = 0x12;
 
 		RE::GPtr<RE::GFxMovieView> LoadingMovie() {
-			return ScaleformUtility::OpenMenuMovie(RE::LoadingMenu::MENU_NAME);
+			return Scaleform::ScaleformUtility::OpenMenuMovie(RE::LoadingMenu::MENU_NAME);
 		}
 
 		RE::BGSLocation* DestinationLocation() {
@@ -53,7 +53,7 @@ namespace LoadingScreen {
 	}
 
 	void LoadingScreenService::Register() {
-		if (!s_modEventSinkAdded && ModEvents::AddSink(&s_sink)) {
+		if (!s_modEventSinkAdded && Papyrus::ModEvents::AddSink(&s_sink)) {
 			s_modEventSinkAdded = true;
 			Log::INFO("LoadingScreenService: Mod-event sink registered.");
 		}
@@ -165,7 +165,7 @@ namespace LoadingScreen {
 		if (!movie) {
 			return;
 		}
-		const bool gamepad = ScaleformUtility::GamepadActive();
+		const bool gamepad = Scaleform::ScaleformUtility::GamepadActive();
 
 		RE::GFxValue arg{ gamepad };
 		movie->Invoke(LoadingScreenContract::AsPath::SetGamepad, nullptr, &arg, 1);

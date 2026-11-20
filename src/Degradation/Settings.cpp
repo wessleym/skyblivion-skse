@@ -3,7 +3,7 @@
 #include <cstdint>
 #include <format>
 
-namespace SKYBDeg
+namespace Degradation
 {
 	void Settings::Resolve()
 	{

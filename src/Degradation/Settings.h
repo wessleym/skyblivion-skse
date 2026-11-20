@@ -4,7 +4,7 @@
 #include <vector>
 
 #include "Degradation/SettingsTable.h"
-#include "Settings/IniTable.h"
+#include "Platform/IniTable.h"
 
 // Every tunable of the degradation system lives in the [Degradation.*] sections of
 // Data\SKSE\Plugins\SkyblivionSKSE.ini (PluginIni), one key per row of Settings.csv (which also gives the
@@ -14,7 +14,7 @@
 // Overrides: the settings menu owns the player-facing values (wear rate, stat floor, prices...) per
 // character and calls SetOverride for each on every game load and change. An override replaces the
 // INI value and survives INI reloads.
-namespace SKYBDeg
+namespace Degradation
 {
 	class Settings
 	{

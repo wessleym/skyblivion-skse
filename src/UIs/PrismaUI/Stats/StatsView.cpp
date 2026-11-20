@@ -15,11 +15,11 @@
 
 namespace Stats {
 
-	void StatsView::Initialize(const PrismaUIService& service) {
+	void StatsView::Initialize(const PrismaUI::PrismaUIService& service) {
 		PrismaFeatureView::Initialize(service, kHtmlPath, kVerifyJsFunc, &StatsView::OnViewLoaded);
 	}
 
-	void StatsView::OnViewLoaded(const PrismaViewHandle& view) {
+	void StatsView::OnViewLoaded(const PrismaUI::PrismaViewHandle& view) {
 		view.RegisterListener(StatsContract::Listener::StatsClose, OnCloseFromJS);
 		view.RegisterListener(StatsContract::Listener::StatsSetPerkIds, OnPerkIdsFromJS);
 		view.RegisterListener(StatsContract::Listener::StatsAcquire, OnAcquireFromJS);
@@ -77,7 +77,7 @@ namespace Stats {
 			Log::WARN("StatsView::OnSaveTreesFromJS: Null payload.");
 			return;
 		}
-		const auto path = ViewUtility::ResolveViewFile(kTreeDocumentPath);
+		const auto path = PrismaUI::ViewUtility::ResolveViewFile(kTreeDocumentPath);
 		std::ofstream file(path, std::ios::binary | std::ios::trunc);
 		if (!file) {
 			Log::ERROR("StatsView::OnSaveTreesFromJS: Could not write {}.", path.string());

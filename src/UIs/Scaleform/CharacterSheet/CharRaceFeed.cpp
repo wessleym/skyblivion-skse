@@ -14,7 +14,7 @@ namespace CharacterSheet {
 	}
 
 	void CharRaceFeed::Register() {
-		if (!ModEvents::AddSink(&s_sink)) {
+		if (!Papyrus::ModEvents::AddSink(&s_sink)) {
 			Log::WARN("CharRaceFeed: No mod-event source. The character sheet's race page will not get its data.");
 			return;
 		}
@@ -23,7 +23,7 @@ namespace CharacterSheet {
 
 	void CharRaceFeed::PushRaces(const std::string& request) {
 		const auto start = std::chrono::steady_clock::now();
-		const auto callback = MenuCallback::Open(request, "CharRaceFeed");
+		const auto callback = Scaleform::MenuCallback::Open(request, "CharRaceFeed");
 		if (!callback) {
 			return;
 		}
@@ -32,7 +32,7 @@ namespace CharacterSheet {
 		const auto doc = JsonFile::ReadObject(kFile, "CharRaceFeed");
 		const auto list = doc ? doc->find("races") : nlohmann::json::const_iterator{};
 		if (doc && list != doc->end() && list->is_array()) {
-			races = ScaleformUtility::ToGFx(*movie, *list);
+			races = Scaleform::ScaleformUtility::ToGFx(*movie, *list);
 		} else {
 			if (doc) {
 				Log::WARN("CharRaceFeed: {} has no \"races\" array.", kFile);
@@ -41,14 +41,14 @@ namespace CharacterSheet {
 		}
 		callback->Invoke(races);
 		Log::INFO("CharRaceFeed: {} race(s) -> {} in {} us.", races.GetArraySize(), callback->target,
-			ScaleformUtility::MicrosecondsSince(start));
+			Scaleform::ScaleformUtility::MicrosecondsSince(start));
 	}
 
 	RE::BSEventNotifyControl CharRaceFeed::Sink::ProcessEvent(const SKSE::ModCallbackEvent* a_event,
 		RE::BSTEventSource<SKSE::ModCallbackEvent>*) {
 		//On the main thread, next frame (as CharFactionsFeed).
 		if (a_event && a_event->eventName == kRequest) {
-			MainThread::Post([request = ModEvents::StrArg(*a_event)] { PushRaces(request); });
+			MainThread::Post([request = Papyrus::ModEvents::StrArg(*a_event)] { PushRaces(request); });
 		}
 		return RE::BSEventNotifyControl::kContinue;
 	}

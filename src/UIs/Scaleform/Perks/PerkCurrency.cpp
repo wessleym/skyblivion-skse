@@ -7,10 +7,10 @@
 
 #include <algorithm>
 
-namespace PerksView {
+namespace Perks {
 
 	void PerkCurrency::Register() {
-		if (!ModEvents::AddSink(&s_sink)) {
+		if (!Papyrus::ModEvents::AddSink(&s_sink)) {
 			Log::WARN("PerkCurrency: No mod-event source. Perk purchases will not be paid for.");
 			return;
 		}
@@ -24,7 +24,7 @@ namespace PerksView {
 
 	//Payload: "treeId^perkId^HEX|Plugin^currencyType[^globalEditorId]".
 	void PerkCurrency::Deduct(const std::string& payload) {
-		const auto fields = ModEvents::Split(payload, '^');
+		const auto fields = Papyrus::ModEvents::Split(payload, '^');
 		if (fields.size() < 4) {
 			Log::WARN("PerkCurrency: Malformed purchase '{}'.", payload);
 			return;
@@ -87,7 +87,7 @@ namespace PerksView {
 		//Game state belongs on the main thread. The same queue as PerksFeed's state request, so a request
 		//sent after a purchase sees the deducted balance.
 		if (a_event && a_event->eventName == PerksContract::ModEvent::Acquire) {
-			MainThread::Post([payload = ModEvents::StrArg(*a_event)] { Deduct(payload); });
+			MainThread::Post([payload = Papyrus::ModEvents::StrArg(*a_event)] { Deduct(payload); });
 		}
 		return RE::BSEventNotifyControl::kContinue;
 	}

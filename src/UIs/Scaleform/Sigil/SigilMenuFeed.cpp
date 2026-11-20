@@ -34,7 +34,7 @@ namespace Sigil {
 		}
 
 		RE::BGSListForm* FormListFromField(std::string_view field) {
-			return RE::TESForm::LookupByID<RE::BGSListForm>(ModEvents::ParseFormID(field));
+			return RE::TESForm::LookupByID<RE::BGSListForm>(Papyrus::ModEvents::ParseFormID(field));
 		}
 
 		//"name|magnitude|duration" for the costliest effect of an enchantment, or "" when it has none.
@@ -97,7 +97,7 @@ namespace Sigil {
 	}
 
 	void SigilMenuFeed::Register() {
-		if (!ModEvents::AddSink(&s_sink)) {
+		if (!Papyrus::ModEvents::AddSink(&s_sink)) {
 			Log::WARN("SigilMenuFeed: No mod-event source. Sigil menu requests will not be heard.");
 			return;
 		}
@@ -108,7 +108,7 @@ namespace Sigil {
 		const auto start = std::chrono::steady_clock::now();
 
 		auto* player = RE::PlayerCharacter::GetSingleton();
-		auto movie = ScaleformUtility::OpenMenuMovie(SigilMenuContract::MenuName);
+		auto movie = Scaleform::ScaleformUtility::OpenMenuMovie(SigilMenuContract::MenuName);
 		if (!player || !movie) {
 			Log::WARN("SigilMenuFeed: Gear requested, but the player or the {} movie is unavailable.", SigilMenuContract::MenuName);
 			return;
@@ -126,7 +126,7 @@ namespace Sigil {
 				formIDs += ',';
 			}
 			rows += std::format("{}|{}|{}|{}|{}|{}", count, PadField(object->GetName()), value, damage, armor, type);
-			formIDs += ModEvents::FormatFormID(object->GetFormID());
+			formIDs += Papyrus::ModEvents::FormatFormID(object->GetFormID());
 			++count;
 		};
 
@@ -170,9 +170,9 @@ namespace Sigil {
 		RE::GFxValue countArg(static_cast<double>(count));
 		movie->Invoke(SigilMenuContract::AsPath::GearDone, nullptr, &countArg, 1);
 
-		ModEvents::Send(SigilMenuContract::Answer::GearFed, std::format("{}^{}", count, formIDs));
+		Papyrus::ModEvents::Send(SigilMenuContract::Answer::GearFed, std::format("{}^{}", count, formIDs));
 
-		Log::INFO("SigilMenuFeed: {} gear row(s) from {} inventory entries in {} us.", count, inventory.size(), ScaleformUtility::MicrosecondsSince(start));
+		Log::INFO("SigilMenuFeed: {} gear row(s) from {} inventory entries in {} us.", count, inventory.size(), Scaleform::ScaleformUtility::MicrosecondsSince(start));
 		if (truncated) {
 			Log::WARN("SigilMenuFeed: The gear list hit its {}-row cap. Some eligible gear is not listed.", kGearRowCap);
 		}
@@ -182,18 +182,18 @@ namespace Sigil {
 		const auto start = std::chrono::steady_clock::now();
 
 		auto* player = RE::PlayerCharacter::GetSingleton();
-		auto movie = ScaleformUtility::OpenMenuMovie(SigilMenuContract::MenuName);
+		auto movie = Scaleform::ScaleformUtility::OpenMenuMovie(SigilMenuContract::MenuName);
 		if (!player || !movie) {
 			Log::WARN("SigilMenuFeed: Stones requested, but the player or the {} movie is unavailable.", SigilMenuContract::MenuName);
 			return;
 		}
 
-		const auto sections = ModEvents::Split(payload, '^');
+		const auto sections = Papyrus::ModEvents::Split(payload, '^');
 		if (sections.size() < 3) {
 			Log::WARN("SigilMenuFeed: Malformed stone request '{}'.", payload);
 			return;
 		}
-		const auto listIDs = ModEvents::Split(sections[0], ',');
+		const auto listIDs = Papyrus::ModEvents::Split(sections[0], ',');
 		if (listIDs.size() < 4) {
 			Log::WARN("SigilMenuFeed: Expected 4 FormList IDs, got {}.", listIDs.size());
 			return;
@@ -206,8 +206,8 @@ namespace Sigil {
 			Log::WARN("SigilMenuFeed: The stone or enchantment FormLists did not resolve.");
 			return;
 		}
-		const int pad = ModEvents::ParseInt(sections[1]);
-		const int selection = ModEvents::ParseInt(sections[2]);
+		const int pad = Papyrus::ModEvents::ParseInt(sections[1]);
+		const int selection = Papyrus::ModEvents::ParseInt(sections[2]);
 
 		std::unordered_map<const RE::TESForm*, int> stoneIndex;
 		for (std::uint32_t i = 0; i < stones->forms.size(); ++i) {
@@ -273,8 +273,8 @@ namespace Sigil {
 			movie->Invoke(SigilMenuContract::AsPath::SetStones, nullptr, args, argCount);
 		}
 
-		ModEvents::Send(SigilMenuContract::Answer::StonesFed, std::to_string(rowCount));
-		Log::INFO("SigilMenuFeed: {} stone row(s) from {} misc entries in {} us.", rowCount, inventory.size(), ScaleformUtility::MicrosecondsSince(start));
+		Papyrus::ModEvents::Send(SigilMenuContract::Answer::StonesFed, std::to_string(rowCount));
+		Log::INFO("SigilMenuFeed: {} stone row(s) from {} misc entries in {} us.", rowCount, inventory.size(), Scaleform::ScaleformUtility::MicrosecondsSince(start));
 	}
 
 	RE::BSEventNotifyControl SigilMenuFeed::Sink::ProcessEvent(const SKSE::ModCallbackEvent* a_event,
@@ -287,7 +287,7 @@ namespace Sigil {
 			MainThread::Post([] { PushGear(); });
 		}
 		else if (a_event->eventName == SigilMenuContract::ModEvent::RequestStones) {
-			MainThread::Post([payload = ModEvents::StrArg(*a_event)] { PushStones(payload); });
+			MainThread::Post([payload = Papyrus::ModEvents::StrArg(*a_event)] { PushStones(payload); });
 		}
 		return RE::BSEventNotifyControl::kContinue;
 	}

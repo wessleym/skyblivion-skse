@@ -10,7 +10,7 @@
 #include <algorithm>
 #include <format>
 
-namespace SKYBSettingsMenu
+namespace SettingsMenu
 {
 	namespace
 	{

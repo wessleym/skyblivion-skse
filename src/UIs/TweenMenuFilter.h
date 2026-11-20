@@ -26,7 +26,7 @@
 //
 //What counts as a tool is what each tool itself counts: the ESM form lists SKYBSigilStonesAll
 //(the sigil quest's) and SKYBDegRepairTools (the repair menu's), through FormCache.
-namespace TweenTools {
+namespace UIs {
 	class TweenMenuFilter : public RE::BSTEventSink<RE::MenuOpenCloseEvent> {
 	public:
 		static TweenMenuFilter* GetSingleton();

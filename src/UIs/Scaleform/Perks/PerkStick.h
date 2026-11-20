@@ -3,7 +3,7 @@
 #include <mutex>
 #include <string>
 
-namespace PerksView {
+namespace Perks {
 
 	//The right thumbstick, for the perk menu's zoom. Scaleform never sees the sticks; this hands the right one to the menu.
 	//

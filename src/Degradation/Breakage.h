@@ -13,7 +13,7 @@
 //
 // The mark is the item's own name (ExtraTextDisplayData), so it travels with the item into any
 // container and through saves, and the player sees it everywhere the name shows.
-namespace SKYBDeg::Breakage
+namespace Degradation::Breakage
 {
 	[[nodiscard]] bool IsMarked(const RE::ExtraDataList* a_list);
 

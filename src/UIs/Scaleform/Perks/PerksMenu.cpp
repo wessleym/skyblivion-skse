@@ -3,7 +3,7 @@
 #include "PerksContract.h"
 #include "Papyrus/ModEvents.h"
 
-namespace PerksView {
+namespace Perks {
 
 	bool PerksMenu::IsAvailable() {
 		//The game's own file system, so an archived SWF counts as well as a loose one.
@@ -16,7 +16,7 @@ namespace PerksView {
 	}
 
 	void PerksMenu::Open() {
-		ModEvents::Send(PerksContract::ModEvent::MenuSwitch, PerksContract::Menu::Tab);
+		Papyrus::ModEvents::Send(PerksContract::ModEvent::MenuSwitch, PerksContract::Menu::Tab);
 		Log::INFO("PerksMenu: Sent {} '{}'.", PerksContract::ModEvent::MenuSwitch, PerksContract::Menu::Tab);
 	}
 

@@ -4,111 +4,114 @@
 #include <mutex>
 #include <unordered_map>
 
-namespace {
-	std::mutex g_lastGetSecondsPassedTimesLock;
-	std::unordered_map<const void*, double> g_lastGetSecondsPassedTimes;
-}
-
-void FormUtility::Register(RE::BSScript::Internal::VirtualMachine* vm) {
-	SKSEScriptRegistrar::Register(vm, "SKYBFormUtility", "GetAssociatedMenuForm", GetAssociatedMenuForm);
-	SKSEScriptRegistrar::Register(vm, "SKYBFormUtility", "GetSecondsPassed", GetSecondsPassed, true);
-	SKSEScriptRegistrar::Register(vm, "SKYBFormUtility", "GetSecondsPassedByActiveEffect", GetSecondsPassedByActiveEffect, true);
-}
-
-std::vector<RE::TESForm*> FormUtility::GetAssociatedMenuForm(RE::BSScript::Internal::VirtualMachine* /*a_vm*/, RE::VMStackID /*a_stackID*/, RE::StaticFunctionTag*, RE::BSFixedString a_menu) {
-	std::vector<RE::TESForm*> result{};
-
-	// BookMenu - Book / BookRef
-	// BarterMenu - Actor / Vendor chest
-	// Console - Selected ref
-	// Container - ObjectReference
-	// GiftMenu - GiftActor
-	// Lockpicking Menu - Locked door
-	// Training Menu - Training Actor
-	// CraftingMenu - Furniture of menu. Not handled.
-	// Dialogue Menu- Talking actor
-	if (a_menu == "BookMenu") {
-		result.push_back(RE::BookMenu::GetTargetForm());
-		result.push_back(RE::BookMenu::GetTargetReference().get());
+namespace Papyrus
+{
+	namespace {
+		std::mutex g_lastGetSecondsPassedTimesLock;
+		std::unordered_map<const void*, double> g_lastGetSecondsPassedTimes;
 	}
-	else if (a_menu == "ContainerMenu") {
-		auto handle = RE::ContainerMenu::GetTargetRefHandle();
 
-		if (handle) {
-			auto container = RE::TESObjectREFR::LookupByHandle(handle);
+	void FormUtility::Register(RE::BSScript::Internal::VirtualMachine* vm) {
+		SKSEScriptRegistrar::Register(vm, "SKYBFormUtility", "GetAssociatedMenuForm", GetAssociatedMenuForm);
+		SKSEScriptRegistrar::Register(vm, "SKYBFormUtility", "GetSecondsPassed", GetSecondsPassed, true);
+		SKSEScriptRegistrar::Register(vm, "SKYBFormUtility", "GetSecondsPassedByActiveEffect", GetSecondsPassedByActiveEffect, true);
+	}
 
-			if (container) {
-				result.push_back(container.get());
+	std::vector<RE::TESForm*> FormUtility::GetAssociatedMenuForm(RE::BSScript::Internal::VirtualMachine* /*a_vm*/, RE::VMStackID /*a_stackID*/, RE::StaticFunctionTag*, RE::BSFixedString a_menu) {
+		std::vector<RE::TESForm*> result{};
+
+		// BookMenu - Book / BookRef
+		// BarterMenu - Actor / Vendor chest
+		// Console - Selected ref
+		// Container - ObjectReference
+		// GiftMenu - GiftActor
+		// Lockpicking Menu - Locked door
+		// Training Menu - Training Actor
+		// CraftingMenu - Furniture of menu. Not handled.
+		// Dialogue Menu- Talking actor
+		if (a_menu == "BookMenu") {
+			result.push_back(RE::BookMenu::GetTargetForm());
+			result.push_back(RE::BookMenu::GetTargetReference().get());
+		}
+		else if (a_menu == "ContainerMenu") {
+			auto handle = RE::ContainerMenu::GetTargetRefHandle();
+
+			if (handle) {
+				auto container = RE::TESObjectREFR::LookupByHandle(handle);
+
+				if (container) {
+					result.push_back(container.get());
+				}
 			}
 		}
-	}
-	else if (a_menu == "Console") {
-		auto selected = REBridge::ConsoleSelectedRef();
-		result.push_back(selected.get());
-	}
-	else if (a_menu == "BarterMenu") {
-		auto handle = RE::BarterMenu::GetTargetRefHandle();
+		else if (a_menu == "Console") {
+			auto selected = REBridge::ConsoleSelectedRef();
+			result.push_back(selected.get());
+		}
+		else if (a_menu == "BarterMenu") {
+			auto handle = RE::BarterMenu::GetTargetRefHandle();
 
-		if (handle) {
-			auto vendor = RE::Actor::LookupByHandle(handle);
+			if (handle) {
+				auto vendor = RE::Actor::LookupByHandle(handle);
 
-			if (vendor) {
-				result.push_back(vendor.get());
-				auto faction = vendor->GetVendorFaction();
-				RE::TESObjectREFR* container = faction ? faction->vendorData.merchantContainer : nullptr;
-				result.push_back(container);
+				if (vendor) {
+					result.push_back(vendor.get());
+					auto faction = vendor->GetVendorFaction();
+					RE::TESObjectREFR* container = faction ? faction->vendorData.merchantContainer : nullptr;
+					result.push_back(container);
+				}
 			}
 		}
-	}
-	else if (a_menu == "Lockpicking Menu") {
-		result.push_back(RE::LockpickingMenu::GetTargetReference().get());
-	}
-	else if (a_menu == "Training Menu") {
-		// Not implemented. The trainer actor is the probable target; unverified.
-	}
-	else if (a_menu == "GiftMenu") {
-		//GiftMenu::GetReceiverRefHandle's global is address-library id 519571, which VR's library lacks:
-		//reading it there would be fatal, so VR answers with no form.
-		if (!REL::Module::IsVR()) {
-			auto handle = RE::GiftMenu::GetReceiverRefHandle();
-			if (auto receiver = RE::Actor::LookupByHandle(handle)) {
-				result.push_back(receiver.get());
+		else if (a_menu == "Lockpicking Menu") {
+			result.push_back(RE::LockpickingMenu::GetTargetReference().get());
+		}
+		else if (a_menu == "Training Menu") {
+			// Not implemented. The trainer actor is the probable target; unverified.
+		}
+		else if (a_menu == "GiftMenu") {
+			//GiftMenu::GetReceiverRefHandle's global is address-library id 519571, which VR's library lacks:
+			//reading it there would be fatal, so VR answers with no form.
+			if (!REL::Module::IsVR()) {
+				auto handle = RE::GiftMenu::GetReceiverRefHandle();
+				if (auto receiver = RE::Actor::LookupByHandle(handle)) {
+					result.push_back(receiver.get());
+				}
 			}
 		}
+		else if (a_menu == "Dialogue Menu") {
+			// Always two entries, speaker then last speaker: callers index them. Each is null when the manager is unavailable.
+			auto menuTopicManager = RE::MenuTopicManager::GetSingleton();
+			result.push_back(menuTopicManager && menuTopicManager->speaker ? REBridge::Lookup(menuTopicManager->speaker).get() : nullptr);
+			result.push_back(menuTopicManager && menuTopicManager->lastSpeaker ? REBridge::Lookup(menuTopicManager->lastSpeaker).get() : nullptr);
+		}
+		else {
+			// TODO: report the unsupported menu name
+		}
+
+		result.shrink_to_fit();
+
+		return result;
 	}
-	else if (a_menu == "Dialogue Menu") {
-		// Always two entries, speaker then last speaker: callers index them. Each is null when the manager is unavailable.
-		auto menuTopicManager = RE::MenuTopicManager::GetSingleton();
-		result.push_back(menuTopicManager && menuTopicManager->speaker ? REBridge::Lookup(menuTopicManager->speaker).get() : nullptr);
-		result.push_back(menuTopicManager && menuTopicManager->lastSpeaker ? REBridge::Lookup(menuTopicManager->lastSpeaker).get() : nullptr);
-	}
-	else {
-		// TODO: report the unsupported menu name
+
+	void FormUtility::ClearGetSecondsPassedTimes() {
+		std::scoped_lock lock(g_lastGetSecondsPassedTimesLock);
+		g_lastGetSecondsPassedTimes.clear();
 	}
 
-	result.shrink_to_fit();
+	float FormUtility::GetSecondsPassed(RE::StaticFunctionTag*, RE::TESForm* a_form) {
+		return SecondsSinceLastGetSecondsPassed(a_form);
+	}
 
-	return result;
-}
+	float FormUtility::GetSecondsPassedByActiveEffect(RE::StaticFunctionTag*, RE::ActiveEffect* a_effect) {
+		return SecondsSinceLastGetSecondsPassed(a_effect);
+	}
 
-void FormUtility::ClearGetSecondsPassedTimes() {
-	std::scoped_lock lock(g_lastGetSecondsPassedTimesLock);
-	g_lastGetSecondsPassedTimes.clear();
-}
-
-float FormUtility::GetSecondsPassed(RE::StaticFunctionTag*, RE::TESForm* a_form) {
-	return SecondsSinceLastGetSecondsPassed(a_form);
-}
-
-float FormUtility::GetSecondsPassedByActiveEffect(RE::StaticFunctionTag*, RE::ActiveEffect* a_effect) {
-	return SecondsSinceLastGetSecondsPassed(a_effect);
-}
-
-float FormUtility::SecondsSinceLastGetSecondsPassed(const void* a_object) {
-	const double now = ScriptClock::Seconds();
-	std::scoped_lock lock(g_lastGetSecondsPassedTimesLock);
-	auto [lastTime, isFirstCall] = g_lastGetSecondsPassedTimes.try_emplace(a_object, now);
-	const double seconds = isFirstCall ? 0.0 : now - lastTime->second;
-	lastTime->second = now;
-	return static_cast<float>(seconds);
+	float FormUtility::SecondsSinceLastGetSecondsPassed(const void* a_object) {
+		const double now = ScriptClock::Seconds();
+		std::scoped_lock lock(g_lastGetSecondsPassedTimesLock);
+		auto [lastTime, isFirstCall] = g_lastGetSecondsPassedTimes.try_emplace(a_object, now);
+		const double seconds = isFirstCall ? 0.0 : now - lastTime->second;
+		lastTime->second = now;
+		return static_cast<float>(seconds);
+	}
 }

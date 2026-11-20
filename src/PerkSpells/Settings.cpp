@@ -1,7 +1,7 @@
 #include "PerkSpells/Settings.h"
 
 #include "Platform/Text.h"
-#include "Settings/PluginIni.h"
+#include "Platform/PluginIni.h"
 
 #include <string>
 

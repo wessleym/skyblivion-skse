@@ -16,7 +16,7 @@
 #include <string>
 #include <vector>
 
-namespace SKYBDeg
+namespace Degradation
 {
 	using Condition::Kind;
 
@@ -394,7 +394,7 @@ namespace SKYBDeg
 			//Into the movie on the main thread, next frame.
 			MainThread::Post([header = std::move(a_header), rows = std::move(a_rows), a_select,
 												 status = std::move(a_status)]() {
-				auto movie = ScaleformUtility::OpenMenuMovie(RepairMenu::MENU_NAME);
+				auto movie = Scaleform::ScaleformUtility::OpenMenuMovie(RepairMenu::MENU_NAME);
 				if (!movie) {
 					return;
 				}
@@ -526,7 +526,7 @@ namespace SKYBDeg
 				}
 			}
 			header.scalePct = scale * 100.0f;
-			header.gamepad = ScaleformUtility::GamepadActive();
+			header.gamepad = Scaleform::ScaleformUtility::GamepadActive();
 
 			std::vector<PushRow> rows;
 			rows.reserve(g_rows.size());
@@ -854,7 +854,7 @@ namespace SKYBDeg
 	// ============================================================== menu =====
 	RepairMenu::RepairMenu()
 	{
-		ScaleformUtility::LoadMenuMovie(*this, FILE_NAME, 5, true, Close);
+		Scaleform::ScaleformUtility::LoadMenuMovie(*this, FILE_NAME, 5, true, Close);
 	}
 
 	void RepairMenu::Register()
@@ -870,7 +870,7 @@ namespace SKYBDeg
 	static bool OpenAs(bool a_fromInventory, RE::Actor* a_vendor, bool a_recharge, const RE::TESForm* a_tool,
 					   RepairMenu::Bench a_bench = RepairMenu::Bench::kNone)
 	{
-		if (!ScaleformUtility::CanShowMenu(RepairMenu::MENU_NAME, RepairMenu::FILE_NAME)) {
+		if (!Scaleform::ScaleformUtility::CanShowMenu(RepairMenu::MENU_NAME, RepairMenu::FILE_NAME)) {
 			return false;
 		}
 		g_fromInventory = a_fromInventory;
@@ -880,9 +880,9 @@ namespace SKYBDeg
 		g_vendor = a_vendor ? a_vendor->GetHandle() : RE::ActorHandle{};
 		g_pendingHammer = Condition::HammerIndex(a_tool);
 		if (a_fromInventory) {
-			ScaleformUtility::HideMenu(RE::InventoryMenu::MENU_NAME);
+			Scaleform::ScaleformUtility::HideMenu(RE::InventoryMenu::MENU_NAME);
 		}
-		ScaleformUtility::ShowMenu(RepairMenu::MENU_NAME);
+		Scaleform::ScaleformUtility::ShowMenu(RepairMenu::MENU_NAME);
 		return true;
 	}
 
@@ -907,7 +907,7 @@ namespace SKYBDeg
 
 	void RepairMenu::Close()
 	{
-		ScaleformUtility::HideMenu(MENU_NAME);
+		Scaleform::ScaleformUtility::HideMenu(MENU_NAME);
 	}
 
 	void RepairMenu::Accept(RE::FxDelegateHandler::CallbackProcessor* a_cbReg)
@@ -932,7 +932,7 @@ namespace SKYBDeg
 				g_vendor = {};
 				g_bench = Bench::kNone;
 				if (back) {
-					ScaleformUtility::ShowMenu(RE::InventoryMenu::MENU_NAME);
+					Scaleform::ScaleformUtility::ShowMenu(RE::InventoryMenu::MENU_NAME);
 				}
 			});
 		}
@@ -991,7 +991,7 @@ namespace SKYBDeg
 			return;
 		}
 		const std::string arg = a_params[0].GetString();
-		SKSE::GetTaskInterface()->AddTask([arg] { ModEvents::Send(HotkeyService::kRequestEvent.data(), arg); });
+		SKSE::GetTaskInterface()->AddTask([arg] { Papyrus::ModEvents::Send(Hotkeys::HotkeyService::kRequestEvent.data(), arg); });
 	}
 
 	void RepairMenu::OnPlaySound(const RE::FxDelegateArgs& a_params)
@@ -1004,7 +1004,7 @@ namespace SKYBDeg
 	// ============================================================ opener =====
 	void RepairMenuOpener::Register()
 	{
-		ModEvents::AddSink(this);
+		Papyrus::ModEvents::AddSink(this);
 	}
 
 	RE::BSEventNotifyControl RepairMenuOpener::ProcessEvent(const SKSE::ModCallbackEvent* a_event,
@@ -1013,7 +1013,7 @@ namespace SKYBDeg
 		if (a_event && a_event->eventName == "SKYBDegOpenRepairMenu") {
 			//A Papyrus SendModEvent arrives on the VM's thread; Open's state is the main thread's.
 			//Papyrus strings are pooled without regard to case, so "bench" can arrive as "Bench".
-			if (!Text::IEquals(ModEvents::StrArg(*a_event), "bench")) {
+			if (!Text::IEquals(Papyrus::ModEvents::StrArg(*a_event), "bench")) {
 				Log::INFO("mod event SKYBDegOpenRepairMenu -> repair menu");
 				SKSE::GetTaskInterface()->AddTask([] { RepairMenu::Open(false, nullptr); });
 				return RE::BSEventNotifyControl::kContinue;

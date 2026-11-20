@@ -6,7 +6,7 @@
 #include <cstdint>
 #include <optional>
 
-namespace SKYBDeg::TemperHook
+namespace Degradation::TemperHook
 {
 	namespace
 	{

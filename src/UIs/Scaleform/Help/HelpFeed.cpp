@@ -23,7 +23,7 @@ namespace Help {
 	}
 
 	void HelpFeed::Register() {
-		if (!ModEvents::AddSink(&s_sink)) {
+		if (!Papyrus::ModEvents::AddSink(&s_sink)) {
 			Log::WARN("HelpFeed: No mod-event source. Help page requests will not be heard.");
 			return;
 		}
@@ -33,7 +33,7 @@ namespace Help {
 	void HelpFeed::PushHelp(const std::string& request) {
 		const auto start = std::chrono::steady_clock::now();
 
-		const auto feed = FeedRequest::Open(request, FeedRequest::Mode::Optional, "HelpFeed");
+		const auto feed = Scaleform::FeedRequest::Open(request, Scaleform::FeedRequest::Mode::Optional, "HelpFeed");
 		if (!feed) {
 			return;
 		}
@@ -80,13 +80,13 @@ namespace Help {
 			return;
 		}
 		Log::INFO("HelpFeed: {} categor(ies), {} topic(s) -> {} in {} us.", categoryCount, topicCount, feed->target,
-			ScaleformUtility::MicrosecondsSince(start));
+			Scaleform::ScaleformUtility::MicrosecondsSince(start));
 	}
 
 	RE::BSEventNotifyControl HelpFeed::Sink::ProcessEvent(const SKSE::ModCallbackEvent* a_event,
 		RE::BSTEventSource<SKSE::ModCallbackEvent>*) {
 		if (a_event && a_event->eventName == HelpContract::ModEvent::RequestHelp) {
-			MainThread::Post([request = ModEvents::StrArg(*a_event)] { PushHelp(request); });
+			MainThread::Post([request = Papyrus::ModEvents::StrArg(*a_event)] { PushHelp(request); });
 		}
 		return RE::BSEventNotifyControl::kContinue;
 	}

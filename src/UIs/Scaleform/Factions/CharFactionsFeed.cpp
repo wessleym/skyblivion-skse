@@ -56,7 +56,7 @@ namespace Factions {
 	}
 
 	void CharFactionsFeed::Register() {
-		if (!ModEvents::AddSink(&s_sink)) {
+		if (!Papyrus::ModEvents::AddSink(&s_sink)) {
 			Log::WARN("CharFactionsFeed: No mod-event source. Character sheet faction requests will not be heard.");
 			return;
 		}
@@ -66,7 +66,7 @@ namespace Factions {
 	void CharFactionsFeed::PushFactions(const std::string& request) {
 		const auto start = std::chrono::steady_clock::now();
 
-		const auto callback = MenuCallback::Open(request, "CharFactionsFeed");
+		const auto callback = Scaleform::MenuCallback::Open(request, "CharFactionsFeed");
 		if (!callback) {
 			return;
 		}
@@ -104,14 +104,14 @@ namespace Factions {
 		}
 		callback->Invoke(rows);
 
-		Log::INFO("CharFactionsFeed: {} membership(s) -> {} in {} us.", rows.GetArraySize(), callback->target, ScaleformUtility::MicrosecondsSince(start));
+		Log::INFO("CharFactionsFeed: {} membership(s) -> {} in {} us.", rows.GetArraySize(), callback->target, Scaleform::ScaleformUtility::MicrosecondsSince(start));
 	}
 
 	RE::BSEventNotifyControl CharFactionsFeed::Sink::ProcessEvent(const SKSE::ModCallbackEvent* a_event,
 		RE::BSTEventSource<SKSE::ModCallbackEvent>*) {
 		//On the main thread, next frame (see SkillSheetFeed).
 		if (a_event && a_event->eventName == CharFactionsContract::ModEvent::RequestFactions) {
-			MainThread::Post([request = ModEvents::StrArg(*a_event)] { PushFactions(request); });
+			MainThread::Post([request = Papyrus::ModEvents::StrArg(*a_event)] { PushFactions(request); });
 		}
 		return RE::BSEventNotifyControl::kContinue;
 	}

@@ -2,7 +2,7 @@
 
 #include <string>
 
-namespace PerksView {
+namespace Perks {
 
 	//Answers the perk menu's two data requests. See PerksContract.h for the events.
 	//

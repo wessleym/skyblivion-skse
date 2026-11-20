@@ -17,7 +17,7 @@
 
 using namespace std::literals;
 
-namespace SKYBDeg::Condition
+namespace Degradation::Condition
 {
 	namespace
 	{

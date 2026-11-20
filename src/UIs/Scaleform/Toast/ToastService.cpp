@@ -41,7 +41,7 @@ namespace Toast {
 		if (auto* ui = RE::UI::GetSingleton()) {
 			ui->AddEventSink<RE::MenuOpenCloseEvent>(&s_sink);
 		}
-		if (!ModEvents::AddSink(&s_sink)) {
+		if (!Papyrus::ModEvents::AddSink(&s_sink)) {
 			Log::WARN("ToastService: No mod-event source. Toast requests will not be heard.");
 			return;
 		}
@@ -78,7 +78,7 @@ namespace Toast {
 	}
 
 	void ToastService::FlushWhenReady() {
-		ScaleformUtility::RetryOnMainThread(kReadyAttempts, kReadyInterval, DeliverIfReady, [] {
+		Scaleform::ScaleformUtility::RetryOnMainThread(kReadyAttempts, kReadyInterval, DeliverIfReady, [] {
 			std::scoped_lock lock(s_lock);
 			Log::WARN("ToastService: The toast movie never reported ready. Dropping {} held toast(s).", s_pending.size());
 			s_pending.clear();
@@ -139,7 +139,7 @@ namespace Toast {
 			return RE::BSEventNotifyControl::kContinue;
 		}
 		ToastFields fields;
-		const auto parts = ModEvents::Split(ModEvents::StrArg(*a_event), '|');
+		const auto parts = Papyrus::ModEvents::Split(Papyrus::ModEvents::StrArg(*a_event), '|');
 		for (std::size_t i = 0; i < fields.size() && i < parts.size(); ++i) {
 			fields[i] = parts[i];
 		}

@@ -9,7 +9,7 @@
 // anything the smithing menu or this plugin writes beyond that. A missing
 // ExtraHealth reads as 1.0 (the engine's rule). Decay lowers it toward
 // QualityMin (INI); the repair menu raises it toward the Smithing-scaled cap.
-namespace SKYBDeg::Condition
+namespace Degradation::Condition
 {
 	enum class Kind
 	{

@@ -77,7 +77,7 @@ namespace Translation {
 	}
 
 	void TranslationService::Register() {
-		if (!ModEvents::AddSink(&s_sink)) {
+		if (!Papyrus::ModEvents::AddSink(&s_sink)) {
 			Log::WARN("TranslationService: No mod-event source. {} will not be heard.", TranslationContract::ModEvent::ReloadStrings);
 		}
 		Reload();

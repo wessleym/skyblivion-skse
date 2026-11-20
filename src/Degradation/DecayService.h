@@ -8,7 +8,7 @@
 // x curve(condition) x (power / bash / sneak / attacker-damage scaling)
 // x the player's Smithing (SkillWearReduction) x armor mastery on that armor class
 // (MasteryWearReduction), floored at QualityMin (INI). NPC gear does not wear.
-namespace SKYBDeg
+namespace Degradation
 {
 	class DecayService : public RE::BSTEventSink<RE::TESHitEvent>
 	{

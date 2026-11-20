@@ -3,20 +3,20 @@
 #include "../PrismaFeatureView.h"
 #include "SpellMakingContract.h"
 
-class PrismaViewHandle;
+namespace PrismaUI { class PrismaViewHandle; }
 
 namespace SpellMaking {
 
-class SpellMakingView : public PrismaFeatureView<SpellMakingView> {
+class SpellMakingView : public PrismaUI::PrismaFeatureView<SpellMakingView> {
 public:
-    static void Initialize(const PrismaUIService& service);
+    static void Initialize(const PrismaUI::PrismaUIService& service);
     static void Open();
     static void Close();
 
 private:
     static constexpr const char* kHtmlPath = "SpellMaking/index.html";
     static constexpr const char* kVerifyJsFunc = SpellMakingContract::JsFunc::SpellMakingVerifyBridges;
-    static void RegisterListeners(const PrismaViewHandle& view);
+    static void RegisterListeners(const PrismaUI::PrismaViewHandle& view);
 
     // JS listener: the player confirmed a purchase. `argument` is the JSON buy payload
     // (consumed by SpellRecipeParser).

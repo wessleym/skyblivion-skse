@@ -2,7 +2,7 @@
 
 #include <string>
 
-namespace PerksView {
+namespace Perks {
 
 	//Pays for a perk rank bought in the perk menu. See PerksContract::ModEvent::Acquire.
 	//

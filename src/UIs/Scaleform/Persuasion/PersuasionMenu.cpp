@@ -44,11 +44,11 @@ namespace Persuasion
 		void Invoke(const char* a_function, nlohmann::json a_payload)
 		{
 			MainThread::Post([function = std::string(a_function), payload = std::move(a_payload)]() {
-				auto movie = ScaleformUtility::OpenMenuMovie(PersuasionMenu::MENU_NAME);
+				auto movie = Scaleform::ScaleformUtility::OpenMenuMovie(PersuasionMenu::MENU_NAME);
 				if (!movie) {
 					return;
 				}
-				const RE::GFxValue value = ScaleformUtility::ToGFx(*movie, payload);
+				const RE::GFxValue value = Scaleform::ScaleformUtility::ToGFx(*movie, payload);
 				movie->Invoke(function.c_str(), nullptr, &value, 1);
 			});
 		}
@@ -70,7 +70,7 @@ namespace Persuasion
 	{
 		//Not paused: the world runs so the NPC's face answers the wedge under the cursor,
 		//as with the PrismaUI view. Over the dialogue menu, which DialogueSession hides meanwhile.
-		ScaleformUtility::LoadMenuMovie(*this, FILE_NAME, 5, false, Close);
+		Scaleform::ScaleformUtility::LoadMenuMovie(*this, FILE_NAME, 5, false, Close);
 	}
 
 	void PersuasionMenu::Register()
@@ -87,21 +87,21 @@ namespace Persuasion
 			Log::WARN("PersuasionMenu::Open: no target");
 			return;
 		}
-		if (!ScaleformUtility::CanShowMenu(MENU_NAME, FILE_NAME)) {
+		if (!Scaleform::ScaleformUtility::CanShowMenu(MENU_NAME, FILE_NAME)) {
 			return;
 		}
 		s_target = a_target->GetHandle();
 		s_hideRequested = false;
 		//Holds the NPC in conversation and hides the dialogue menu while the wheel is up.
 		DialogueSession::Start(a_target, Close);
-		ScaleformUtility::ShowMenu(MENU_NAME);
+		Scaleform::ScaleformUtility::ShowMenu(MENU_NAME);
 		Log::INFO("persuasion menu: opening for {:08X}", a_target->GetFormID());
 	}
 
 	void PersuasionMenu::Close()
 	{
 		s_hideRequested = true;
-		ScaleformUtility::HideMenu(MENU_NAME);
+		Scaleform::ScaleformUtility::HideMenu(MENU_NAME);
 	}
 
 	void PersuasionMenu::Accept(RE::FxDelegateHandler::CallbackProcessor* a_cbReg)
@@ -130,7 +130,7 @@ namespace Persuasion
 			if (target) {
 				SKSE::GetTaskInterface()->AddTask([target, ours] {
 					if (RE::ActorPtr actor = REBridge::Lookup(target)) {
-						ActorExpression::Reset(actor.get());
+						Actors::ActorExpression::Reset(actor.get());
 					}
 					if (ours) {
 						DialogueSession::End(target);
@@ -155,7 +155,7 @@ namespace Persuasion
 
 			const char* displayName = actor->GetDisplayFullName();
 			const std::string name = displayName ? displayName : actor->GetName();
-			const int disposition = DispositionSystem::GetDispositionActorValue(actor);
+			const int disposition = Disposition::DispositionSystem::GetDispositionActorValue(actor);
 			nlohmann::json preferences = nlohmann::json::object();
 			for (const auto& [action, pref] : PersuasionPreferences::GetRandomPreferences(actor)) {
 				preferences[std::string(action)] = std::string(pref);
@@ -165,7 +165,7 @@ namespace Persuasion
 				{ "disposition", disposition },
 				{ "preferences", preferences },
 				{ "rules", Rules::ToJson(s_effective) },
-				{ "gamepad", ScaleformUtility::GamepadActive() }
+				{ "gamepad", Scaleform::ScaleformUtility::GamepadActive() }
 			};
 			Invoke("_root.wheel.SetPersuasion", std::move(payload));
 		});
@@ -182,9 +182,9 @@ namespace Persuasion
 				return;
 			}
 			if (const auto* info = PersuasionPreferences::GetPreference(preference)) {
-				ActorExpression::Set(actor, info->expression, info->strength);
+				Actors::ActorExpression::Set(actor, info->expression, info->strength);
 			} else {
-				ActorExpression::Reset(actor);
+				Actors::ActorExpression::Reset(actor);
 			}
 		});
 	}
@@ -197,7 +197,7 @@ namespace Persuasion
 		const float value = static_cast<float>(a_params[0].GetNumber());
 		SKSE::GetTaskInterface()->AddTask([target = s_target, value] {
 			if (const RE::ActorPtr actor = TargetOrWarn(target, "PersuasionMenu::OnDisposition"); actor && !actor->IsDead()) {
-				DispositionSystem::SetDispositionActorValue(actor.get(), value, true);
+				Disposition::DispositionSystem::SetDispositionActorValue(actor.get(), value, true);
 			}
 		});
 	}

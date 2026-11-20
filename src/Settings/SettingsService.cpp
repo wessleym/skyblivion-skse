@@ -47,7 +47,7 @@ namespace Settings {
 				fileContents += key + '=' + value + '\n';
 			}
 		}
-		SafeFileWrite::Write(path, fileContents, "SettingsService");
+		Storage::SafeFileWrite::Write(path, fileContents, "SettingsService");
 	}
 
 	std::string SettingsService::GetString(std::string_view section, std::string_view key, std::string_view defaultValue) {

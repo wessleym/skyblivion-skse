@@ -10,7 +10,7 @@
 #include <format>
 #include <string>
 
-namespace SKYBDeg::Breakage
+namespace Degradation::Breakage
 {
 	namespace
 	{

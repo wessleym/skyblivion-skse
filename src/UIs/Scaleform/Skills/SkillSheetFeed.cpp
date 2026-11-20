@@ -11,7 +11,7 @@
 namespace Skills {
 
 	void SkillSheetFeed::Register() {
-		if (!ModEvents::AddSink(&s_sink)) {
+		if (!Papyrus::ModEvents::AddSink(&s_sink)) {
 			Log::WARN("SkillSheetFeed: No mod-event source. Skill sheet requests will not be heard.");
 			return;
 		}
@@ -21,7 +21,7 @@ namespace Skills {
 	void SkillSheetFeed::PushSheet(const std::string& request) {
 		const auto start = std::chrono::steady_clock::now();
 
-		const auto callback = MenuCallback::Open(request, "SkillSheetFeed (sheet)");
+		const auto callback = Scaleform::MenuCallback::Open(request, "SkillSheetFeed (sheet)");
 		if (!callback) {
 			return;
 		}
@@ -43,20 +43,20 @@ namespace Skills {
 			skills.PushBack(row);
 		}
 
-		const bool gamepad = ScaleformUtility::GamepadActive();
+		const bool gamepad = Scaleform::ScaleformUtility::GamepadActive();
 		RE::GFxValue sheet;
 		movie->CreateObject(&sheet);
 		sheet.SetMember("gamepad", RE::GFxValue(gamepad));
 		sheet.SetMember("skills", skills);
 		callback->Invoke(sheet);
 
-		Log::INFO("SkillSheetFeed: {} skills (gamepad {}) -> {} in {} us.", readings->size(), gamepad, callback->target, ScaleformUtility::MicrosecondsSince(start));
+		Log::INFO("SkillSheetFeed: {} skills (gamepad {}) -> {} in {} us.", readings->size(), gamepad, callback->target, Scaleform::ScaleformUtility::MicrosecondsSince(start));
 	}
 
 	void SkillSheetFeed::PushMastery(const std::string& request, int actorValue) {
 		const auto start = std::chrono::steady_clock::now();
 
-		const auto callback = MenuCallback::Open(request, "SkillSheetFeed (mastery)");
+		const auto callback = Scaleform::MenuCallback::Open(request, "SkillSheetFeed (mastery)");
 		if (!callback) {
 			return;
 		}
@@ -85,7 +85,7 @@ namespace Skills {
 		info.SetMember("ranks", ranks);
 		callback->Invoke(info);
 
-		Log::INFO("SkillSheetFeed: {} mastery rank(s) for actor value {} -> {} in {} us.", ranks.GetArraySize(), actorValue, callback->target, ScaleformUtility::MicrosecondsSince(start));
+		Log::INFO("SkillSheetFeed: {} mastery rank(s) for actor value {} -> {} in {} us.", ranks.GetArraySize(), actorValue, callback->target, Scaleform::ScaleformUtility::MicrosecondsSince(start));
 	}
 
 	RE::BSEventNotifyControl SkillSheetFeed::Sink::ProcessEvent(const SKSE::ModCallbackEvent* a_event,
@@ -95,11 +95,11 @@ namespace Skills {
 		}
 		//Built on the main thread, next frame: SKSE's UI task queue can run on worker threads.
 		if (a_event->eventName == SkillSheetContract::ModEvent::RequestSheet) {
-			MainThread::Post([request = ModEvents::StrArg(*a_event)] { PushSheet(request); });
+			MainThread::Post([request = Papyrus::ModEvents::StrArg(*a_event)] { PushSheet(request); });
 		}
 		else if (a_event->eventName == SkillSheetContract::ModEvent::RequestMastery) {
 			const int actorValue = static_cast<int>(a_event->numArg);
-			MainThread::Post([request = ModEvents::StrArg(*a_event), actorValue] { PushMastery(request, actorValue); });
+			MainThread::Post([request = Papyrus::ModEvents::StrArg(*a_event), actorValue] { PushMastery(request, actorValue); });
 		}
 		return RE::BSEventNotifyControl::kContinue;
 	}

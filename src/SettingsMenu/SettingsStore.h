@@ -21,12 +21,12 @@
 // and keeps them.
 //
 // After every change and on every game load each value is pushed to what acts
-// on it: SKYBDeg::Settings, Persuasion::Settings, CombatService, EconomyService,
+// on it: Degradation::Settings, Persuasion::Settings, CombatService, EconomyService,
 // InterfaceAdapters (moreHUD globals, QuickLoot properties) and SettingsService
 // (rows that mirror an existing SKYBSettings.ini key read and write that key).
 #include "SettingsMenu/SettingsMenuTable.h"
 
-namespace SKYBSettingsMenu
+namespace SettingsMenu
 {
 	class Store : public RE::BSTEventSink<RE::MenuOpenCloseEvent>
 	{

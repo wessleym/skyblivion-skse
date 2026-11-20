@@ -14,7 +14,7 @@ namespace Persuasion {
 	public:
 		struct PreferenceInfo {
 			std::string_view            name;// Must match an option of kPreferences in PersuasionPreferences.cpp
-			ActorExpression::Expression expression;
+			Actors::ActorExpression::Expression expression;
 			float                       strength;// 0 to 100
 		};
 

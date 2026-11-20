@@ -5,7 +5,7 @@
 // hands the original a proxy that swaps in our "ItemSelect" handler and forwards the rest. Ours opens
 // the menu for a repair tool and calls the engine's handler for anything else. Vanilla and SkyUI
 // inventories, mouse, keyboard and gamepad all go through this one delegate call.
-namespace SKYBDeg::InventoryHook
+namespace Degradation::InventoryHook
 {
 	void Install();
 }

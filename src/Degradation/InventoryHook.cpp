@@ -4,7 +4,7 @@
 #include "Degradation/RepairMenu.h"
 #include <cstring>
 
-namespace SKYBDeg::InventoryHook
+namespace Degradation::InventoryHook
 {
 	namespace
 	{

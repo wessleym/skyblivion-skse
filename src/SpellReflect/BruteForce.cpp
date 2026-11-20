@@ -125,19 +125,19 @@ namespace SpellReflect::BruteForce {
         // event); otherwise the hand holding the weapon, and the right one when both hold the same weapon.
         float Wear(RE::PlayerCharacter* a_player, RE::TESObjectWEAP* a_weapon, std::size_t a_lockLevel, bool a_success,
                    std::optional<bool> a_left) {
-            using SKYBDeg::G;
-            if (!SKYBDeg::Settings::On(G::Enabled)) {
+            using Degradation::G;
+            if (!Degradation::Settings::On(G::Enabled)) {
                 return -1.0f;
             }
             const bool left = a_left ? *a_left :
                                        a_player->GetEquippedObject(true) == a_weapon && a_player->GetEquippedObject(false) != a_weapon;
-            const auto list = SKYBDeg::Condition::FindWornList(a_weapon, left);
+            const auto list = Degradation::Condition::FindWornList(a_weapon, left);
             if (!list) {
                 return -1.0f;
             }
-            const float rate = SKYBDeg::Settings::Get(G::WeapRate) * SKYBDeg::Settings::Get(G::WeapRateMult) *
+            const float rate = Degradation::Settings::Get(G::WeapRate) * Degradation::Settings::Get(G::WeapRateMult) *
                                (a_success ? Settings::Get().bruteWearMultSuccess : Settings::Get().bruteWearMultFail)[a_lockLevel];
-            return SKYBDeg::DecayService::Degrade(a_weapon, list, rate, "brute force");
+            return Degradation::DecayService::Degrade(a_weapon, list, rate, "brute force");
         }
 
         // The sounds the player hears at the lock ([BruteForce] sSuccessSound / sFailSound).

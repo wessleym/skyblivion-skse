@@ -34,7 +34,7 @@ namespace Advancement {
 	}
 
 	void AdvancementSound::Register() {
-		if (!ModEvents::AddSink(&s_sink)) {
+		if (!Papyrus::ModEvents::AddSink(&s_sink)) {
 			Log::WARN("AdvancementSound: No mod-event source. The level-up screen will have no music.");
 			return;
 		}

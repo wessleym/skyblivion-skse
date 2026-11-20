@@ -29,7 +29,7 @@
 // failing that, as the one such call near the function's start (0x400 bytes; 0x60 in 16016, which
 // 16017 follows). The seven sites install all or none; the two melee sites then install both or
 // neither. A hooked site or an unfound one = nothing is patched there; the log says which.
-namespace SKYBDeg::TemperHook
+namespace Degradation::TemperHook
 {
 	// Called at plugin load; patches all seven sites or none, then the two melee sites or neither.
 	void Install();

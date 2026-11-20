@@ -8,7 +8,7 @@
 #include <format>
 #include <string>
 
-namespace SKYBDeg
+namespace Degradation
 {
 	using Condition::Kind;
 	using Flag = RE::TESHitEvent::Flag;

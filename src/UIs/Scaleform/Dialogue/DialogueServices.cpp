@@ -3,7 +3,7 @@
 #include "Degradation/RepairMenu.h"
 #include "Platform/FormCache.h"
 #include "Platform/Text.h"
-#include "Settings/PluginIni.h"
+#include "Platform/PluginIni.h"
 
 #include <algorithm>
 #include <string_view>
@@ -358,10 +358,10 @@ namespace Dialogue {
 			SKSE::GetTaskInterface()->AddTask([handle, recharge] {
 				if (auto vendor = REBridge::Lookup(handle)) {
 					if (recharge) {
-						SKYBDeg::RepairMenu::OpenRecharge(vendor.get());
+						Degradation::RepairMenu::OpenRecharge(vendor.get());
 					}
 					else {
-						SKYBDeg::RepairMenu::OpenVendor(vendor.get());
+						Degradation::RepairMenu::OpenVendor(vendor.get());
 					}
 				}
 			});

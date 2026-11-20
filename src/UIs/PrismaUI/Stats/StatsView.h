@@ -3,16 +3,16 @@
 #include "../PrismaFeatureView.h"
 #include "StatsContract.h"
 
-class PrismaViewHandle;
+namespace PrismaUI { class PrismaViewHandle; }
 
 namespace Stats {
 
 	//The perk-tree screen shown in place of StatsMenu.
 	//The view owns its tree document, loading perk-trees.js or the data built into the page;
 	//C++ supplies only the player's standing.
-	class StatsView : public PrismaFeatureView<StatsView> {
+	class StatsView : public PrismaUI::PrismaFeatureView<StatsView> {
 	public:
-		static void Initialize(const PrismaUIService& service);
+		static void Initialize(const PrismaUI::PrismaUIService& service);
 
 		//True once the view exists and its page has loaded.
 		//StatsMenuHook suppresses the vanilla screen only while this holds.
@@ -32,7 +32,7 @@ namespace Stats {
 		static constexpr const char* kTreeDocumentPath = "Stats/perk-trees.js";
 
 		//PrismaFeatureView invokes this once the page's DOM is ready.
-		static void OnViewLoaded(const PrismaViewHandle& view);
+		static void OnViewLoaded(const PrismaUI::PrismaViewHandle& view);
 
 		//PrismaUI refcounts focus: a second Open would need a second Unfocus to release.
 		static inline bool s_open = false;

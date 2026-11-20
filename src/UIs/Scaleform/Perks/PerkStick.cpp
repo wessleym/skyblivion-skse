@@ -4,14 +4,14 @@
 #include "Platform/MainThread.h"
 #include "UIs/Scaleform/ScaleformUtility.h"
 
-namespace PerksView {
+namespace Perks {
 
 	namespace {
 		PerkStick s_stick;
 	}
 
 	void PerkStick::Register() {
-		if (!ModEvents::AddSink(&s_stick)) {
+		if (!Papyrus::ModEvents::AddSink(&s_stick)) {
 			Log::WARN("PerkStick: No mod-event source. The perk menu's right-stick zoom is off.");
 			return;
 		}
@@ -29,7 +29,7 @@ namespace PerksView {
 		if (!a_event || a_event->eventName != PerksContract::ModEvent::WatchStick) {
 			return RE::BSEventNotifyControl::kContinue;
 		}
-		const std::string arg = ModEvents::StrArg(*a_event);
+		const std::string arg = Papyrus::ModEvents::StrArg(*a_event);
 		const auto        bar = arg.find('|');
 		std::lock_guard   guard(_lock);
 		if (bar == std::string::npos || bar == 0 || bar + 1 >= arg.size()) {
@@ -84,7 +84,7 @@ namespace PerksView {
 		if (function.empty()) {
 			return;
 		}
-		auto movie = ScaleformUtility::OpenMenuMovie(menu);
+		auto movie = Scaleform::ScaleformUtility::OpenMenuMovie(menu);
 		bool ok = false;
 		if (movie) {
 			RE::GFxValue args[2] = { RE::GFxValue(static_cast<double>(x)), RE::GFxValue(static_cast<double>(y)) };

@@ -32,7 +32,7 @@
 //                  (Condition::RechargeCost)
 // Opening from the inventory closes it first (no inventory changes under a live item list); with
 // ReturnToInventory = 1 in the INI it reopens when the repair menu closes.
-namespace SKYBDeg
+namespace Degradation
 {
 	class RepairMenu : public RE::IMenu
 	{

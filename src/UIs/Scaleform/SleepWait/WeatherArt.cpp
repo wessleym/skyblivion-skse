@@ -102,10 +102,10 @@ namespace SleepWait {
 	void WeatherArt::Push() {
 		std::string why;
 		const Art art = CurrentArt(why);
-		ScaleformUtility::RetryOnMainThread(
+		Scaleform::ScaleformUtility::RetryOnMainThread(
 			kAttempts, kRetryInterval,
 			[art, why] {
-				auto movie = ScaleformUtility::OpenMenuMovie(RE::SleepWaitMenu::MENU_NAME);
+				auto movie = Scaleform::ScaleformUtility::OpenMenuMovie(RE::SleepWaitMenu::MENU_NAME);
 				if (!movie) {
 					return true;  //closed already: nothing to do
 				}

@@ -72,7 +72,7 @@ namespace Dialogue {
 	}
 
 	void DialogueFeed::Register() {
-		if (!ModEvents::AddSink(&s_sink)) {
+		if (!Papyrus::ModEvents::AddSink(&s_sink)) {
 			Log::WARN("DialogueFeed: No mod-event source. Dialogue menu requests will not be heard.");
 			return;
 		}
@@ -82,7 +82,7 @@ namespace Dialogue {
 	void DialogueFeed::PushDialogueData(const std::string& request) {
 		const auto start = std::chrono::steady_clock::now();
 
-		const auto feed = FeedRequest::Open(request, FeedRequest::Mode::Ignored, "DialogueFeed");
+		const auto feed = Scaleform::FeedRequest::Open(request, Scaleform::FeedRequest::Mode::Ignored, "DialogueFeed");
 		if (!feed) {
 			return;
 		}
@@ -96,7 +96,7 @@ namespace Dialogue {
 		if (speaker) {
 			persuadeRow = PersuasionTopicRow();
 			//The value the persuasion view shows, clamped so the menu's meter can scale linearly.
-			disposition = std::clamp(DispositionSystem::GetDispositionActorValue(speaker), 0, 100);
+			disposition = std::clamp(Disposition::DispositionSystem::GetDispositionActorValue(speaker), 0, 100);
 			const auto refusal = PersuasionRefusal(speaker);
 			noPersuade = refusal == Refusal::NoPersuadeFaction;
 			canPersuade = refusal == Refusal::None;
@@ -118,7 +118,7 @@ namespace Dialogue {
 
 		Log::INFO("DialogueFeed: Speaker={} disposition={} noPersuade={} canPersuade={} persuadeRow={} services:{} -> {} in {} us.",
 			speaker ? speaker->GetName() : "(none)", disposition, noPersuade, canPersuade, persuadeRow, services, feed->target,
-			ScaleformUtility::MicrosecondsSince(start));
+			Scaleform::ScaleformUtility::MicrosecondsSince(start));
 	}
 
 	void DialogueFeed::OpenPersuasion() {
@@ -138,7 +138,7 @@ namespace Dialogue {
 			break;
 		}
 		Log::INFO("DialogueFeed: Opening persuasion with {}.", speaker->GetName());
-		UISystem::OpenPersuasion(speaker);
+		UIs::UISystem::OpenPersuasion(speaker);
 	}
 
 	RE::BSEventNotifyControl DialogueFeed::Sink::ProcessEvent(const SKSE::ModCallbackEvent* a_event,
@@ -148,13 +148,13 @@ namespace Dialogue {
 		}
 		if (a_event->eventName == DialogueContract::ModEvent::RequestDialogueData) {
 			//Built on the main thread, next frame: SKSE's task queues can run on worker threads and race the menu.
-			MainThread::Post([request = ModEvents::StrArg(*a_event)] { PushDialogueData(request); });
+			MainThread::Post([request = Papyrus::ModEvents::StrArg(*a_event)] { PushDialogueData(request); });
 		}
 		else if (a_event->eventName == DialogueContract::ModEvent::OpenPersuasion) {
 			SKSE::GetTaskInterface()->AddTask([] { OpenPersuasion(); });
 		}
 		else if (a_event->eventName == DialogueContract::ModEvent::OpenDialogueService) {
-			SKSE::GetTaskInterface()->AddTask([serviceID = ModEvents::StrArg(*a_event)] {
+			SKSE::GetTaskInterface()->AddTask([serviceID = Papyrus::ModEvents::StrArg(*a_event)] {
 				DialogueServices::Open(serviceID, DialogueSpeaker());
 			});
 		}

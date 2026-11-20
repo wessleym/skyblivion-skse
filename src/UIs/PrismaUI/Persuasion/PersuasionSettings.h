@@ -13,7 +13,7 @@
 #include <string_view>
 
 #include "PersuasionSettingsTable.h"
-#include "Settings/IniTable.h"
+#include "Platform/IniTable.h"
 
 namespace Persuasion
 {

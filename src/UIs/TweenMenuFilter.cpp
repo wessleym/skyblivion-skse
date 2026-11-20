@@ -5,7 +5,7 @@
 #include "Platform/MainThread.h"
 #include "UIs/Scaleform/ScaleformUtility.h"
 
-namespace TweenTools {
+namespace UIs {
 	namespace {
 		constexpr const char* kMenuClip = "_root.TweenMenu_mc";
 		//The movie's columns: Categories[1..4] (its TOP_STATE, LEFT_STATE, RIGHT_STATE, BOTTOM_STATE).
@@ -73,7 +73,7 @@ namespace TweenTools {
 			return;
 		}
 		Log::INFO("TweenMenuFilter: SKILLS picked; sending {} \"{}\"", kTabSwitchEvent, kSkillsTab);
-		ModEvents::Send(kTabSwitchEvent, kSkillsTab);
+		Papyrus::ModEvents::Send(kTabSwitchEvent, kSkillsTab);
 	}
 
 	const TweenMenuFilter::Tool* TweenMenuFilter::Find(const char* a_menuEvent)
@@ -112,7 +112,7 @@ namespace TweenTools {
 
 	void TweenMenuFilter::Prepare(bool a_retry)
 	{
-		const auto view = ScaleformUtility::OpenMenuMovie(RE::TweenMenu::MENU_NAME);
+		const auto view = Scaleform::ScaleformUtility::OpenMenuMovie(RE::TweenMenu::MENU_NAME);
 		if (!view) {
 			return;
 		}

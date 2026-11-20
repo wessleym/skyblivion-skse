@@ -101,7 +101,7 @@ namespace Persuasion
 		const float newDisposition = out.disposition;
 		taskInterface->AddTask([handle, newDisposition]() {
 			if (RE::ActorPtr actor = REBridge::Lookup(handle)) {
-				DispositionSystem::SetDispositionActorValue(actor.get(), newDisposition, true);
+				Disposition::DispositionSystem::SetDispositionActorValue(actor.get(), newDisposition, true);
 			}
 		});
 

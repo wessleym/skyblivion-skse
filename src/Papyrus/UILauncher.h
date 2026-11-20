@@ -2,22 +2,25 @@
 #include "SKSEScriptRegistrar.h"
 #include "UIs/UISystem.h"
 
-class UILauncher {
-public:
-    static void Register(RE::BSScript::Internal::VirtualMachine* vm) {
-        SKSEScriptRegistrar::Register(vm, "SKYBUILauncher", "OpenPersuasionGame", OpenPersuasionGame);
-        SKSEScriptRegistrar::Register(vm, "SKYBUILauncher", "OpenSpellMaking", OpenSpellMaking);
-    }
+namespace Papyrus
+{
+    class UILauncher {
+    public:
+        static void Register(RE::BSScript::Internal::VirtualMachine* vm) {
+            SKSEScriptRegistrar::Register(vm, "SKYBUILauncher", "OpenPersuasionGame", OpenPersuasionGame);
+            SKSEScriptRegistrar::Register(vm, "SKYBUILauncher", "OpenSpellMaking", OpenSpellMaking);
+        }
 
-private:
-    static void OpenPersuasionGame(RE::StaticFunctionTag*, RE::Actor* target) {
-        Log::INFO("Papyrus: OpenPersuasionGame Called with Target {:08X}",
-                  target ? target->GetFormID() : 0u);
-        UISystem::OpenPersuasion(target);
-    }
+    private:
+        static void OpenPersuasionGame(RE::StaticFunctionTag*, RE::Actor* target) {
+            Log::INFO("Papyrus: OpenPersuasionGame Called with Target {:08X}",
+                      target ? target->GetFormID() : 0u);
+            UIs::UISystem::OpenPersuasion(target);
+        }
 
-    static void OpenSpellMaking(RE::StaticFunctionTag*) {
-        Log::INFO("Papyrus: OpenSpellMaking Called");
-        UISystem::OpenSpellMaking();
-    }
-};
+        static void OpenSpellMaking(RE::StaticFunctionTag*) {
+            Log::INFO("Papyrus: OpenSpellMaking Called");
+            UIs::UISystem::OpenSpellMaking();
+        }
+    };
+}

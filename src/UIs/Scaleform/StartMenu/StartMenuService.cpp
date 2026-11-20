@@ -13,7 +13,7 @@ namespace StartMenu {
 
 	namespace {
 		RE::GPtr<RE::GFxMovieView> MainMenuMovie() {
-			return ScaleformUtility::OpenMenuMovie(RE::MainMenu::MENU_NAME);
+			return Scaleform::ScaleformUtility::OpenMenuMovie(RE::MainMenu::MENU_NAME);
 		}
 
 
@@ -23,7 +23,7 @@ namespace StartMenu {
 	}
 
 	void StartMenuService::Register() {
-		if (!ModEvents::AddSink(&s_sink)) {
+		if (!Papyrus::ModEvents::AddSink(&s_sink)) {
 			Log::WARN("StartMenuService: No mod-event source. Title screen requests will not be heard.");
 			return;
 		}
@@ -41,9 +41,9 @@ namespace StartMenu {
 		//one row per settings-menu category with a newgame label (Categories.csv): its presets, led by
 		//"Current Settings" only when the new-game values match none of them (the player changed something);
 		//otherwise the row starts on the preset they match. Nothing changes until a different choice is made.
-		using SKYBSettingsMenu::kCategories;
-		using SKYBSettingsMenu::kPresetCount;
-		auto* store = SKYBSettingsMenu::Store::GetSingleton();
+		using SettingsMenu::kCategories;
+		using SettingsMenu::kPresetCount;
+		auto* store = SettingsMenu::Store::GetSingleton();
 		s_pending.assign(kCategories.size(), -1);
 		s_hasCurrent.assign(kCategories.size(), false);
 		int presetRows = 0;
@@ -126,13 +126,13 @@ namespace StartMenu {
 		//the presets wait for the new game (OnNewGame): nothing is written until it starts
 		if (key.starts_with(StartMenuContract::Option::PresetPrefix)) {
 			const auto id = key.substr(std::string_view(StartMenuContract::Option::PresetPrefix).size());
-			const auto& cats = SKYBSettingsMenu::kCategories;
+			const auto& cats = SettingsMenu::kCategories;
 			for (std::size_t c = 0; c < cats.size() && c < s_pending.size(); ++c) {
 				if (id == cats[c].id) {
 					const int preset = s_hasCurrent[c] ? index - 1 : index;
-					s_pending[c] = std::clamp(preset, -1, static_cast<int>(SKYBSettingsMenu::kPresetCount) - 1);
+					s_pending[c] = std::clamp(preset, -1, static_cast<int>(SettingsMenu::kPresetCount) - 1);
 					Log::INFO("StartMenuService: new game's {} -> {}.", id,
-						s_pending[c] < 0 ? "current settings" : SKYBSettingsMenu::kPresetIds[s_pending[c]]);
+						s_pending[c] < 0 ? "current settings" : SettingsMenu::kPresetIds[s_pending[c]]);
 					return;
 				}
 			}
@@ -145,12 +145,12 @@ namespace StartMenu {
 	}
 
 	void StartMenuService::OnNewGame() {
-		auto* store = SKYBSettingsMenu::Store::GetSingleton();
-		const auto& cats = SKYBSettingsMenu::kCategories;
+		auto* store = SettingsMenu::Store::GetSingleton();
+		const auto& cats = SettingsMenu::kCategories;
 		for (std::size_t c = 0; c < cats.size() && c < s_pending.size(); ++c) {
 			if (s_pending[c] >= 0) {
 				Log::INFO("StartMenuService: new game takes the {} preset {}.", cats[c].id,
-					SKYBSettingsMenu::kPresetIds[s_pending[c]]);
+					SettingsMenu::kPresetIds[s_pending[c]]);
 				store->ApplyPresetToCharacter(cats[c].id, static_cast<std::size_t>(s_pending[c]));
 			}
 		}
@@ -169,7 +169,7 @@ namespace StartMenu {
 			PushLocations();
 		}
 		else if (a_event->eventName == StartMenuContract::ModEvent::SetOption) {
-			ApplyOption(ModEvents::StrArg(*a_event), static_cast<int>(a_event->numArg));
+			ApplyOption(Papyrus::ModEvents::StrArg(*a_event), static_cast<int>(a_event->numArg));
 		}
 		return RE::BSEventNotifyControl::kContinue;
 	}

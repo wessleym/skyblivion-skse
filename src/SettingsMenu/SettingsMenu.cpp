@@ -7,7 +7,7 @@
 #include "SettingsMenu/SoundService.h"
 #include "UIs/Scaleform/ScaleformUtility.h"
 
-namespace SKYBSettingsMenu
+namespace SettingsMenu
 {
 	namespace
 	{
@@ -37,7 +37,7 @@ namespace SKYBSettingsMenu
 	SettingsMenu::SettingsMenu()
 	{
 		// above the journal and the title screen, which stay open underneath
-		ScaleformUtility::LoadMenuMovie(*this, FILE_NAME, 10, true, Close);
+		Scaleform::ScaleformUtility::LoadMenuMovie(*this, FILE_NAME, 10, true, Close);
 	}
 
 	void SettingsMenu::Register()
@@ -45,24 +45,24 @@ namespace SKYBSettingsMenu
 		if (auto ui = RE::UI::GetSingleton()) {
 			ui->Register(MENU_NAME, Creator);
 		}
-		ModEvents::AddSink(SettingsMenuOpener::GetSingleton());
+		Papyrus::ModEvents::AddSink(SettingsMenuOpener::GetSingleton());
 		// a finished capture re-pushes the menu (if it is still open)
-		HotkeyService::GetSingleton()->SetOnChange([] { Push(); });
+		Hotkeys::HotkeyService::GetSingleton()->SetOnChange([] { Push(); });
 		Log::INFO("settings menu: registered as '{}', opened by the mod event {}", MENU_NAME, OPEN_EVENT);
 	}
 
 	void SettingsMenu::Open()
 	{
-		if (!ScaleformUtility::CanShowMenu(MENU_NAME, FILE_NAME)) {
+		if (!Scaleform::ScaleformUtility::CanShowMenu(MENU_NAME, FILE_NAME)) {
 			return;
 		}
 		Log::INFO("settings menu: opening ({})", Store::GetSingleton()->EditingDefaults() ? "new-game defaults" : "this character");
-		ScaleformUtility::ShowMenu(MENU_NAME);
+		Scaleform::ScaleformUtility::ShowMenu(MENU_NAME);
 	}
 
 	void SettingsMenu::Close()
 	{
-		ScaleformUtility::HideMenu(MENU_NAME);
+		Scaleform::ScaleformUtility::HideMenu(MENU_NAME);
 	}
 
 	void SettingsMenu::Accept(RE::FxDelegateHandler::CallbackProcessor* a_cbReg)
@@ -90,7 +90,7 @@ namespace SKYBSettingsMenu
 
 	void SettingsMenu::Push()
 	{
-		auto movie = ScaleformUtility::OpenMenuMovie(SettingsMenu::MENU_NAME);
+		auto movie = Scaleform::ScaleformUtility::OpenMenuMovie(SettingsMenu::MENU_NAME);
 		if (!movie) {
 			return;
 		}
@@ -99,11 +99,11 @@ namespace SKYBSettingsMenu
 		RE::GFxValue header;
 		movie->CreateObject(&header);
 		header.SetMember("context", RE::GFxValue(store->EditingDefaults() ? "defaults" : "save"));
-		header.SetMember("gamepad", RE::GFxValue(ScaleformUtility::GamepadActive()));
+		header.SetMember("gamepad", RE::GFxValue(Scaleform::ScaleformUtility::GamepadActive()));
 		// the preset every value starts at: the menu draws the Preset row as unchanged while it is in force
 		header.SetMember("presetBase", RE::GFxValue(static_cast<double>(kPresetBaseline)));
 		// the menu's own rebindable keys, and a one-shot capture message
-		auto*        hotkeys = HotkeyService::GetSingleton();
+		auto*        hotkeys = Hotkeys::HotkeyService::GetSingleton();
 		RE::GFxValue keys;
 		hotkeys->BuildMap(movie.get(), keys);
 		header.SetMember("keys", keys);
@@ -175,13 +175,13 @@ namespace SKYBSettingsMenu
 		// Hotkeys category: the shared actions ("All Menus") first, then each
 		// menu's rows that still bind a device of their own
 		for (const auto& h : kHotkeys) {
-			if (!HotkeyService::Listed(h)) {
+			if (!Hotkeys::HotkeyService::Listed(h)) {
 				continue;
 			}
-			const auto* group = HotkeyService::Group(h.group);
-			const int   own = HotkeyService::OwnDevices(h);
+			const auto* group = Hotkeys::HotkeyService::Group(h.group);
+			const int   own = Hotkeys::HotkeyService::OwnDevices(h);
 			const auto  cur = hotkeys->Get(h);
-			const HotkeyService::Binding def{ h.pc, h.pad };
+			const Hotkeys::HotkeyService::Binding def{ h.pc, h.pad };
 			RE::GFxValue o;
 			movie->CreateObject(&o);
 			o.SetMember("id", RE::GFxValue(h.id));
@@ -190,11 +190,11 @@ namespace SKYBSettingsMenu
 			o.SetMember("type", RE::GFxValue("key"));
 			o.SetMember("label", RE::GFxValue(h.label));
 			o.SetMember("desc", RE::GFxValue(std::string(h.label) + "_desc"));
-			o.SetMember("text", RE::GFxValue(HotkeyService::Text(h, cur).c_str()));
-			o.SetMember("defaultText", RE::GFxValue(HotkeyService::Text(h, def).c_str()));
+			o.SetMember("text", RE::GFxValue(Hotkeys::HotkeyService::Text(h, cur).c_str()));
+			o.SetMember("defaultText", RE::GFxValue(Hotkeys::HotkeyService::Text(h, def).c_str()));
 			o.SetMember("changed", RE::GFxValue(((own & 1) && cur.pc != def.pc) || ((own & 2) && cur.pad != def.pad)));
 			o.SetMember("scope", RE::GFxValue("global"));
-			o.SetMember("applies", RE::GFxValue(HotkeyService::IsGame(h) ? "keyworld" : "key"));
+			o.SetMember("applies", RE::GFxValue(Hotkeys::HotkeyService::IsGame(h) ? "keyworld" : "key"));
 			rows.PushBack(o);
 		}
 
@@ -254,8 +254,8 @@ namespace SKYBSettingsMenu
 			auto* store = Store::GetSingleton();
 			if (const auto* row = Store::FindRow(id)) {
 				store->Set(*row, ResetValue(*row));
-			} else if (const auto* key = HotkeyService::Find(id)) {
-				HotkeyService::GetSingleton()->Reset(*key);
+			} else if (const auto* key = Hotkeys::HotkeyService::Find(id)) {
+				Hotkeys::HotkeyService::GetSingleton()->Reset(*key);
 			} else if (Store::FindCategory(id)) {
 				store->ApplyPreset(id, kPresetBaseline);
 			} else {
@@ -271,19 +271,19 @@ namespace SKYBSettingsMenu
 		const auto id = ArgString(a_params, 0);
 		// armed next frame: the press that asked for it is already behind us
 		MainThread::Post([id] {
-			HotkeyService::GetSingleton()->BeginCapture(id);
+			Hotkeys::HotkeyService::GetSingleton()->BeginCapture(id);
 			Push();
 		});
 	}
 
 	void SettingsMenu::OnCaptureCancel(const RE::FxDelegateArgs&)
 	{
-		MainThread::Post([] { HotkeyService::GetSingleton()->CancelCapture(); });
+		MainThread::Post([] { Hotkeys::HotkeyService::GetSingleton()->CancelCapture(); });
 	}
 
 	void SettingsMenu::OnClose(const RE::FxDelegateArgs&)
 	{
-		MainThread::Post([] { HotkeyService::GetSingleton()->CancelCapture(); });
+		MainThread::Post([] { Hotkeys::HotkeyService::GetSingleton()->CancelCapture(); });
 		Close();
 	}
 

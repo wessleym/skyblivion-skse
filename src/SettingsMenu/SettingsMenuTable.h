@@ -5,7 +5,7 @@
 #include <cstddef>
 #include <cstdint>
 
-namespace SKYBSettingsMenu
+namespace SettingsMenu
 {
     enum class Type : std::uint8_t { kToggle, kNumber, kChoice };
     enum class Applier : std::uint8_t { kNone, kDegradation, kCombat, kGlobalVar, kQuickLoot, kSettingsIni, kEconomy, kChanceNone, kPersuasion, kGameIni, kSound, kGameGlobal };

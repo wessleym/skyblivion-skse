@@ -6,7 +6,7 @@
 
 //The perk tree definitions as loaded from the JSON files (schemaVersion 1).
 //Icon and art references stay raw strings: the SWF resolves them.
-namespace PerksView {
+namespace Perks {
 
 	enum class CurrencyType {
 		//The engine's perk-point pool.

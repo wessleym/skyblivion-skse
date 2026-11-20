@@ -24,7 +24,7 @@
 
 #include <Windows.h>
 
-namespace SKYBSettingsMenu
+namespace SettingsMenu
 {
 	namespace
 	{
@@ -595,7 +595,7 @@ namespace SKYBSettingsMenu
 	{
 		switch (a_row.applier) {
 		case Applier::kDegradation:
-			if (!SKYBDeg::Settings::SetOverride(a_row.section, a_row.key, a_value)) {
+			if (!Degradation::Settings::SetOverride(a_row.section, a_row.key, a_value)) {
 				Log::WARN("settings menu: degradation has no key [{}] {}", a_row.section, a_row.key);
 			}
 			break;
@@ -705,7 +705,7 @@ namespace SKYBSettingsMenu
 			}
 			Apply(r, Get(r));
 		}
-		HotkeyService::GetSingleton()->ApplyGameKeys();  // QuickLoot / moreHUD keys
+		Hotkeys::HotkeyService::GetSingleton()->ApplyGameKeys();  // QuickLoot / moreHUD keys
 		Log::INFO("settings menu: game ready - {} value(s) applied, {} taken from the new-game defaults", kRows.size(),
 					 filledIds.size());
 	}

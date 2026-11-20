@@ -162,7 +162,7 @@ namespace Achievements {
 
 		void PushList(const std::string& request) {
 			const auto start = std::chrono::steady_clock::now();
-			const auto callback = MenuCallback::Open(request, "AchievementService");
+			const auto callback = Scaleform::MenuCallback::Open(request, "AchievementService");
 			if (!callback) {
 				return;
 			}
@@ -245,7 +245,7 @@ namespace Achievements {
 			root.SetMember("allCharacters", RE::GFxValue(shared));
 			callback->Invoke(root);
 			Log::INFO("AchievementService: {} of {} achievement(s) -> {} in {} us.", earned, total, callback->target,
-				ScaleformUtility::MicrosecondsSince(start));
+				Scaleform::ScaleformUtility::MicrosecondsSince(start));
 		}
 
 		//Switches the journal to the page the achievements menu asked for, once its class can take the call.
@@ -254,8 +254,8 @@ namespace Achievements {
 			if (tab < 0) {
 				return;
 			}
-			ScaleformUtility::RetryOnMainThread(20, std::chrono::milliseconds(50), [tab] {
-				auto movie = ScaleformUtility::OpenMenuMovie(RE::JournalMenu::MENU_NAME);
+			Scaleform::ScaleformUtility::RetryOnMainThread(20, std::chrono::milliseconds(50), [tab] {
+				auto movie = Scaleform::ScaleformUtility::OpenMenuMovie(RE::JournalMenu::MENU_NAME);
 				if (!movie) {
 					return true;  //closed again: nothing to do
 				}
@@ -271,7 +271,7 @@ namespace Achievements {
 		//The two addresses are the game's (Address Library ids, SE / AE); on VR the plain message is used.
 		void OpenJournalAt(int tab) {
 			if (REL::Module::IsVR()) {
-				ScaleformUtility::ShowMenu(RE::JournalMenu::MENU_NAME);
+				Scaleform::ScaleformUtility::ShowMenu(RE::JournalMenu::MENU_NAME);
 				return;
 			}
 			static REL::Relocation<std::uint32_t*> savedPage{ RELOCATION_ID(520167, 406697) };
@@ -287,8 +287,8 @@ namespace Achievements {
 		public:
 			void Call(Params&) override {
 				Log::INFO("AchievementService: ACHIEVEMENTS chosen in the quest menu.");
-				ModEvents::Send(AchievementContract::QuestMenu::MenuSwitch, AchievementContract::QuestMenu::MenuSwitchTab);
-				SKSE::GetTaskInterface()->AddUITask([] { ScaleformUtility::HideMenu(AchievementContract::QuestMenu::Name); });
+				Papyrus::ModEvents::Send(AchievementContract::QuestMenu::MenuSwitch, AchievementContract::QuestMenu::MenuSwitchTab);
+				SKSE::GetTaskInterface()->AddUITask([] { Scaleform::ScaleformUtility::HideMenu(AchievementContract::QuestMenu::Name); });
 			}
 		};
 		class QuestMenuLog : public RE::GFxFunctionHandler {
@@ -303,8 +303,8 @@ namespace Achievements {
 		//Adds the ACHIEVEMENTS item to the quest menu's tab row once the menu's root clip exists.
 		void InjectQuestTabItem() {
 			namespace QM = AchievementContract::QuestMenu;
-			ScaleformUtility::RetryOnMainThread(20, std::chrono::milliseconds(50), [] {
-				auto movie = ScaleformUtility::OpenMenuMovie(QM::Name);
+			Scaleform::ScaleformUtility::RetryOnMainThread(20, std::chrono::milliseconds(50), [] {
+				auto movie = Scaleform::ScaleformUtility::OpenMenuMovie(QM::Name);
 				if (!movie) {
 					return true;  //closed again
 				}
@@ -344,7 +344,7 @@ namespace Achievements {
 				}
 				if (a_event->eventName == AchievementContract::ModEvent::Request) {
 					//Built on the main thread, next frame.
-					MainThread::Post([request = ModEvents::StrArg(*a_event)] { PushList(request); });
+					MainThread::Post([request = Papyrus::ModEvents::StrArg(*a_event)] { PushList(request); });
 				}
 				else if (a_event->eventName == AchievementContract::ModEvent::JournalTab) {
 					//The menu closes itself next; the journal opens once it has.
@@ -393,7 +393,7 @@ namespace Achievements {
 
 	void AchievementService::Register() {
 		AchievementData::LoadOnce();
-		if (!ModEvents::AddSink(&g_sinks)) {
+		if (!Papyrus::ModEvents::AddSink(&g_sinks)) {
 			Log::WARN("AchievementService: No mod-event source. The achievements menu will get no data.");
 		}
 		if (auto* ui = RE::UI::GetSingleton()) {
@@ -404,7 +404,7 @@ namespace Achievements {
 
 	void AchievementService::RegisterPapyrus(RE::BSScript::Internal::VirtualMachine* vm) {
 		const auto* script = AchievementContract::ScriptName;
-		SKSEScriptRegistrar::Register(vm, script, "Unlock", PapyrusUnlock);
+		Papyrus::SKSEScriptRegistrar::Register(vm, script, "Unlock", PapyrusUnlock);
 	}
 
 	bool AchievementService::Unlock(std::string_view id) {
@@ -430,7 +430,7 @@ namespace Achievements {
 		//The record writes a file, and the event reaches Papyrus listeners: both off the caller's thread.
 		SKSE::GetTaskInterface()->AddTask([id = a->id, character = earned.character] {
 			AchievementStore::Record(id, character);
-			ModEvents::Send(AchievementContract::ModEvent::Earned, id);
+			Papyrus::ModEvents::Send(AchievementContract::ModEvent::Earned, id);
 		});
 		return true;
 	}
