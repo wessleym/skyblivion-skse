@@ -1,8 +1,8 @@
 #pragma once
 
-// PerkSpells settings, read once at load from Data\SKSE\Plugins\SKYBPerkSpells.ini
-// (the standalone SKYBPerkSpells plugin's file, same keys and defaults).
-// Missing file or keys fall back to the defaults below.
+// PerkSpells settings, read once at load from the [PerkSpells.*] sections of
+// Data\SKSE\Plugins\SkyblivionSKSE.ini (PluginIni; the standalone SKYBPerkSpells plugin's keys and
+// defaults). Missing file, sections or keys fall back to the defaults below.
 
 #include <array>
 #include <cstdint>

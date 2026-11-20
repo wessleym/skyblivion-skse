@@ -16,7 +16,7 @@
 //           a save row edits the new-game defaults instead:
 //           SKYBSettings.ini [SettingsMenuNewGame] <id>=<value>
 //
-// A value never written is the row's Classic preset. A save loaded without
+// A value never written is the row's baseline preset (kPresetBaseline). A save loaded without
 // this record (an older save, or a new game) takes the new-game defaults then
 // and keeps them.
 //
@@ -68,7 +68,7 @@ namespace SKYBSettingsMenu
 	private:
 		Store() = default;
 
-		[[nodiscard]] float StoredDefault(const RowDef& a_row) const;  // INI value or Classic
+		[[nodiscard]] float StoredDefault(const RowDef& a_row) const;  // INI value or the baseline
 		static void         Apply(const RowDef& a_row, float a_value);
 
 		static void OnSave(SKSE::SerializationInterface* a_intfc);

@@ -5,6 +5,7 @@
 #include "Hotkeys/HotkeyService.h"
 #include "Papyrus/ModEvents.h"
 #include "Platform/MainThread.h"
+#include "Platform/Text.h"
 #include "Resources.h"
 #include "UIs/Scaleform/ScaleformUtility.h"
 
@@ -61,7 +62,8 @@ namespace SKYBDeg
 			bool         unbreakable{ false };
 			float        skill{ 0 }, floorPct{ 0 }, scalePct{ 180 }, statFloorPct{ 60 };
 			bool         gamepad{ false };
-			std::string  mode{ "player" };    // "player" | "vendor"
+			std::string  mode{ "player" };    // "player" | "vendor" | "recharge"
+			std::string  bench;               // player mode at a bench: "grindstone" | "workbench" ("" = not at one)
 			std::string  vendorName;
 			float        vendorSkill{ 0 };
 			std::int32_t gold{ 0 };
@@ -83,8 +85,11 @@ namespace SKYBDeg
 		bool             g_vendorMode = false;  // opened from a vendor's Repair or Recharge service
 		bool             g_recharge = false;    // vendor mode: the Recharge service (else Repair)
 		RE::ActorHandle  g_vendor;
+		using Bench = RepairMenu::Bench;
+		Bench            g_bench = Bench::kNone;  // opened at a grindstone / workbench (player mode only)
 
 		RE::Actor* Vendor() { return g_vendorMode ? REBridge::Lookup(g_vendor).get() : nullptr; }
+		bool       AtBench() { return g_bench != Bench::kNone; }
 
 		// the carried hammer that breaks least (an unbreakable one first), or -1
 		int BestOwned()
@@ -102,11 +107,38 @@ namespace SKYBDeg
 			return best;
 		}
 
-		// keep the hammer in hand valid: still carried, else the best carried one
+		// At a bench the repair spends its hammer for certain, so the pick is turned round: a
+		// carried hammer that never breaks (it is not spent), else the one that breaks most
+		// easily, the plainest. -1 with none carried.
+		int PlainestOwned()
+		{
+			int best = -1;
+			float bestBase = -1.0f;
+			const auto& hammers = Settings::Hammers();
+			for (int i = 0; i < static_cast<int>(hammers.size()); ++i) {
+				if (Condition::Owned(i) <= 0) {
+					continue;
+				}
+				if (Condition::Unbreakable(i)) {
+					return i;
+				}
+				const float base = Settings::At(hammers[i].breakChance);
+				if (base > bestBase) {
+					best = i;
+					bestBase = base;
+				}
+			}
+			return best;
+		}
+
+		// the hammer taken when the player has not chosen one
+		int DefaultHammer() { return AtBench() ? PlainestOwned() : BestOwned(); }
+
+		// keep the hammer in hand valid: still carried, else the default carried one
 		void EnsureHammer()
 		{
 			if (g_hammer < 0 || Condition::Owned(g_hammer) <= 0) {
-				g_hammer = BestOwned();
+				g_hammer = DefaultHammer();
 			}
 		}
 
@@ -185,10 +217,23 @@ namespace SKYBDeg
 			return name && *name ? name : a_obj->GetName();
 		}
 
+		// What the open menu lists: everything this system touches, or at a bench only the bench's
+		// gear (grindstone: weapons; workbench: armour and shields).
+		bool Listed(Kind a_kind)
+		{
+			if (a_kind == Kind::kNone) {
+				return false;
+			}
+			if (!AtBench()) {
+				return true;
+			}
+			return (a_kind == Kind::kWeapon) == (g_bench == Bench::kWeapons);
+		}
+
 		std::vector<Row> Census()
 		{
 			std::vector<Row> rows;
-			ForEachCopy([](RE::TESBoundObject& a_obj) { return Condition::Classify(&a_obj) != Kind::kNone; },
+			ForEachCopy([](RE::TESBoundObject& a_obj) { return Listed(Condition::Classify(&a_obj)); },
 				[&](RE::TESBoundObject* a_obj, RE::ExtraDataList* a_list, std::int32_t a_count) {
 					Row r;
 					r.obj = a_obj;
@@ -296,11 +341,14 @@ namespace SKYBDeg
 			if (g_vendorMode) {
 				return DescribeVendor(a_row, Condition::VendorSkill(Vendor()));
 			}
-			const float cap = Condition::RepairCap(a_row.obj);
+			// At a bench there are no strikes: one repair goes straight to the bench target and costs the
+			// hammer in hand, unless that one never breaks.
+			const bool  bench = AtBench();
+			const float cap = bench ? Condition::BenchCap(a_row.obj) : Condition::RepairCap(a_row.obj);
 			PushRow p = DescribeCommon(a_row);
 			p.locked = !Condition::PlayerMayRepair(a_row.obj, a_row.list);
 			p.capPct = cap * 100.0f;
-			const float nq = Condition::StrikeResult(a_row.q, cap);
+			const float nq = bench ? std::max(a_row.q, cap) : Condition::StrikeResult(a_row.q, cap);
 			p.nextPct = nq * 100.0f;
 			p.canStrike = nq > a_row.q + 1e-4f;
 			p.atCap = a_row.q >= cap - 1e-4f;
@@ -310,7 +358,10 @@ namespace SKYBDeg
 			if (p.canStrike && a_row.list && a_row.count == 1) {
 				p.nextStat = Condition::EngineStatAt(a_row.obj, a_row.list, nq);
 			}
-			p.breakPct = g_hammer >= 0 ? Condition::BreakChance(g_hammer, a_row.obj) * 100.0f : -1.0f;
+			p.breakPct = g_hammer < 0                       ? -1.0f
+			             : !bench                           ? Condition::BreakChance(g_hammer, a_row.obj) * 100.0f
+			             : Condition::Unbreakable(g_hammer) ? 0.0f
+			                                                : 100.0f;
 			return p;
 		}
 
@@ -357,6 +408,7 @@ namespace SKYBDeg
 				h.SetMember("hammerKinds", header.hammerKinds);
 				h.SetMember("unbreakable", header.unbreakable);
 				h.SetMember("mode", header.mode.c_str());
+				h.SetMember("bench", header.bench.c_str());
 				h.SetMember("vendorName", header.vendorName.c_str());
 				h.SetMember("vendorSkill", static_cast<double>(header.vendorSkill));
 				h.SetMember("gold", header.gold);
@@ -447,6 +499,9 @@ namespace SKYBDeg
 				header.mode = "vendor";
 				header.vendorName = vendor->GetDisplayFullName() ? vendor->GetDisplayFullName() : vendor->GetName();
 				header.vendorSkill = Condition::VendorSkill(vendor);
+			}
+			if (AtBench()) {
+				header.bench = g_bench == Bench::kWeapons ? "grindstone" : "workbench";
 			}
 			header.floorPct = Settings::Get(G::QualityMin) * 100.0f;
 			header.statFloorPct = Settings::Get(G::StatFloor) * 100.0f;
@@ -647,6 +702,54 @@ namespace SKYBDeg
 					a_row.obj, target, a_row.worn, a_index);
 		}
 
+		// At a grindstone / workbench: the item goes to the bench target in one go and the hammer in
+		// hand is spent: no break roll, and a hammer that never breaks stays. The caller has checked
+		// the enchanted-gear rule and that a hammer is in hand.
+		void DoBenchRepair(const Row& a_row, std::int32_t a_index)
+		{
+			const float target = Condition::BenchCap(a_row.obj);
+			const float q0 = Condition::GetHealth(a_row.list);
+			if (target <= q0 + 1e-4f) {
+				RE::PlaySound("UIMenuCancel");
+				Refresh({ { "$SKYB_repair_status_bench_atcap", { a_row.name, Pct(target) } } }, a_row.obj, q0, a_row.worn, a_index);
+				return;
+			}
+			bool applied = true;
+			if (a_row.list && a_row.count == 1) {
+				Condition::SetHealth(a_row.obj, a_row.list, target);
+			} else {
+				applied = SplitAndSet(a_row.obj, a_row.list, q0, target);
+			}
+			if (!applied) {
+				Refresh({ { "$SKYB_repair_status_failed", {} } }, a_row.obj, q0, a_row.worn, a_index);
+				return;
+			}
+
+			auto player = RE::PlayerCharacter::GetSingleton();
+			auto* tool = Settings::Hammers()[g_hammer].form;
+			const std::string hammerName = tool->GetName();
+			const bool spent = !Condition::Unbreakable(g_hammer);
+			if (spent) {
+				player->RemoveItem(tool, 1, RE::ITEM_REMOVE_REASON::kRemove, nullptr, nullptr);
+			}
+			const bool ranOut = Condition::Owned(g_hammer) <= 0;
+			// one repair counts as one strike; the rest is the amount restored
+			player->AddSkillExperience(RE::ActorValue::kSmithing,
+									   Settings::Get(G::RepairXPBase) + Settings::Get(G::RepairXPPerQuality) * (target - q0));
+			RE::PlaySound(a_row.kind == Kind::kWeapon ? "UISmithingImproveWeapon" : "UISmithingImproveArmor");
+			Log::INFO("bench repair ({}): '{}' {:.1f}% -> {:.1f}% with '{}' ({}), own limit {:.0f}%, material limit {:.0f}%, skill {:.0f}",
+						 g_bench == Bench::kWeapons ? "grindstone" : "workbench", a_row.name, q0 * 100.0f, target * 100.0f,
+						 hammerName, spent ? "spent" : "never breaks, kept", Condition::RepairCap(a_row.obj) * 100.0f,
+						 Condition::CapAtFullSkill(a_row.obj) * 100.0f, Condition::Smithing());
+
+			std::vector<StatusLine> status{ { spent ? "$SKYB_repair_status_bench_done" : "$SKYB_repair_status_bench_done_kept",
+				{ a_row.name, Pct(target), hammerName } } };
+			if (ranOut) {
+				status.push_back({ "$SKYB_repair_status_ranout", { hammerName } });
+			}
+			Refresh(std::move(status), a_row.obj, target, a_row.worn, a_index);
+		}
+
 		void DoStrike(std::int32_t a_row, bool a_toLimit, std::int32_t a_generation)
 		{
 			if (a_generation != g_generation || a_row < 0 || a_row >= static_cast<std::int32_t>(g_rows.size())) {
@@ -678,6 +781,10 @@ namespace SKYBDeg
 			if (!tool) {
 				RE::PlaySound("UIMenuCancel");
 				Refresh({ { "$SKYB_repair_status_nohammers", {} } }, row.obj, row.q, row.worn, a_row);
+				return;
+			}
+			if (AtBench()) {
+				DoBenchRepair(row, a_row);  // one action at a bench: a_toLimit means the same
 				return;
 			}
 			const float cap = Condition::RepairCap(row.obj);
@@ -760,7 +867,8 @@ namespace SKYBDeg
 
 	// Every open: the mode, then the menu (a vendor's over the dialogue, which stays open). Nothing when
 	// the menu is already up or its movie is missing.
-	static bool OpenAs(bool a_fromInventory, RE::Actor* a_vendor, bool a_recharge, const RE::TESForm* a_tool)
+	static bool OpenAs(bool a_fromInventory, RE::Actor* a_vendor, bool a_recharge, const RE::TESForm* a_tool,
+					   RepairMenu::Bench a_bench = RepairMenu::Bench::kNone)
 	{
 		if (!ScaleformUtility::CanShowMenu(RepairMenu::MENU_NAME, RepairMenu::FILE_NAME)) {
 			return false;
@@ -768,6 +876,7 @@ namespace SKYBDeg
 		g_fromInventory = a_fromInventory;
 		g_vendorMode = a_vendor != nullptr;
 		g_recharge = a_recharge;
+		g_bench = a_bench;
 		g_vendor = a_vendor ? a_vendor->GetHandle() : RE::ActorHandle{};
 		g_pendingHammer = Condition::HammerIndex(a_tool);
 		if (a_fromInventory) {
@@ -821,6 +930,7 @@ namespace SKYBDeg
 				g_vendorMode = false;
 				g_recharge = false;
 				g_vendor = {};
+				g_bench = Bench::kNone;
 				if (back) {
 					ScaleformUtility::ShowMenu(RE::InventoryMenu::MENU_NAME);
 				}
@@ -832,8 +942,8 @@ namespace SKYBDeg
 	void RepairMenu::OnReady(const RE::FxDelegateArgs&)
 	{
 		SKSE::GetTaskInterface()->AddTask([] {
-			// the hammer that was activated, else the best one carried
-			g_hammer = g_pendingHammer >= 0 && Condition::Owned(g_pendingHammer) > 0 ? g_pendingHammer : BestOwned();
+			// the hammer that was activated, else the best one carried (at a bench: the plainest)
+			g_hammer = g_pendingHammer >= 0 && Condition::Owned(g_pendingHammer) > 0 ? g_pendingHammer : DefaultHammer();
 			g_pendingHammer = -1;
 			Settings::ReloadIfChanged();  // INI edits apply on the next menu open
 			Refresh({});
@@ -901,9 +1011,18 @@ namespace SKYBDeg
 															RE::BSTEventSource<SKSE::ModCallbackEvent>*)
 	{
 		if (a_event && a_event->eventName == "SKYBDegOpenRepairMenu") {
-			Log::INFO("mod event SKYBDegOpenRepairMenu -> repair menu");
-			//A Papyrus ModEvent.Send arrives on the VM's thread; Open's state is the main thread's.
-			SKSE::GetTaskInterface()->AddTask([] { RepairMenu::Open(false, nullptr); });
+			//A Papyrus SendModEvent arrives on the VM's thread; Open's state is the main thread's.
+			//Papyrus strings are pooled without regard to case, so "bench" can arrive as "Bench".
+			if (!Text::IEquals(ModEvents::StrArg(*a_event), "bench")) {
+				Log::INFO("mod event SKYBDegOpenRepairMenu -> repair menu");
+				SKSE::GetTaskInterface()->AddTask([] { RepairMenu::Open(false, nullptr); });
+				return RE::BSEventNotifyControl::kContinue;
+			}
+			//From a bench's script (SKYBRepairBench): numArg 1 = grindstone, 2 = armour workbench.
+			const auto bench = std::lround(a_event->numArg) == 1 ? RepairMenu::Bench::kWeapons : RepairMenu::Bench::kArmor;
+			Log::INFO("mod event SKYBDegOpenRepairMenu -> repair menu at a {}",
+				bench == RepairMenu::Bench::kWeapons ? "grindstone (weapons)" : "workbench (armour and shields)");
+			SKSE::GetTaskInterface()->AddTask([bench] { OpenAs(false, nullptr, false, nullptr, bench); });
 		}
 		return RE::BSEventNotifyControl::kContinue;
 	}

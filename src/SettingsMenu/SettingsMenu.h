@@ -13,7 +13,7 @@
 //   movie -> DLL   SKYBSettings_Ready()                  movie is up, send data
 //                  SKYBSettings_Step(id, dir)            dir -1 / +1: previous / next value
 //                  SKYBSettings_Preset(category, dir)    cycle the category's preset
-//                  SKYBSettings_Reset(id)                row or category back to Classic,
+//                  SKYBSettings_Reset(id)                row or category back to the baseline,
 //                                                        hotkey back to its default keys
 //                  SKYBSettings_Capture(id)              wait for the next key / button for hotkey id
 //                  SKYBSettings_CaptureCancel()

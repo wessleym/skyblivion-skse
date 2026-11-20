@@ -56,6 +56,27 @@ namespace Alchemy {
 		}
 	};
 
+	class ModelHandler : public RE::GFxFunctionHandler {
+	public:
+		void Call(Params& a_params) override {
+			auto* models = RE::Inventory3DManager::GetSingleton();
+			if (!models || a_params.argCount == 0) {
+				return;
+			}
+			if (!a_params.args[0].GetBool()) {
+				models->UnloadInventoryItem();
+				return;
+			}
+			//Only the potion is restored here. With no potion the movie asks for the highlighted ingredient itself.
+			auto* ui = RE::UI::GetSingleton();
+			auto menu = ui ? ui->GetMenu<RE::CraftingMenu>() : nullptr;
+			auto* alchemy = menu ? skyrim_cast<RE::CraftingSubMenus::CraftingSubMenus::AlchemyMenu*>(menu->GetCraftingSubMenu()) : nullptr;
+			if (alchemy && alchemy->resultPotionEntry) {
+				models->LoadInventoryItem(alchemy->resultPotionEntry);
+			}
+		}
+	};
+
 	//-------------------------------------------------------------------------------------------------- install
 
 	void AlchemyMenuFeed::InstallScaleform() {
@@ -82,21 +103,26 @@ namespace Alchemy {
 		}
 		static RE::GPtr<FetchHandler> fetch = RE::make_gptr<FetchHandler>();
 		static RE::GPtr<RememberHandler> remember = RE::make_gptr<RememberHandler>();
+		static RE::GPtr<ModelHandler> model = RE::make_gptr<ModelHandler>();
 		RE::GFxValue fetchFn;
 		RE::GFxValue rememberFn;
+		RE::GFxValue modelFn;
 		a_view->CreateFunction(&fetchFn, fetch.get());
 		a_view->CreateFunction(&rememberFn, remember.get());
+		a_view->CreateFunction(&modelFn, model.get());
 		//The object SKSE hands over is the plugin's own slot (_global.skse.plugins.SKYBAlchemy), not the movie's
-		//_root. The two functions go on the slot, on _root and on _global; the movie looks in all three.
-		const bool onSlot = a_root->SetMember(C::Function::Fetch, fetchFn) && a_root->SetMember(C::Function::Remember, rememberFn);
+		//_root. The three functions go on the slot, on _root and on _global; the movie looks in all three.
+		const auto setAll = [&](RE::GFxValue& a_target) {
+			return a_target.SetMember(C::Function::Fetch, fetchFn) && a_target.SetMember(C::Function::Remember, rememberFn) &&
+			       a_target.SetMember(C::Function::Model, modelFn);
+		};
+		const bool onSlot = setAll(*a_root);
 		RE::GFxValue root;
-		const bool onRoot = a_view->GetVariable(&root, "_root") && root.IsDisplayObject() &&
-		                    root.SetMember(C::Function::Fetch, fetchFn) && root.SetMember(C::Function::Remember, rememberFn);
+		const bool onRoot = a_view->GetVariable(&root, "_root") && root.IsDisplayObject() && setAll(root);
 		RE::GFxValue globals;
-		const bool onGlobal = a_view->GetVariable(&globals, "_global") && globals.IsObject() &&
-		                      globals.SetMember(C::Function::Fetch, fetchFn) && globals.SetMember(C::Function::Remember, rememberFn);
-		Log::INFO("[AlchemyMenu] {} loaded: {} and {} set on SKSE's slot={}, _root={}, _global={}.",
-			url, C::Function::Fetch, C::Function::Remember, onSlot, onRoot, onGlobal);
+		const bool onGlobal = a_view->GetVariable(&globals, "_global") && globals.IsObject() && setAll(globals);
+		Log::INFO("[AlchemyMenu] {} loaded: {}, {} and {} set on SKSE's slot={}, _root={}, _global={}.",
+			url, C::Function::Fetch, C::Function::Remember, C::Function::Model, onSlot, onRoot, onGlobal);
 		return true;
 	}
 

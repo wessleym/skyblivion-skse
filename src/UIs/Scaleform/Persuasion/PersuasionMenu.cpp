@@ -109,6 +109,7 @@ namespace Persuasion
 		a_cbReg->Process("SKYBPersuade_Ready", OnReady);
 		a_cbReg->Process("SKYBPersuade_Hover", OnHover);
 		a_cbReg->Process("SKYBPersuade_Disposition", OnDisposition);
+		a_cbReg->Process("SKYBPersuade_Pick", OnPick);
 		a_cbReg->Process("SKYBPersuade_Bribe", OnBribe);
 		a_cbReg->Process("SKYBPersuade_BribeQuote", OnBribeQuote);
 		a_cbReg->Process("SKYBPersuade_Close", OnClose);
@@ -197,6 +198,17 @@ namespace Persuasion
 		SKSE::GetTaskInterface()->AddTask([target = s_target, value] {
 			if (const RE::ActorPtr actor = TargetOrWarn(target, "PersuasionMenu::OnDisposition"); actor && !actor->IsDead()) {
 				DispositionSystem::SetDispositionActorValue(actor.get(), value, true);
+			}
+		});
+	}
+
+	//A wedge was picked. The attempt itself earns Speechcraft experience, whatever the NPC made of it:
+	//[Experience] PerPick is the skill use handed to the game, which applies the skill's own use multiplier.
+	void PersuasionMenu::OnPick(const RE::FxDelegateArgs&)
+	{
+		SKSE::GetTaskInterface()->AddTask([] {
+			if (const float use = s_effective.Get(P::SpeechXPPerPick); use > 0.0f) {
+				RE::PlayerCharacter::GetSingleton()->AddSkillExperience(RE::ActorValue::kSpeech, use);
 			}
 		});
 	}

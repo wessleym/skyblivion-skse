@@ -15,6 +15,7 @@
 #include "Platform/FormCache.h"
 #include "Platform/MainThread.h"
 #include "Resources.h"
+#include "Settings/PluginIni.h"
 #include "Settings/SettingsService.h"
 #include "SettingsMenu/CombatService.h"
 #include "SettingsMenu/EconomyService.h"
@@ -74,17 +75,21 @@ bool Plugin::OnLoad(const SKSE::LoadInterface* a_skse)
 	//can run on worker threads).
 	MainThread::Install();
 
+	//SkyblivionSKSE.ini, the plugin's one settings file: read before the first feature asks for its sections.
+	//Former per-feature files still in SKSE\Plugins are named in the log as ignored.
+	PluginIni::Load();
+
 	//Weapon and armor degradation. The temper patches cover SE, AE and VR. A call site that isn't patched is logged with the reason.
 	SKYBDeg::InventoryHook::Install();
 	SKYBDeg::TemperHook::Install();
 
 	//Perk "Apply ... Spell" entry points stack and the perk owner casts (the former standalone
-	//SKYBPerkSpells.dll, folded in; settings in SKYBPerkSpells.ini). At plugin load, as it was there.
+	//SKYBPerkSpells.dll, folded in; settings in [PerkSpells.*]). At plugin load, as it was there.
 	PerkSpells::EntryPointSpells::Install();
 
 	//Timed block (ranked by the Block mastery perks), arrow and spell parries, chance-based spell
 	//reflection (the former standalone SKYBSpellReflect.dll, folded in; settings in
-	//SKYBSpellReflect.ini). At plugin load, as it was there.
+	//[SpellReflect.*]). At plugin load, as it was there.
 	SpellReflect::Install();
 
 	UISystem::Initialize();
@@ -129,7 +134,7 @@ bool Plugin::OnLoad(const SKSE::LoadInterface* a_skse)
 			});
 			break;
 		case SKSE::MessagingInterface::kPostLoadGame:
-			//Reload the degradation and persuasion INIs if they changed, then apply every settings-menu
+			//Take the degradation and persuasion settings again if the INI changed, then apply every settings-menu
 			//row (its degradation and persuasion overrides among them).
 			SKYBDeg::Settings::ReloadIfChanged();
 			Persuasion::Settings::ReloadIfChanged();
@@ -141,13 +146,13 @@ bool Plugin::OnLoad(const SKSE::LoadInterface* a_skse)
 			//The systems below use Resources and the form table (po3 Tweaks' editor-ID map is built by now).
 			Resources::Install();
 			FormCache::OnDataLoaded();
-			//Timed block ranks, parry perks, feedback records (SKYBSpellReflect.ini).
+			//Timed block ranks, parry perks, feedback records ([SpellReflect.*]).
 			SpellReflect::OnDataLoaded();
 			//The apparatus perks and the effect baselines the alchemy menu shows.
 			Alchemy::AlchemyMenuFeed::OnDataLoaded();
 			//The scroll recipes (ConfigFiles/ScrollCrafting/recipes.json); the forms through FormCache.
 			ScrollCraft::ScrollRecipeStore::LoadOnce();
-			//Casting a scroll or firing a staff trains Enchanting (SKYBScrollCrafting.ini [CastingXP]).
+			//Casting a scroll or firing a staff trains Enchanting ([ScrollCrafting.CastingXP]).
 			ScrollCraft::ScrollCastXP::GetSingleton()->Register();
 			DispositionSystem::OnDataLoaded();
 			Sigil::SigilSystem::Register();

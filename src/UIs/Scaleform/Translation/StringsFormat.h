@@ -5,10 +5,8 @@
 
 #include <algorithm>
 #include <cctype>
-#include <optional>
 #include <string>
 #include <string_view>
-#include <unordered_map>
 
 namespace StringsFormat {
 	inline void TrimInPlace(std::string& text) {
@@ -84,45 +82,4 @@ namespace StringsFormat {
 		}
 		return Line::kEntry;
 	}
-
-	// The translator's map is keyed by BSFixedStringW, a case-INSENSITIVE string
-	// (CommonLib: BSFixedStringCI = BSFixedString), so "$GROUP" and "$Group" are
-	// ONE key in game and the later definition replaces the earlier text. Keys
-	// are ASCII, so an ASCII fold compares them the way the game does.
-	inline std::string FoldKey(std::string_view key) {
-		std::string out(key);
-		for (auto& c : out) {
-			if (c >= 'A' && c <= 'Z') {
-				c = static_cast<char>(c - 'A' + 'a');
-			}
-		}
-		return out;
-	}
-
-	// Which file defines each key so far, with keys compared the way the game
-	// compares them - so a redefinition, case-only twins included, can name both
-	// sides.
-	class Origins {
-	public:
-		struct Definition {
-			std::string key;  // as written
-			std::string file;
-		};
-
-		// Records key as defined in file; returns the definition it replaces.
-		std::optional<Definition> Define(const std::string& key, const std::string& file) {
-			auto [it, inserted] = _byKey.try_emplace(FoldKey(key), Definition{key, file});
-			if (inserted) {
-				return std::nullopt;
-			}
-			Definition previous = it->second;
-			it->second = {key, file};
-			return previous;
-		}
-
-		void Clear() { _byKey.clear(); }
-
-	private:
-		std::unordered_map<std::string, Definition> _byKey;
-	};
 }

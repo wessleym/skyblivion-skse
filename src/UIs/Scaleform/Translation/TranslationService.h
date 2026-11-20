@@ -4,7 +4,7 @@
 
 #include <filesystem>
 #include <string>
-#include <vector>
+#include <unordered_map>
 
 namespace Translation {
 
@@ -28,8 +28,8 @@ namespace Translation {
 	//	\n, \t and \\ in values are expanded. A missing leading $ on a key is added.
 	//
 	//Files load in sorted filename order, and a later entry replaces an earlier one for the same key,
-	//so a "zz_overrides.txt" can patch anything. Keys compare case-insensitively, as the game compares them,
-	//and every replacement is logged with both files named.
+	//so a "zz_overrides.txt" can patch anything. Keys compare exactly, case included, as the game's translator
+	//looks them up, and every replacement is logged with both files named.
 	//
 	//All access is on the main thread (kDataLoaded, then an SKSE task per reload), so the service needs no lock.
 	class TranslationService {
@@ -55,16 +55,16 @@ namespace Translation {
 		};
 		static inline Sink s_sink;
 
-		//One entry per key as the game compares keys, the latest definition kept, in load order.
+		//The latest definition of a key, and the file it came from, so a redefinition can name both sides.
 		struct Staged {
-			std::string  folded; //StringsFormat::FoldKey(key)
-			std::wstring key;    //With the $, as written.
+			std::string  file;
+			std::wstring key; //With the $, as written.
 			std::wstring value;
 		};
 
-		static inline std::vector<Staged> s_staged;
-		//The file each key came from, so a collision can name both sides.
-		static inline StringsFormat::Origins s_origins;
+		//By key as written: keys compare exactly, the way the game's translator looks them up, so "$GROUP" and
+		//"$Group" are two keys (the game's own file defines pairs such as $SAVE and $Save with different text).
+		static inline std::unordered_map<std::string, Staged> s_staged;
 	};
 
 }
