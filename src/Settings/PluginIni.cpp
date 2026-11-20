@@ -2,18 +2,14 @@
 
 #include <filesystem>
 #include <fstream>
-#include <mutex>
 #include <optional>
 
 namespace PluginIni
 {
 	namespace
 	{
-		using Stamp = std::optional<std::filesystem::file_time_type>;
-
-		std::mutex                  g_lock;
-		std::shared_ptr<const File> g_file;   // null until the first reading
-		Stamp                       g_stamp;  // the write time of what g_file holds; nullopt: no file
+		File                                           g_file;   // generation 0 until the first reading
+		std::optional<std::filesystem::file_time_type> g_stamp;  // the write time of what g_file holds; nullopt: no file
 
 		std::string Path()
 		{
@@ -30,17 +26,16 @@ namespace PluginIni
 			return nullptr;
 		}
 
-		// g_lock held.
 		void ReadFile()
 		{
-			auto       file = std::make_shared<File>();
 			const auto path = Path();
-			file->generation = (g_file ? g_file->generation : 0) + 1;
+			File       file;
+			file.generation = g_file.generation + 1;
 			g_stamp = Text::WriteTime(path);
 
 			std::ifstream in{ std::filesystem::path{ path } };
-			file->found = g_stamp.has_value() && static_cast<bool>(in);
-			if (!file->found) {
+			file.found = g_stamp.has_value() && static_cast<bool>(in);
+			if (!file.found) {
 				g_stamp.reset();
 				Log::WARN("{}: not found in {} - every feature uses its built-in defaults", kFileName, kFolder);
 				g_file = std::move(file);
@@ -48,8 +43,7 @@ namespace PluginIni
 			}
 
 			Section*    current = nullptr;  // null: lines here belong to no feature
-			std::size_t lines = 0, features = 0;
-			std::array<bool, kFeatures.size()> seen{};
+			std::size_t lines = 0;
 			IniFile::Parse(
 				in, path, kFileName,
 				[&](const IniFile::Entry& a_header) {
@@ -63,12 +57,11 @@ namespace PluginIni
 							a_header.line, a_header.section);
 						return;
 					}
-					current = &file->sections.emplace_back();
+					current = &file.sections.emplace_back();
 					current->feature = std::string(feature->name);
 					current->header = a_header;
 					current->header.section =
 						dot == std::string::npos ? std::string() : Text::Trim(std::string_view(a_header.section).substr(dot + 1));
-					seen[static_cast<std::size_t>(feature - kFeatures.data())] = true;
 				},
 				[&](const IniFile::Entry& a_entry) {
 					if (a_entry.section.empty()) {
@@ -81,11 +74,7 @@ namespace PluginIni
 						++lines;
 					}
 				});
-			for (const bool one : seen) {
-				features += one ? 1 : 0;
-			}
-			Log::INFO("{}: read {} - {} value(s) in {} section(s), for {} of {} features", kFileName, path, lines,
-				file->sections.size(), features, kFeatures.size());
+			Log::INFO("{}: read {} - {} value(s) in {} section(s)", kFileName, path, lines, file.sections.size());
 			g_file = std::move(file);
 		}
 
@@ -106,48 +95,26 @@ namespace PluginIni
 
 	void Load()
 	{
-		{
-			const std::scoped_lock lock{ g_lock };
-			ReadFile();
-		}
+		ReadFile();
 		NameFormerFiles();
 	}
 
 	void Refresh()
 	{
-		const std::scoped_lock lock{ g_lock };
-		if (!g_file) {
-			ReadFile();
-		} else if (Text::WriteTime(Path()) != g_stamp) {
+		if (Text::WriteTime(Path()) != g_stamp) {
 			Log::INFO("{}: changed on disk - reading it again", kFileName);
 			ReadFile();
 		}
 	}
 
-	std::shared_ptr<const File> Current()
+	const File& Current()
 	{
-		const std::scoped_lock lock{ g_lock };
-		if (!g_file) {
-			ReadFile();
-		}
 		return g_file;
 	}
 
 	std::uint32_t Generation()
 	{
-		const std::scoped_lock lock{ g_lock };
-		return g_file ? g_file->generation : 0;
-	}
-
-	bool Has(std::string_view a_feature)
-	{
-		const auto file = Current();
-		for (const auto& section : file->sections) {
-			if (Text::IEquals(section.feature, a_feature)) {
-				return true;
-			}
-		}
-		return false;
+		return g_file.generation;
 	}
 
 	std::string Where(std::string_view a_feature)

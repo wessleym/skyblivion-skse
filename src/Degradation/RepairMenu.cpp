@@ -5,6 +5,7 @@
 #include "Hotkeys/HotkeyService.h"
 #include "Papyrus/ModEvents.h"
 #include "Platform/MainThread.h"
+#include "Platform/Text.h"
 #include "Resources.h"
 #include "UIs/Scaleform/ScaleformUtility.h"
 
@@ -88,7 +89,7 @@ namespace SKYBDeg
 		Bench            g_bench = Bench::kNone;  // opened at a grindstone / workbench (player mode only)
 
 		RE::Actor* Vendor() { return g_vendorMode ? REBridge::Lookup(g_vendor).get() : nullptr; }
-		bool       AtBench() { return g_bench != Bench::kNone && !g_vendorMode; }
+		bool       AtBench() { return g_bench != Bench::kNone; }
 
 		// the carried hammer that breaks least (an unbreakable one first), or -1
 		int BestOwned()
@@ -332,27 +333,6 @@ namespace SKYBDeg
 
 		PushRow DescribeVendor(const Row& a_row, float a_vendorSkill);
 
-		// At a bench: no strikes. One repair goes straight to the bench target (shown as the limit
-		// and as the "after" value) and costs the hammer in hand unless that one never breaks.
-		PushRow DescribeBench(const Row& a_row)
-		{
-			const float target = Condition::BenchCap(a_row.obj);
-			PushRow p = DescribeCommon(a_row);
-			p.locked = !Condition::PlayerMayRepair(a_row.obj, a_row.list);
-			p.capPct = target * 100.0f;
-			p.canStrike = target > a_row.q + 1e-4f;
-			p.atCap = !p.canStrike;
-			const float nq = p.canStrike ? target : a_row.q;
-			p.nextPct = nq * 100.0f;
-			p.effPct = Condition::StatMult(a_row.q) * 100.0f;
-			p.nextEffPct = Condition::StatMult(nq) * 100.0f;
-			if (p.canStrike && a_row.list && a_row.count == 1) {
-				p.nextStat = Condition::EngineStatAt(a_row.obj, a_row.list, nq);
-			}
-			p.breakPct = g_hammer < 0 ? -1.0f : Condition::Unbreakable(g_hammer) ? 0.0f : 100.0f;
-			return p;
-		}
-
 		PushRow Describe(const Row& a_row)
 		{
 			if (g_vendorMode && g_recharge) {
@@ -361,14 +341,14 @@ namespace SKYBDeg
 			if (g_vendorMode) {
 				return DescribeVendor(a_row, Condition::VendorSkill(Vendor()));
 			}
-			if (AtBench()) {
-				return DescribeBench(a_row);
-			}
-			const float cap = Condition::RepairCap(a_row.obj);
+			// At a bench there are no strikes: one repair goes straight to the bench target and costs the
+			// hammer in hand, unless that one never breaks.
+			const bool  bench = AtBench();
+			const float cap = bench ? Condition::BenchCap(a_row.obj) : Condition::RepairCap(a_row.obj);
 			PushRow p = DescribeCommon(a_row);
 			p.locked = !Condition::PlayerMayRepair(a_row.obj, a_row.list);
 			p.capPct = cap * 100.0f;
-			const float nq = Condition::StrikeResult(a_row.q, cap);
+			const float nq = bench ? std::max(a_row.q, cap) : Condition::StrikeResult(a_row.q, cap);
 			p.nextPct = nq * 100.0f;
 			p.canStrike = nq > a_row.q + 1e-4f;
 			p.atCap = a_row.q >= cap - 1e-4f;
@@ -378,7 +358,10 @@ namespace SKYBDeg
 			if (p.canStrike && a_row.list && a_row.count == 1) {
 				p.nextStat = Condition::EngineStatAt(a_row.obj, a_row.list, nq);
 			}
-			p.breakPct = g_hammer >= 0 ? Condition::BreakChance(g_hammer, a_row.obj) * 100.0f : -1.0f;
+			p.breakPct = g_hammer < 0                       ? -1.0f
+			             : !bench                           ? Condition::BreakChance(g_hammer, a_row.obj) * 100.0f
+			             : Condition::Unbreakable(g_hammer) ? 0.0f
+			                                                : 100.0f;
 			return p;
 		}
 
@@ -722,7 +705,7 @@ namespace SKYBDeg
 		// At a grindstone / workbench: the item goes to the bench target in one go and the hammer in
 		// hand is spent: no break roll, and a hammer that never breaks stays. The caller has checked
 		// the enchanted-gear rule and that a hammer is in hand.
-		void DoBenchRepair(const Row& a_row, std::int32_t a_index, int a_hammer, RE::TESBoundObject* a_tool)
+		void DoBenchRepair(const Row& a_row, std::int32_t a_index)
 		{
 			const float target = Condition::BenchCap(a_row.obj);
 			const float q0 = Condition::GetHealth(a_row.list);
@@ -743,12 +726,13 @@ namespace SKYBDeg
 			}
 
 			auto player = RE::PlayerCharacter::GetSingleton();
-			const std::string hammerName = a_tool->GetName();
-			const bool spent = !Condition::Unbreakable(a_hammer);
+			auto* tool = Settings::Hammers()[g_hammer].form;
+			const std::string hammerName = tool->GetName();
+			const bool spent = !Condition::Unbreakable(g_hammer);
 			if (spent) {
-				player->RemoveItem(a_tool, 1, RE::ITEM_REMOVE_REASON::kRemove, nullptr, nullptr);
+				player->RemoveItem(tool, 1, RE::ITEM_REMOVE_REASON::kRemove, nullptr, nullptr);
 			}
-			const bool ranOut = Condition::Owned(a_hammer) <= 0;
+			const bool ranOut = Condition::Owned(g_hammer) <= 0;
 			// one repair counts as one strike; the rest is the amount restored
 			player->AddSkillExperience(RE::ActorValue::kSmithing,
 									   Settings::Get(G::RepairXPBase) + Settings::Get(G::RepairXPPerQuality) * (target - q0));
@@ -758,12 +742,8 @@ namespace SKYBDeg
 						 hammerName, spent ? "spent" : "never breaks, kept", Condition::RepairCap(a_row.obj) * 100.0f,
 						 Condition::CapAtFullSkill(a_row.obj) * 100.0f, Condition::Smithing());
 
-			std::vector<StatusLine> status;
-			if (spent) {
-				status.push_back({ "$SKYB_repair_status_bench_done", { a_row.name, Pct(target), hammerName } });
-			} else {
-				status.push_back({ "$SKYB_repair_status_bench_done_kept", { a_row.name, Pct(target), hammerName } });
-			}
+			std::vector<StatusLine> status{ { spent ? "$SKYB_repair_status_bench_done" : "$SKYB_repair_status_bench_done_kept",
+				{ a_row.name, Pct(target), hammerName } } };
 			if (ranOut) {
 				status.push_back({ "$SKYB_repair_status_ranout", { hammerName } });
 			}
@@ -804,7 +784,7 @@ namespace SKYBDeg
 				return;
 			}
 			if (AtBench()) {
-				DoBenchRepair(row, a_row, g_hammer, tool);  // one action at a bench: a_toLimit means the same
+				DoBenchRepair(row, a_row);  // one action at a bench: a_toLimit means the same
 				return;
 			}
 			const float cap = Condition::RepairCap(row.obj);
@@ -896,7 +876,7 @@ namespace SKYBDeg
 		g_fromInventory = a_fromInventory;
 		g_vendorMode = a_vendor != nullptr;
 		g_recharge = a_recharge;
-		g_bench = a_vendor ? RepairMenu::Bench::kNone : a_bench;
+		g_bench = a_bench;
 		g_vendor = a_vendor ? a_vendor->GetHandle() : RE::ActorHandle{};
 		g_pendingHammer = Condition::HammerIndex(a_tool);
 		if (a_fromInventory) {
@@ -922,13 +902,6 @@ namespace SKYBDeg
 	{
 		if (a_vendor && OpenAs(false, a_vendor, true, nullptr)) {
 			Log::INFO("recharge: opened by {} (Enchanting {:.0f})", a_vendor->GetName(), VendorEnchanting(a_vendor));
-		}
-	}
-
-	void RepairMenu::OpenAtBench(Bench a_bench)
-	{
-		if (a_bench != Bench::kNone && OpenAs(false, nullptr, false, nullptr, a_bench)) {
-			Log::INFO("bench repair: opened at a {}", a_bench == Bench::kWeapons ? "grindstone (weapons)" : "workbench (armour and shields)");
 		}
 	}
 
@@ -1040,21 +1013,16 @@ namespace SKYBDeg
 		if (a_event && a_event->eventName == "SKYBDegOpenRepairMenu") {
 			//A Papyrus SendModEvent arrives on the VM's thread; Open's state is the main thread's.
 			//Papyrus strings are pooled without regard to case, so "bench" can arrive as "Bench".
-			if (_stricmp(ModEvents::StrArg(*a_event).c_str(), "bench") != 0) {
+			if (!Text::IEquals(ModEvents::StrArg(*a_event), "bench")) {
 				Log::INFO("mod event SKYBDegOpenRepairMenu -> repair menu");
 				SKSE::GetTaskInterface()->AddTask([] { RepairMenu::Open(false, nullptr); });
 				return RE::BSEventNotifyControl::kContinue;
 			}
 			//From a bench's script (SKYBRepairBench): numArg 1 = grindstone, 2 = armour workbench.
-			const auto kind = std::lround(a_event->numArg);
-			if (kind != 1 && kind != 2) {
-				Log::WARN("mod event SKYBDegOpenRepairMenu: bench kind {} is neither 1 (grindstone) nor 2 (workbench); nothing opened",
-							 a_event->numArg);
-				return RE::BSEventNotifyControl::kContinue;
-			}
-			const auto bench = kind == 1 ? RepairMenu::Bench::kWeapons : RepairMenu::Bench::kArmor;
-			Log::INFO("mod event SKYBDegOpenRepairMenu (bench {}) -> repair menu at a bench", kind);
-			SKSE::GetTaskInterface()->AddTask([bench] { RepairMenu::OpenAtBench(bench); });
+			const auto bench = std::lround(a_event->numArg) == 1 ? RepairMenu::Bench::kWeapons : RepairMenu::Bench::kArmor;
+			Log::INFO("mod event SKYBDegOpenRepairMenu -> repair menu at a {}",
+				bench == RepairMenu::Bench::kWeapons ? "grindstone (weapons)" : "workbench (armour and shields)");
+			SKSE::GetTaskInterface()->AddTask([bench] { OpenAs(false, nullptr, false, nullptr, bench); });
 		}
 		return RE::BSEventNotifyControl::kContinue;
 	}

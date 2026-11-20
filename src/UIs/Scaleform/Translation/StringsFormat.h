@@ -5,10 +5,8 @@
 
 #include <algorithm>
 #include <cctype>
-#include <optional>
 #include <string>
 #include <string_view>
-#include <unordered_map>
 
 namespace StringsFormat {
 	inline void TrimInPlace(std::string& text) {
@@ -84,27 +82,4 @@ namespace StringsFormat {
 		}
 		return Line::kEntry;
 	}
-
-	// Which file defines each key so far, so a redefinition can name both sides.
-	// Keys are compared exactly as written, the way the game's translator looks
-	// them up: "$GROUP" and "$Group" are two keys (the game's own file defines
-	// pairs such as $SAVE and $Save with different text), not a redefinition.
-	class Origins {
-	public:
-		// Records key as defined in file; returns the file that defined it before.
-		std::optional<std::string> Define(const std::string& key, const std::string& file) {
-			auto [it, inserted] = _byKey.try_emplace(key, file);
-			if (inserted) {
-				return std::nullopt;
-			}
-			std::string previous = std::move(it->second);
-			it->second = file;
-			return previous;
-		}
-
-		void Clear() { _byKey.clear(); }
-
-	private:
-		std::unordered_map<std::string, std::string> _byKey;
-	};
 }

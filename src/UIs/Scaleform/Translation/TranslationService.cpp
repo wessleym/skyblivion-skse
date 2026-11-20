@@ -125,12 +125,12 @@ namespace Translation {
 				continue;
 			}
 
-			if (auto previous = s_origins.Define(key, fileName)) {
+			auto [staged, inserted] = s_staged.try_emplace(key);
+			if (!inserted) {
 				//Not an error, since the later file wins, but logged because cross-file key collisions are otherwise silent.
-				Log::WARN("TranslationService: Key {} redefined in {} (was {}).", key, fileName, *previous);
-				std::erase_if(s_staged, [&wideKey](const Staged& entry) { return entry.key == wideKey; });
+				Log::WARN("TranslationService: Key {} redefined in {} (was {}).", key, fileName, staged->second.file);
 			}
-			s_staged.push_back({ std::move(wideKey), std::move(wideValue) });
+			staged->second = { fileName, std::move(wideKey), std::move(wideValue) };
 			++parsed;
 		}
 
@@ -150,7 +150,7 @@ namespace Translation {
 
 		auto& map = translator->translator.translationMap;
 		int applied = 0;
-		for (auto& entry : s_staged) {
+		for (auto& [_, entry] : s_staged) {
 			const auto mapKey = InternExact(entry.key);
 			auto mapValue = InternExact(entry.value);
 			//Replaces rather than skips: a key migrated out of the engine-loaded file must take the Skyblivion text.
@@ -169,7 +169,6 @@ namespace Translation {
 
 	int TranslationService::Reload() {
 		s_staged.clear();
-		s_origins.Clear();
 
 		const auto language = CurrentLanguage();
 		const auto folder = ResolveFolder(language);

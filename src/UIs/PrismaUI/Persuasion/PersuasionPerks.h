@@ -60,7 +60,8 @@ namespace Persuasion
 			std::size_t index;  // into kSettingDefs
 			char        op;     // '=', '*', '+', '>' (never below), '<' (never above)
 			float       value;
-			std::string per;    // "<value> per <ActorValue>": the actor value's name, else empty
+			std::string    per;                                // "<value> per <ActorValue>": the actor value's name (for the log), else empty
+			RE::ActorValue perValue{ RE::ActorValue::kNone };  // that actor value, resolved when the line is read
 			float       upTo{ 0.0f };  // points of it counted at most; 0 = all of them
 		};
 

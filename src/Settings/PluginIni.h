@@ -11,13 +11,13 @@
 //
 // The file is read at plugin load (Load) and again whenever its write time has changed (Refresh, called by
 // the features that take changes without a restart). Generation() counts the readings, so a feature can tell
-// whether the values it holds are still the file's.
+// whether the values it holds are still the file's. Every caller is on the main thread or at plugin load, so
+// there is no lock.
 #include "Platform/IniFile.h"
 #include "Platform/Text.h"
 
 #include <array>
 #include <cstdint>
-#include <memory>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -62,12 +62,10 @@ namespace PluginIni
 	void Load();
 	// Reads the file again when its write time changed (or it appeared or went away).
 	void Refresh();
-	// The file as last read (read now if Load has not run yet).
-	[[nodiscard]] std::shared_ptr<const File> Current();
+	// The file as last read (Load runs at plugin load, before any feature reads).
+	[[nodiscard]] const File& Current();
 	// 0 before the first reading, then one more each time the file is read.
 	[[nodiscard]] std::uint32_t Generation();
-	// Whether the file has a section of this feature, even an empty one.
-	[[nodiscard]] bool Has(std::string_view a_feature);
 	// "SkyblivionSKSE.ini [Feature]", for log lines.
 	[[nodiscard]] std::string Where(std::string_view a_feature);
 
@@ -76,8 +74,8 @@ namespace PluginIni
 	template <class S, class F>
 	bool Read(std::string_view a_feature, S&& a_onSection, F&& a_onEntry)
 	{
-		const auto file = Current();
-		for (const auto& section : file->sections) {
+		const auto& file = Current();
+		for (const auto& section : file.sections) {
 			if (!Text::IEquals(section.feature, a_feature)) {
 				continue;
 			}
@@ -86,7 +84,7 @@ namespace PluginIni
 				a_onEntry(line);
 			}
 		}
-		return file->found;
+		return file.found;
 	}
 
 	template <class F>

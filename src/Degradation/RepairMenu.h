@@ -19,7 +19,7 @@
 // Opened by InventoryHook (repair tool activated), the SKYBDegOpenRepairMenu mod event, or the
 // dialogue services strip (DialogueServices: repair, recharge; the SKYBDegradation.OpenVendor* natives
 // of earlier versions are gone, 2026-11-06):
-//   bench mode     OpenAtBench: the mod event with strArg "bench" and numArg 1 (grindstone) or 2
+//   bench mode     the mod event with strArg "bench" and numArg 1 (grindstone) or 2
 //                  (armour workbench), sent by the bench's script (SKYBRepairBench). The player's
 //                  menu with header.bench = "grindstone" | "workbench" (mode stays "player"): a
 //                  grindstone lists weapons, a workbench armour and shields. One repair takes the
@@ -53,7 +53,6 @@ namespace SKYBDeg
 			kWeapons,  // grindstone
 			kArmor     // armour workbench: armour and shields
 		};
-		static void OpenAtBench(Bench a_bench);
 		static void Close();
 
 		void                   Accept(RE::FxDelegateHandler::CallbackProcessor* a_cbReg) override;

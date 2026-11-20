@@ -63,8 +63,7 @@ namespace Alchemy {
 			if (!models || a_params.argCount == 0) {
 				return;
 			}
-			const bool show = a_params.args[0].IsBool() ? a_params.args[0].GetBool() : a_params.args[0].GetNumber() != 0.0;
-			if (!show) {
+			if (!a_params.args[0].GetBool()) {
 				models->UnloadInventoryItem();
 				return;
 			}

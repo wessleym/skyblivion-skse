@@ -4,7 +4,7 @@
 
 #include <filesystem>
 #include <string>
-#include <vector>
+#include <unordered_map>
 
 namespace Translation {
 
@@ -55,15 +55,16 @@ namespace Translation {
 		};
 		static inline Sink s_sink;
 
-		//One entry per key, the latest definition kept, in load order.
+		//The latest definition of a key, and the file it came from, so a redefinition can name both sides.
 		struct Staged {
+			std::string  file;
 			std::wstring key; //With the $, as written.
 			std::wstring value;
 		};
 
-		static inline std::vector<Staged> s_staged;
-		//The file each key came from, so a collision can name both sides.
-		static inline StringsFormat::Origins s_origins;
+		//By key as written: keys compare exactly, the way the game's translator looks them up, so "$GROUP" and
+		//"$Group" are two keys (the game's own file defines pairs such as $SAVE and $Save with different text).
+		static inline std::unordered_map<std::string, Staged> s_staged;
 	};
 
 }

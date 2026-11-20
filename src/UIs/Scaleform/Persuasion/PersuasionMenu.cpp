@@ -206,16 +206,9 @@ namespace Persuasion
 	//[Experience] PerPick is the skill use handed to the game, which applies the skill's own use multiplier.
 	void PersuasionMenu::OnPick(const RE::FxDelegateArgs&)
 	{
-		SKSE::GetTaskInterface()->AddTask([target = s_target] {
-			const float use = s_effective.Get(P::SpeechXPPerPick);
-			if (use <= 0.0f) {
-				return;
-			}
-			//Only in a live conversation: a pick that arrives after the NPC is gone or dead earns nothing.
-			const RE::ActorPtr actor = TargetOrWarn(target, "PersuasionMenu::OnPick");
-			auto*              player = RE::PlayerCharacter::GetSingleton();
-			if (actor && !actor->IsDead() && player) {
-				player->AddSkillExperience(RE::ActorValue::kSpeech, use);
+		SKSE::GetTaskInterface()->AddTask([] {
+			if (const float use = s_effective.Get(P::SpeechXPPerPick); use > 0.0f) {
+				RE::PlayerCharacter::GetSingleton()->AddSkillExperience(RE::ActorValue::kSpeech, use);
 			}
 		});
 	}

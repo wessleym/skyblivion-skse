@@ -201,12 +201,8 @@ namespace TweenTools {
 
 	void TweenMenuFilter::WrapPick(RE::GFxMovie* a_movie, RE::GFxValue& a_clip)
 	{
+		//Once per open (the menu's movie is a fresh one each time): on the first pass, or on the deferred one.
 		static RE::GPtr<PickHandler> pick = RE::make_gptr<PickHandler>();
-		//A fresh movie each open; on the deferred pass of the same open the wrap is already there.
-		RE::GFxValue kept;
-		if (a_clip.GetMember(kMoviePick, &kept) && !kept.IsUndefined()) {
-			return;
-		}
 		RE::GFxValue original;
 		if (!a_clip.GetMember(kPick, &original) || original.IsUndefined()) {
 			static bool s_warned = false;

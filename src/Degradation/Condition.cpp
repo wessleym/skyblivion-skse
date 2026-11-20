@@ -263,21 +263,16 @@ namespace SKYBDeg::Condition
 	float BenchCap(const RE::TESBoundObject* a_obj)
 	{
 		const float own = RepairCap(a_obj);
-		float       target = own;
-		if (const float floor = Settings::Get(G::BenchCapFloor); floor > 0.0f) {
-			target = std::max(target, floor);
-		}
-		auto player = RE::PlayerCharacter::GetSingleton();
-		if (player && target > 1.0f) {
+		float       target = std::max(own, Settings::Get(G::BenchCapFloor));
+		if (target > 1.0f) {
 			// Mod Tempering Health has two condition tabs, the perk owner and the item (the base
 			// object, as the perks' material keyword conditions expect), and one value.
 			float above = target - 1.0f;
-			RE::BGSEntryPoint::HandleEntryPoint(RE::BGSEntryPoint::ENTRY_POINT::kModTemperingHealth, player,
+			RE::BGSEntryPoint::HandleEntryPoint(RE::BGSEntryPoint::ENTRY_POINT::kModTemperingHealth, RE::PlayerCharacter::GetSingleton(),
 				const_cast<RE::TESBoundObject*>(a_obj), std::addressof(above));
-			if (std::isfinite(above) && above >= 0.0f) {
-				target = 1.0f + above;
-			}
+			target = 1.0f + above;
 		}
+		// never below the player's own limit (a perk result below 0 or not a number lands there too)
 		return std::max(own, std::min(target, CapAtFullSkill(a_obj)));
 	}
 

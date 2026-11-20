@@ -156,8 +156,9 @@ namespace Persuasion
 			}
 			std::string_view value = a_entry.value;
 			//"<number> per <ActorValue> [up to <points>]": the number counts once for each point.
-			std::string per;
-			float       upTo = 0.0f;
+			std::string    per;
+			RE::ActorValue perValue = RE::ActorValue::kNone;
+			float          upTo = 0.0f;
 			if (const auto at = Text::Lower(value).find(" per "); at != std::string::npos) {
 				auto scale = Text::Trim(value.substr(at + 5));
 				value = value.substr(0, at);
@@ -173,6 +174,11 @@ namespace Persuasion
 						a_entry.value);
 					return;
 				}
+				perValue = ActorValueNamed(scale);
+				if (perValue == RE::ActorValue::kNone) {
+					Log::WARN("persuasion perks: line {}: no actor value named {} - ignored", lineNo, scale);
+					return;
+				}
 				per = std::move(scale);
 			}
 			float v = 0.0f;
@@ -185,15 +191,16 @@ namespace Persuasion
 				Log::WARN("persuasion perks: line {}: unknown setting {} - ignored", lineNo, target);
 				return;
 			}
-			s_rules.back().ops.push_back(Op{ static_cast<std::size_t>(idx), op, v, std::move(per), upTo });
+			s_rules.back().ops.push_back(Op{ static_cast<std::size_t>(idx), op, v, std::move(per), perValue, upTo });
 			++ops;
 		};
 
-		const bool fromFile = PluginIni::Has(kIniFeature);
+		//One [PersuasionPerks.*] section in the file, even an empty one, replaces the built-in rules.
+		std::size_t sections = 0;
+		PluginIni::Read(kIniFeature, [&](const IniFile::Entry& a_header) { ++sections; onSection(a_header); }, onEntry);
 		s_generation = PluginIni::Generation();
-		if (fromFile) {
-			PluginIni::Read(kIniFeature, onSection, onEntry);
-		} else {
+		const bool fromFile = sections > 0;
+		if (!fromFile) {
 			Log::INFO("persuasion perks: {} has no [{}.*] section - using the built-in rules", PluginIni::kFileName, kIniFeature);
 			std::istringstream builtIn{ std::string(kDefaultRules) };
 			IniFile::Parse(builtIn, "the built-in rules", "persuasion perks", onSection, onEntry);
@@ -285,15 +292,9 @@ namespace Persuasion
 			for (const auto& op : rule.ops) {
 				const auto& def = Settings::Def(op.index);
 				float amount = op.value;
-				if (!op.per.empty()) {
-					const auto av = ActorValueNamed(op.per);
+				if (op.perValue != RE::ActorValue::kNone) {
 					auto* owner = REBridge::AVOwner(player);
-					if (av == RE::ActorValue::kNone || !owner) {
-						Log::WARN("persuasion perks: [{}]: [{}] {}: no actor value named {} - line skipped", rule.header,
-							def.section, def.key, op.per);
-						continue;
-					}
-					float points = std::max(0.0f, owner->GetActorValue(av));
+					float points = owner ? std::max(0.0f, owner->GetActorValue(op.perValue)) : 0.0f;
 					if (op.upTo > 0.0f) {
 						points = std::min(points, op.upTo);
 					}
@@ -302,7 +303,7 @@ namespace Persuasion
 				float& slot = a_values[op.index];
 				const float before = slot;
 				switch (op.op) {
-				case '*': slot *= op.per.empty() ? amount : 1.0f + amount; break;
+				case '*': slot *= op.perValue == RE::ActorValue::kNone ? amount : 1.0f + amount; break;
 				case '+': slot += amount; break;
 				case '>': slot = std::max(slot, amount * start[op.index]); break;
 				case '<': slot = std::min(slot, amount * start[op.index]); break;
